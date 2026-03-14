@@ -1,0 +1,19 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<TargetFramework>net9.0</TargetFramework>
+		<AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+		<Version>6.0</Version>
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
+		<Authors>Shreyas Zare</Authors>
+		<Company>Technitium</Company>
+		<Product>Technitium Library</Product>
+		<Description></Description>
+		<RepositoryUrl>https://github.com/TechnitiumSoftware/TechnitiumLibrary</RepositoryUrl>
+	</PropertyGroup>
+
+	<PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
+		<OutputPath>..\bin\</OutputPath>
+	</PropertyGroup>
+
+</Project>
