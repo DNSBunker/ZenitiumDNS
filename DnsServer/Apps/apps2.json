@@ -1,0 +1,1526 @@
+[
+	{
+		"name": "Advanced Blocking",
+		"description": "Blocks domain names using block lists and regex block lists. Supports creating groups based on client's IP address or subnet to enforce different block lists and regex block lists for each group.\n\nNote! This app works independent of the DNS server's built-in blocking feature. The options configured in DNS server Settings section does not apply to this app.",
+		"versions": [
+			{
+				"serverVersion": "9.0",
+				"version": "3.0",
+				"url": "https://download.technitium.com/dns/apps/AdvancedBlockingApp-v3.zip",
+				"size": "28.3 KB"
+			},
+			{
+				"serverVersion": "10.0",
+				"version": "4.0",
+				"url": "https://download.technitium.com/dns/apps/AdvancedBlockingApp-v4.zip",
+				"size": "28.6 KB"
+			},
+			{
+				"serverVersion": "10.0.1",
+				"version": "4.0.1",
+				"url": "https://download.technitium.com/dns/apps/AdvancedBlockingApp-v4.0.1.zip",
+				"size": "28.9 KB"
+			},
+			{
+				"serverVersion": "11.0",
+				"version": "5.0.1",
+				"url": "https://download.technitium.com/dns/apps/AdvancedBlockingApp-v5.0.1.zip",
+				"size": "27.4 KB"
+			},
+			{
+				"serverVersion": "11.0.3",
+				"version": "5.1",
+				"url": "https://download.technitium.com/dns/apps/AdvancedBlockingApp-v5.1.zip",
+				"size": "27.8 KB"
+			},
+			{
+				"serverVersion": "11.1",
+				"version": "5.1.1",
+				"url": "https://download.technitium.com/dns/apps/AdvancedBlockingApp-v5.1.1.zip",
+				"size": "27.9 KB"
+			},
+			{
+				"serverVersion": "11.5",
+				"version": "6.0",
+				"url": "https://download.technitium.com/dns/apps/AdvancedBlockingApp-v6.zip",
+				"size": "28.2 KB"
+			},
+			{
+				"serverVersion": "11.5.1",
+				"version": "6.0.1",
+				"url": "https://download.technitium.com/dns/apps/AdvancedBlockingApp-v6.0.1.zip",
+				"size": "28.2 KB"
+			},
+			{
+				"serverVersion": "11.5.3",
+				"version": "6.1.1",
+				"url": "https://download.technitium.com/dns/apps/AdvancedBlockingApp-v6.1.1.zip",
+				"size": "29.6 KB"
+			},
+			{
+				"serverVersion": "12.0",
+				"version": "7.0",
+				"url": "https://download.technitium.com/dns/apps/AdvancedBlockingApp-v7.zip",
+				"size": "30.4 KB"
+			},
+			{
+				"serverVersion": "12.1",
+				"version": "7.1",
+				"url": "https://download.technitium.com/dns/apps/AdvancedBlockingApp-v7.1.zip",
+				"size": "30.8 KB"
+			},
+			{
+				"serverVersion": "12.2",
+				"version": "7.1.1",
+				"url": "https://download.technitium.com/dns/apps/AdvancedBlockingApp-v7.1.1.zip",
+				"size": "30.7 KB"
+			},
+			{
+				"serverVersion": "13.0",
+				"version": "8.0",
+				"url": "https://download.technitium.com/dns/apps/AdvancedBlockingApp-v8.zip",
+				"size": "30.7 KB"
+			},
+			{
+				"serverVersion": "14.0",
+				"version": "9.0",
+				"url": "https://download.technitium.com/dns/apps/AdvancedBlockingApp-v9.zip",
+				"size": "31.0 KB"
+			},
+			{
+				"serverVersion": "14.2.0",
+				"version": "9.1",
+				"url": "https://download.technitium.com/dns/apps/AdvancedBlockingApp-v9.1.zip",
+				"size": "33.08 KB"
+			},
+			{
+				"serverVersion": "14.3",
+				"version": "10.0",
+				"url": "https://download.technitium.com/dns/apps/AdvancedBlockingApp-v10.zip",
+				"size": "33.12 KB"
+			}
+		]
+	},
+	{
+		"name": "Advanced Forwarding",
+		"description": "Provides advanced, bulk conditional forwarding options. Supports creating groups based on client's IP address or subnet to enable different conditional forwarding configuration for each group. Supports AdGuard Upstreams config files.",
+		"versions": [
+			{
+				"serverVersion": "11.0",
+				"version": "1.0.1",
+				"url": "https://download.technitium.com/dns/apps/AdvancedForwardingApp-v1.0.1.zip",
+				"size": "19.1 KB"
+			},
+			{
+				"serverVersion": "11.0.3",
+				"version": "1.0.2",
+				"url": "https://download.technitium.com/dns/apps/AdvancedForwardingApp-v1.0.2.zip",
+				"size": "19.2 KB"
+			},
+			{
+				"serverVersion": "11.1",
+				"version": "1.1",
+				"url": "https://download.technitium.com/dns/apps/AdvancedForwardingApp-v1.1.zip",
+				"size": "19.3 KB"
+			},
+			{
+				"serverVersion": "11.5",
+				"version": "1.2",
+				"url": "https://download.technitium.com/dns/apps/AdvancedForwardingApp-v1.2.zip",
+				"size": "19.3 KB"
+			},
+			{
+				"serverVersion": "12.0",
+				"version": "2.0",
+				"url": "https://download.technitium.com/dns/apps/AdvancedForwardingApp-v2.zip",
+				"size": "20.1 KB"
+			},
+			{
+				"serverVersion": "12.1",
+				"version": "2.1",
+				"url": "https://download.technitium.com/dns/apps/AdvancedForwardingApp-v2.1.zip",
+				"size": "20.5 KB"
+			},
+			{
+				"serverVersion": "13.0",
+				"version": "3.0",
+				"url": "https://download.technitium.com/dns/apps/AdvancedForwardingApp-v3.zip",
+				"size": "20.4 KB"
+			},
+			{
+				"serverVersion": "13.5",
+				"version": "3.1",
+				"url": "https://download.technitium.com/dns/apps/AdvancedForwardingApp-v3.1.zip",
+				"size": "20.5 KB"
+			},
+			{
+				"serverVersion": "14.0",
+				"version": "4.0",
+				"url": "https://download.technitium.com/dns/apps/AdvancedForwardingApp-v4.zip",
+				"size": "20.7 KB"
+			}
+		]
+	},
+	{
+		"name": "Auto PTR",
+		"description": "Allows creating APP records in primary and forwarder zones that can return automatically generated response for a PTR request for both IPv4 and IPv6.",
+		"versions": [
+			{
+				"serverVersion": "11.2",
+				"version": "1.0",
+				"url": "https://download.technitium.com/dns/apps/AutoPtrApp-v1.zip",
+				"size": "10.6 KB"
+			},
+			{
+				"serverVersion": "11.3",
+				"version": "1.0.2",
+				"url": "https://download.technitium.com/dns/apps/AutoPtrApp-v1.0.2.zip",
+				"size": "11.4 KB"
+			},
+			{
+				"serverVersion": "12.0",
+				"version": "2.0",
+				"url": "https://download.technitium.com/dns/apps/AutoPtrApp-v2.zip",
+				"size": "12.3 KB"
+			},
+			{
+				"serverVersion": "13.0",
+				"version": "3.0",
+				"url": "https://download.technitium.com/dns/apps/AutoPtrApp-v3.zip",
+				"size": "12.2 KB"
+			},
+			{
+				"serverVersion": "14.0",
+				"version": "4.0",
+				"url": "https://download.technitium.com/dns/apps/AutoPtrApp-v4.zip",
+				"size": "12.3 KB"
+			}
+		]
+	},
+	{
+		"name": "Block Page",
+		"description": "Serves a block page from a built-in web server that can be displayed to the end user when a website is blocked by the DNS server.\n\nNote! You need to manually set the Blocking Type as Custom Address in the blocking settings and configure the current server's IP address as Custom Blocking Addresses for the block page to be served to the users. Use a PKCS #12 certificate (.pfx or .p12) for enabling HTTPS support. Enabling HTTPS support will show certificate error to the user which is expected and the user will have to proceed ignoring the certificate error to be able to see the block page.",
+		"versions": [
+			{
+				"serverVersion": "9.0",
+				"version": "2.0",
+				"url": "https://download.technitium.com/dns/apps/BlockPageApp-v2.zip",
+				"size": "21.2 KB"
+			},
+			{
+				"serverVersion": "10.0",
+				"version": "3.0",
+				"url": "https://download.technitium.com/dns/apps/BlockPageApp-v3.zip",
+				"size": "22.1 KB"
+			},
+			{
+				"serverVersion": "10.0.1",
+				"version": "3.0.1",
+				"url": "https://download.technitium.com/dns/apps/BlockPageApp-v3.0.1.zip",
+				"size": "22.1 KB"
+			},
+			{
+				"serverVersion": "11.0",
+				"version": "4.0",
+				"url": "https://download.technitium.com/dns/apps/BlockPageApp-v4.zip",
+				"size": "20.6 KB"
+			},
+			{
+				"serverVersion": "11.0.3",
+				"version": "4.1",
+				"url": "https://download.technitium.com/dns/apps/BlockPageApp-v4.1.zip",
+				"size": "20.9 KB"
+			},
+			{
+				"serverVersion": "11.3",
+				"version": "4.2",
+				"url": "https://download.technitium.com/dns/apps/BlockPageApp-v4.2.zip",
+				"size": "21.1 KB"
+			},
+			{
+				"serverVersion": "11.5.3",
+				"version": "4.3",
+				"url": "https://download.technitium.com/dns/apps/BlockPageApp-v4.3.zip",
+				"size": "23.6 KB"
+			},
+			{
+				"serverVersion": "11.5.3",
+				"version": "4.3.1",
+				"url": "https://download.technitium.com/dns/apps/BlockPageApp-v4.3.1.zip",
+				"size": "23.6 KB"
+			},
+			{
+				"serverVersion": "12.0",
+				"version": "5.0",
+				"url": "https://download.technitium.com/dns/apps/BlockPageApp-v5.zip",
+				"size": "25.1 KB"
+			},
+			{
+				"serverVersion": "12.2",
+				"version": "5.1",
+				"url": "https://download.technitium.com/dns/apps/BlockPageApp-v5.1.zip",
+				"size": "25.2 KB"
+			},
+			{
+				"serverVersion": "13.0",
+				"version": "6.0",
+				"url": "https://download.technitium.com/dns/apps/BlockPageApp-v6.zip",
+				"size": "25.2 KB"
+			},
+			{
+				"serverVersion": "13.1.1",
+				"version": "6.0.1",
+				"url": "https://download.technitium.com/dns/apps/BlockPageApp-v6.0.1.zip",
+				"size": "25.2 KB"
+			},
+			{
+				"serverVersion": "13.4.1",
+				"version": "6.1",
+				"url": "https://download.technitium.com/dns/apps/BlockPageApp-v6.1.zip",
+				"size": "28.3 KB"
+			},
+			{
+				"serverVersion": "13.4.2",
+				"version": "6.2",
+				"url": "https://download.technitium.com/dns/apps/BlockPageApp-v6.2.zip",
+				"size": "28.4 KB"
+			},
+			{
+				"serverVersion": "14.0",
+				"version": "7.0",
+				"url": "https://download.technitium.com/dns/apps/BlockPageApp-v7.zip",
+				"size": "28.7 KB"
+			},
+			{
+				"serverVersion": "14.3",
+				"version": "7.1",
+				"url": "https://download.technitium.com/dns/apps/BlockPageApp-v7.1.zip",
+				"size": "28.88 KB"
+			}
+		]
+	},
+	{
+		"name": "Default Records",
+		"description": "Allows setting one or more default records for configured local zones.",
+		"versions": [
+			{
+				"serverVersion": "11.5",
+				"version": "1.0",
+				"url": "https://download.technitium.com/dns/apps/DefaultRecordsApp-v1.zip",
+				"size": "13.3 KB"
+			},
+			{
+				"serverVersion": "12.0",
+				"version": "2.0",
+				"url": "https://download.technitium.com/dns/apps/DefaultRecordsApp-v2.zip",
+				"size": "14.0 KB"
+			},
+			{
+				"serverVersion": "13.0",
+				"version": "3.0",
+				"url": "https://download.technitium.com/dns/apps/DefaultRecordsApp-v3.zip",
+				"size": "13.8 KB"
+			},
+			{
+				"serverVersion": "14.0",
+				"version": "4.0",
+				"url": "https://download.technitium.com/dns/apps/DefaultRecordsApp-v4.zip",
+				"size": "14.0 KB"
+			}
+		]
+	},
+	{
+		"name": "DNS64",
+		"description": "Enables DNS64 function for both authoritative and recursive resolver responses for use by IPv6 only clients.\n\nWarning! Installing DNS64 app without having NAT64 in place will cause connectivity issues for some websites.",
+		"versions": [
+			{
+				"serverVersion": "10.0",
+				"version": "1.0",
+				"url": "https://download.technitium.com/dns/apps/Dns64App-v1.zip",
+				"size": "15.8 KB"
+			},
+			{
+				"serverVersion": "10.0.1",
+				"version": "1.0.1",
+				"url": "https://download.technitium.com/dns/apps/Dns64App-v1.0.1.zip",
+				"size": "15.8 KB"
+			},
+			{
+				"serverVersion": "11.0",
+				"version": "2.0",
+				"url": "https://download.technitium.com/dns/apps/Dns64App-v2.zip",
+				"size": "14.4 KB"
+			},
+			{
+				"serverVersion": "12.0",
+				"version": "3.0",
+				"url": "https://download.technitium.com/dns/apps/Dns64App-v3.zip",
+				"size": "15.3 KB"
+			},
+			{
+				"serverVersion": "13.0",
+				"version": "4.0",
+				"url": "https://download.technitium.com/dns/apps/Dns64App-v4.zip",
+				"size": "15.5 KB"
+			},
+			{
+				"serverVersion": "13.5",
+				"version": "4.1",
+				"url": "https://download.technitium.com/dns/apps/Dns64App-v4.1.zip",
+				"size": "15.6 KB"
+			},
+			{
+				"serverVersion": "14.0",
+				"version": "5.0",
+				"url": "https://download.technitium.com/dns/apps/Dns64App-v5.zip",
+				"size": "15.7 KB"
+			}
+		]
+	},
+	{
+		"name": "DNS Block List (DNSBL)",
+		"description": "Allows creating APP records in primary and forwarder zones that can return A or TXT records based on the DNS Block Lists (DNSBL) configured. The implementation is based on RFC 5782.",
+		"versions": [
+			{
+				"serverVersion": "11.0",
+				"version": "1.0",
+				"url": "https://download.technitium.com/dns/apps/DnsBlockListApp-v1.zip",
+				"size": "18.5 KB"
+			},
+			{
+				"serverVersion": "11.0.3",
+				"version": "1.0.1",
+				"url": "https://download.technitium.com/dns/apps/DnsBlockListApp-v1.0.1.zip",
+				"size": "18.7 KB"
+			},
+			{
+				"serverVersion": "12.0",
+				"version": "2.0",
+				"url": "https://download.technitium.com/dns/apps/DnsBlockListApp-v2.zip",
+				"size": "19.5 KB"
+			},
+			{
+				"serverVersion": "13.0",
+				"version": "3.0",
+				"url": "https://download.technitium.com/dns/apps/DnsBlockListApp-v3.zip",
+				"size": "19.4 KB"
+			},
+			{
+				"serverVersion": "14.0",
+				"version": "4.0",
+				"url": "https://download.technitium.com/dns/apps/DnsBlockListApp-v4.zip",
+				"size": "19.7 KB"
+			}
+		]
+	},
+	{
+		"name": "DNS Rebinding Protection",
+		"description": "Protects from DNS rebinding attacks using configured private domains and networks.\n\nWarning! The app will remove private IP addresses from response for domain names not hosted locally.",
+		"versions": [
+			{
+				"serverVersion": "12.0",
+				"version": "1.1",
+				"url": "https://download.technitium.com/dns/apps/DnsRebindingProtectionApp-v1.1.zip",
+				"size": "11.7 KB"
+			},
+			{
+				"serverVersion": "13.0",
+				"version": "2.0",
+				"url": "https://download.technitium.com/dns/apps/DnsRebindingProtectionApp-v2.zip",
+				"size": "11.8 KB"
+			},
+			{
+				"serverVersion": "13.1.1",
+				"version": "3.0",
+				"url": "https://download.technitium.com/dns/apps/DnsRebindingProtectionApp-v3.zip",
+				"size": "12.9 KB"
+			},
+			{
+				"serverVersion": "14.0",
+				"version": "4.0",
+				"url": "https://download.technitium.com/dns/apps/DnsRebindingProtectionApp-v4.zip",
+				"size": "13.0 KB"
+			}
+		]
+	},
+	{
+		"name": "Drop Requests",
+		"description": "Drops incoming DNS requests that match list of blocked networks or blocked questions.",
+		"versions": [
+			{
+				"serverVersion": "9.0",
+				"version": "2.1",
+				"url": "https://download.technitium.com/dns/apps/DropRequestsApp-v2.1.zip",
+				"size": "13.1 KB"
+			},
+			{
+				"serverVersion": "10.0",
+				"version": "3.0",
+				"url": "https://download.technitium.com/dns/apps/DropRequestsApp-v3.zip",
+				"size": "13.6 KB"
+			},
+			{
+				"serverVersion": "10.0.1",
+				"version": "3.0.1",
+				"url": "https://download.technitium.com/dns/apps/DropRequestsApp-v3.0.1.zip",
+				"size": "13.6 KB"
+			},
+			{
+				"serverVersion": "11.0",
+				"version": "4.0",
+				"url": "https://download.technitium.com/dns/apps/DropRequestsApp-v4.zip",
+				"size": "12.1 KB"
+			},
+			{
+				"serverVersion": "12.0",
+				"version": "5.0",
+				"url": "https://download.technitium.com/dns/apps/DropRequestsApp-v5.zip",
+				"size": "12.7 KB"
+			},
+			{
+				"serverVersion": "13.0",
+				"version": "6.0",
+				"url": "https://download.technitium.com/dns/apps/DropRequestsApp-v6.zip",
+				"size": "12.6 KB"
+			},
+			{
+				"serverVersion": "13.4",
+				"version": "6.1",
+				"url": "https://download.technitium.com/dns/apps/DropRequestsApp-v6.1.zip",
+				"size": "12.7 KB"
+			},
+			{
+				"serverVersion": "14.0",
+				"version": "7.0",
+				"url": "https://download.technitium.com/dns/apps/DropRequestsApp-v7.zip",
+				"size": "12.7 KB"
+			}
+		]
+	},
+	{
+		"name": "Failover",
+		"description": "Allows creating APP records in primary and forwarder zones that can return A or AAAA records, or CNAME record based on the health status of the servers. The app supports email alerts and web hooks to relay the health status.",
+		"versions": [
+			{
+				"serverVersion": "9.0",
+				"version": "4.0",
+				"url": "https://download.technitium.com/dns/apps/FailoverApp-v4.zip",
+				"size": "52.0 KB"
+			},
+			{
+				"serverVersion": "10.0",
+				"version": "5.0",
+				"url": "https://download.technitium.com/dns/apps/FailoverApp-v5.zip",
+				"size": "53.2 KB"
+			},
+			{
+				"serverVersion": "10.0.1",
+				"version": "5.1",
+				"url": "https://download.technitium.com/dns/apps/FailoverApp-v5.1.zip",
+				"size": "53.3 KB"
+			},
+			{
+				"serverVersion": "11.0",
+				"version": "6.0",
+				"url": "https://download.technitium.com/dns/apps/FailoverApp-v6.zip",
+				"size": "47.5 KB"
+			},
+			{
+				"serverVersion": "11.0.3",
+				"version": "6.0.1",
+				"url": "https://download.technitium.com/dns/apps/FailoverApp-v6.0.1.zip",
+				"size": "47.8 KB"
+			},
+			{
+				"serverVersion": "11.1",
+				"version": "6.1",
+				"url": "https://download.technitium.com/dns/apps/FailoverApp-v6.1.zip",
+				"size": "47.9 KB"
+			},
+			{
+				"serverVersion": "11.2",
+				"version": "6.1.1",
+				"url": "https://download.technitium.com/dns/apps/FailoverApp-v6.1.1.zip",
+				"size": "48.0 KB"
+			},
+			{
+				"serverVersion": "11.3",
+				"version": "6.1.3",
+				"url": "https://download.technitium.com/dns/apps/FailoverApp-v6.1.3.zip",
+				"size": "48.0 KB"
+			},
+			{
+				"serverVersion": "11.5",
+				"version": "6.2",
+				"url": "https://download.technitium.com/dns/apps/FailoverApp-v6.2.zip",
+				"size": "48.2 KB"
+			},
+			{
+				"serverVersion": "12.0",
+				"version": "7.0",
+				"url": "https://download.technitium.com/dns/apps/FailoverApp-v7.zip",
+				"size": "49.7 KB"
+			},
+			{
+				"serverVersion": "12.1",
+				"version": "7.0.1",
+				"url": "https://download.technitium.com/dns/apps/FailoverApp-v7.0.1.zip",
+				"size": "49.8 KB"
+			},
+			{
+				"serverVersion": "13.0",
+				"version": "8.0",
+				"url": "https://download.technitium.com/dns/apps/FailoverApp-v8.zip",
+				"size": "50.0 KB"
+			},
+			{
+				"serverVersion": "13.2.1",
+				"version": "8.0.1",
+				"url": "https://download.technitium.com/dns/apps/FailoverApp-v8.0.1.zip",
+				"size": "50.0 KB"
+			},
+			{
+				"serverVersion": "14.0",
+				"version": "9.0",
+				"url": "https://download.technitium.com/dns/apps/FailoverApp-v9.zip",
+				"size": "50.5 KB"
+			},
+			{
+				"serverVersion": "14.3",
+				"version": "9.1",
+				"url": "https://download.technitium.com/dns/apps/FailoverApp-v9.1.zip",
+				"size": "50.54 KB"
+			}
+		]
+	},
+	{
+		"name": "Filter AAAA",
+		"description": "Allows filtering AAAA records by returning NO DATA response when A records for the same domain name are available. This allows clients with dual-stack (IPv4 and IPv6) Internet connection to prefer using IPv4 to connect to websites and use IPv6 only when a website has no IPv4 support.",
+		"versions": [
+			{
+				"serverVersion": "12.2",
+				"version": "1.0",
+				"url": "https://download.technitium.com/dns/apps/FilterAaaaApp-v1.zip",
+				"size": "12.9 KB"
+			},
+			{
+				"serverVersion": "13.0",
+				"version": "2.0",
+				"url": "https://download.technitium.com/dns/apps/FilterAaaaApp-v2.zip",
+				"size": "12.9 KB"
+			},
+			{
+				"serverVersion": "13.1",
+				"version": "3.0",
+				"url": "https://download.technitium.com/dns/apps/FilterAaaaApp-v3.zip",
+				"size": "13.8 KB"
+			},
+			{
+				"serverVersion": "13.1.1",
+				"version": "3.1",
+				"url": "https://download.technitium.com/dns/apps/FilterAaaaApp-v3.1.zip",
+				"size": "14.1 KB"
+			},
+			{
+				"serverVersion": "13.2",
+				"version": "3.2",
+				"url": "https://download.technitium.com/dns/apps/FilterAaaaApp-v3.2.zip",
+				"size": "14.1 KB"
+			},
+			{
+				"serverVersion": "14.0",
+				"version": "4.0",
+				"url": "https://download.technitium.com/dns/apps/FilterAaaaApp-v4.zip",
+				"size": "14.3 KB"
+			}
+		]
+	},
+	{
+		"name": "Geo Continent",
+		"description": "Allows creating APP records in primary and forwarder zones that can return A or AAAA records, or CNAME record based on the continent the client queries from using MaxMind GeoIP2 Country database. Supports EDNS Client Subnet (ECS). This app requires MaxMind GeoIP2 database and includes the GeoLite2 version for trial. \n\nTo update the MaxMind GeoIP2 database for your app, download the GeoIP2-Country.mmdb file from MaxMind and zip it. Use the zip file with the manual Update option. The app optionally also uses MaxMind ISP/ASN database which can be updated the with same method.",
+		"versions": [
+			{
+				"serverVersion": "9.0",
+				"version": "4.0",
+				"url": "https://download.technitium.com/dns/apps/GeoContinentApp-v4.zip",
+				"size": "3.00 MB"
+			},
+			{
+				"serverVersion": "10.0",
+				"version": "5.0",
+				"url": "https://download.technitium.com/dns/apps/GeoContinentApp-v5.zip",
+				"size": "2.76 MB"
+			},
+			{
+				"serverVersion": "10.0.1",
+				"version": "5.0.1",
+				"url": "https://download.technitium.com/dns/apps/GeoContinentApp-v5.0.1.zip",
+				"size": "2.76 MB"
+			},
+			{
+				"serverVersion": "11.0",
+				"version": "6.0",
+				"url": "https://download.technitium.com/dns/apps/GeoContinentApp-v6.zip",
+				"size": "2.76 MB"
+			},
+			{
+				"serverVersion": "11.0.3",
+				"version": "6.0.1",
+				"url": "https://download.technitium.com/dns/apps/GeoContinentApp-v6.0.1.zip",
+				"size": "2.92 MB"
+			},
+			{
+				"serverVersion": "11.2",
+				"version": "6.0.2",
+				"url": "https://download.technitium.com/dns/apps/GeoContinentApp-v6.0.2.zip",
+				"size": "2.92 MB"
+			},
+			{
+				"serverVersion": "11.3",
+				"version": "6.0.4",
+				"url": "https://download.technitium.com/dns/apps/GeoContinentApp-v6.0.4.zip",
+				"size": "2.92 MB"
+			},
+			{
+				"serverVersion": "12.0",
+				"version": "7.0",
+				"url": "https://download.technitium.com/dns/apps/GeoContinentApp-v7.zip",
+				"size": "3.16 MB"
+			},
+			{
+				"serverVersion": "12.1",
+				"version": "7.1",
+				"url": "https://download.technitium.com/dns/apps/GeoContinentApp-v7.1.zip",
+				"size": "7.57 MB"
+			},
+			{
+				"serverVersion": "13.0",
+				"version": "8.0",
+				"url": "https://download.technitium.com/dns/apps/GeoContinentApp-v8.zip",
+				"size": "8.35 MB"
+			},
+			{
+				"serverVersion": "13.6",
+				"version": "8.1",
+				"url": "https://download.technitium.com/dns/apps/GeoContinentApp-v8.1.zip",
+				"size": "8.35 MB"
+			},
+			{
+				"serverVersion": "14.0",
+				"version": "9.0",
+				"url": "https://download.technitium.com/dns/apps/GeoContinentApp-v9.zip",
+				"size": "10.5 MB"
+			},
+			{
+				"serverVersion": "14.3",
+				"version": "9.0.1",
+				"url": "https://download.technitium.com/dns/apps/GeoContinentApp-v9.0.1.zip",
+				"size": "10.59 MB"
+			}
+		]
+	},
+	{
+		"name": "Geo Country",
+		"description": "Allows creating APP records in primary and forwarder zones that can return A or AAAA records, or CNAME record based on the country the client queries from using MaxMind GeoIP2 Country database. Supports EDNS Client Subnet (ECS). This app requires MaxMind GeoIP2 database and includes the GeoLite2 version for trial. \n\nTo update the MaxMind GeoIP2 database for your app, download the GeoIP2-Country.mmdb file from MaxMind and zip it. Use the zip file with the manual Update option. The app optionally also uses MaxMind ISP/ASN database which can be updated the with same method.",
+		"versions": [
+			{
+				"serverVersion": "9.0",
+				"version": "4.0",
+				"url": "https://download.technitium.com/dns/apps/GeoCountryApp-v4.zip",
+				"size": "3.00 MB"
+			},
+			{
+				"serverVersion": "10.0",
+				"version": "5.0",
+				"url": "https://download.technitium.com/dns/apps/GeoCountryApp-v5.zip",
+				"size": "2.76 MB"
+			},
+			{
+				"serverVersion": "10.0.1",
+				"version": "5.0.1",
+				"url": "https://download.technitium.com/dns/apps/GeoCountryApp-v5.0.1.zip",
+				"size": "2.76 MB"
+			},
+			{
+				"serverVersion": "11.0",
+				"version": "6.0",
+				"url": "https://download.technitium.com/dns/apps/GeoCountryApp-v6.zip",
+				"size": "2.76 MB"
+			},
+			{
+				"serverVersion": "11.0.3",
+				"version": "6.0.1",
+				"url": "https://download.technitium.com/dns/apps/GeoCountryApp-v6.0.1.zip",
+				"size": "2.92 MB"
+			},
+			{
+				"serverVersion": "11.2",
+				"version": "6.0.2",
+				"url": "https://download.technitium.com/dns/apps/GeoCountryApp-v6.0.2.zip",
+				"size": "2.92 MB"
+			},
+			{
+				"serverVersion": "11.3",
+				"version": "6.0.4",
+				"url": "https://download.technitium.com/dns/apps/GeoCountryApp-v6.0.4.zip",
+				"size": "2.92 MB"
+			},
+			{
+				"serverVersion": "12.0",
+				"version": "7.0",
+				"url": "https://download.technitium.com/dns/apps/GeoCountryApp-v7.zip",
+				"size": "3.16 MB"
+			},
+			{
+				"serverVersion": "12.1",
+				"version": "7.1",
+				"url": "https://download.technitium.com/dns/apps/GeoCountryApp-v7.1.zip",
+				"size": "7.57 MB"
+			},
+			{
+				"serverVersion": "13.0",
+				"version": "8.0",
+				"url": "https://download.technitium.com/dns/apps/GeoCountryApp-v8.zip",
+				"size": "8.35 MB"
+			},
+			{
+				"serverVersion": "13.6",
+				"version": "8.1",
+				"url": "https://download.technitium.com/dns/apps/GeoCountryApp-v8.1.zip",
+				"size": "8.35 MB"
+			},
+			{
+				"serverVersion": "14.0",
+				"version": "9.0",
+				"url": "https://download.technitium.com/dns/apps/GeoCountryApp-v9.zip",
+				"size": "10.5 MB"
+			},
+			{
+				"serverVersion": "14.3",
+				"version": "9.0.1",
+				"url": "https://download.technitium.com/dns/apps/GeoCountryApp-v9.0.1.zip",
+				"size": "10.59 MB"
+			}
+		]
+	},
+	{
+		"name": "Geo Distance",
+		"description": "Allows creating APP records in primary and forwarder zones that can return A or AAAA records, or CNAME record of the server located geographically closest to the client using MaxMind GeoIP2 City database. Supports EDNS Client Subnet (ECS). This app requires MaxMind GeoIP2 database and includes the GeoLite2 version for trial. \n\nTo update the MaxMind GeoIP2 database for your app, download the GeoIP2-City.mmdb file from MaxMind and zip it. Use the zip file with the manual Update option. The app optionally also uses MaxMind ISP/ASN database which can be updated the with same method.",
+		"versions": [
+			{
+				"serverVersion": "9.0",
+				"version": "4.0",
+				"url": "https://download.technitium.com/dns/apps/GeoDistanceApp-v4.zip",
+				"size": "32.7 MB"
+			},
+			{
+				"serverVersion": "10.0",
+				"version": "5.0",
+				"url": "https://download.technitium.com/dns/apps/GeoDistanceApp-v5.zip",
+				"size": "32.5 MB"
+			},
+			{
+				"serverVersion": "10.0.1",
+				"version": "5.0.1",
+				"url": "https://download.technitium.com/dns/apps/GeoDistanceApp-v5.0.1.zip",
+				"size": "32.5 MB"
+			},
+			{
+				"serverVersion": "11.0",
+				"version": "6.0",
+				"url": "https://download.technitium.com/dns/apps/GeoDistanceApp-v6.zip",
+				"size": "32.5 MB"
+			},
+			{
+				"serverVersion": "11.0.3",
+				"version": "6.0.1",
+				"url": "https://download.technitium.com/dns/apps/GeoDistanceApp-v6.0.1.zip",
+				"size": "33.9 MB"
+			},
+			{
+				"serverVersion": "11.2",
+				"version": "6.0.2",
+				"url": "https://download.technitium.com/dns/apps/GeoDistanceApp-v6.0.2.zip",
+				"size": "33.9 MB"
+			},
+			{
+				"serverVersion": "11.3",
+				"version": "6.0.4",
+				"url": "https://download.technitium.com/dns/apps/GeoDistanceApp-v6.0.4.zip",
+				"size": "33.9 MB"
+			},
+			{
+				"serverVersion": "12.0",
+				"version": "7.0",
+				"url": "https://download.technitium.com/dns/apps/GeoDistanceApp-v7.zip",
+				"size": "31.0 MB"
+			},
+			{
+				"serverVersion": "12.1",
+				"version": "7.1",
+				"url": "https://download.technitium.com/dns/apps/GeoDistanceApp-v7.1.zip",
+				"size": "35.4 MB"
+			},
+			{
+				"serverVersion": "13.0",
+				"version": "8.0",
+				"url": "https://download.technitium.com/dns/apps/GeoDistanceApp-v8.zip",
+				"size": "33.4 MB"
+			},
+			{
+				"serverVersion": "14.0",
+				"version": "9.0",
+				"url": "https://download.technitium.com/dns/apps/GeoDistanceApp-v9.zip",
+				"size": "35.5 MB"
+			},
+			{
+				"serverVersion": "14.3",
+				"version": "9.0.1",
+				"url": "https://download.technitium.com/dns/apps/GeoDistanceApp-v9.0.1.zip",
+				"size": "35.59 MB"
+			}
+		]
+	},
+	{
+		"name": "Log Exporter",
+		"description": "Allows exporting query logs to third party sinks. It supports exporting to File, HTTP endpoint, and Syslog (UDP, TCP, TLS, and Local protocols).",
+		"versions": [
+			{
+				"serverVersion": "13.4",
+				"version": "1.0",
+				"url": "https://download.technitium.com/dns/apps/LogExporterApp-v1.zip",
+				"size": "202 KB"
+			},
+			{
+				"serverVersion": "13.5",
+				"version": "1.0.1",
+				"url": "https://download.technitium.com/dns/apps/LogExporterApp-v1.0.1.zip",
+				"size": "202 KB"
+			},
+			{
+				"serverVersion": "13.6",
+				"version": "1.0.2",
+				"url": "https://download.technitium.com/dns/apps/LogExporterApp-v1.0.2.zip",
+				"size": "202 KB"
+			},
+			{
+				"serverVersion": "14.0",
+				"version": "2.0",
+				"url": "https://download.technitium.com/dns/apps/LogExporterApp-v2.zip",
+				"size": "212 KB"
+			},
+			{
+				"serverVersion": "14.2.0",
+				"version": "2.1",
+				"url": "https://download.technitium.com/dns/apps/LogExporterApp-v2.1.zip",
+				"size": "213.95 KB"
+			}
+		]
+	},
+	{
+		"name": "MISP Connector",
+		"description": "Block malicious domain names pulled from MISP feeds.\n\nNote! This app works independent of the DNS server's built-in blocking feature. The options configured in DNS server Settings section does not apply to this app.",
+		"versions": [
+			{
+				"serverVersion": "14.2.0",
+				"version": "1.0",
+				"url": "https://download.technitium.com/dns/apps/MispConnectorApp-v1.zip",
+				"size": "24.49 KB"
+			}
+		]
+	},
+	{
+		"name": "NO DATA",
+		"description": "Allows creating APP records in Conditional Forwarder zones to return NO DATA response for requests that match the configured query type (QTYPE) to prevent them from being forwarded.",
+		"versions": [
+			{
+				"serverVersion": "10.0",
+				"version": "1.0",
+				"url": "https://download.technitium.com/dns/apps/NoDataApp-v1.zip",
+				"size": "11.0 KB"
+			},
+			{
+				"serverVersion": "10.0.1",
+				"version": "1.0.1",
+				"url": "https://download.technitium.com/dns/apps/NoDataApp-v1.0.1.zip",
+				"size": "11.0 KB"
+			},
+			{
+				"serverVersion": "11.0",
+				"version": "2.0",
+				"url": "https://download.technitium.com/dns/apps/NoDataApp-v2.zip",
+				"size": "10.1 KB"
+			},
+			{
+				"serverVersion": "11.0.3",
+				"version": "2.0.1",
+				"url": "https://download.technitium.com/dns/apps/NoDataApp-v2.0.1.zip",
+				"size": "10.1 KB"
+			},
+			{
+				"serverVersion": "11.3",
+				"version": "2.0.3",
+				"url": "https://download.technitium.com/dns/apps/NoDataApp-v2.0.3.zip",
+				"size": "10.1 KB"
+			},
+			{
+				"serverVersion": "12.0",
+				"version": "3.0",
+				"url": "https://download.technitium.com/dns/apps/NoDataApp-v3.zip",
+				"size": "10.9 KB"
+			},
+			{
+				"serverVersion": "13.0",
+				"version": "4.0",
+				"url": "https://download.technitium.com/dns/apps/NoDataApp-v4.zip",
+				"size": "10.7 KB"
+			},
+			{
+				"serverVersion": "14.0",
+				"version": "5.0",
+				"url": "https://download.technitium.com/dns/apps/NoDataApp-v5.zip",
+				"size": "10.8 KB"
+			}
+		]
+	},
+	{
+		"name": "NX Domain",
+		"description": "Blocks configured domain names with a NX Domain response.",
+		"versions": [
+			{
+				"serverVersion": "9.0",
+				"version": "2.0",
+				"url": "https://download.technitium.com/dns/apps/NxDomainApp-v2.zip",
+				"size": "11.4 KB"
+			},
+			{
+				"serverVersion": "10.0",
+				"version": "3.0",
+				"url": "https://download.technitium.com/dns/apps/NxDomainApp-v3.zip",
+				"size": "12.0 KB"
+			},
+			{
+				"serverVersion": "10.0.1",
+				"version": "3.0.1",
+				"url": "https://download.technitium.com/dns/apps/NxDomainApp-v3.0.1.zip",
+				"size": "12.0 KB"
+			},
+			{
+				"serverVersion": "11.0",
+				"version": "4.0",
+				"url": "https://download.technitium.com/dns/apps/NxDomainApp-v4.zip",
+				"size": "10.7 KB"
+			},
+			{
+				"serverVersion": "12.0",
+				"version": "5.0",
+				"url": "https://download.technitium.com/dns/apps/NxDomainApp-v5.zip",
+				"size": "11.5 KB"
+			},
+			{
+				"serverVersion": "12.2",
+				"version": "5.0.1",
+				"url": "https://download.technitium.com/dns/apps/NxDomainApp-v5.0.1.zip",
+				"size": "11.4 KB"
+			},
+			{
+				"serverVersion": "13.0",
+				"version": "6.0",
+				"url": "https://download.technitium.com/dns/apps/NxDomainApp-v6.zip",
+				"size": "11.4 KB"
+			},
+			{
+				"serverVersion": "13.5",
+				"version": "6.1",
+				"url": "https://download.technitium.com/dns/apps/NxDomainApp-v6.1.zip",
+				"size": "11.6 KB"
+			},
+			{
+				"serverVersion": "14.0",
+				"version": "7.0",
+				"url": "https://download.technitium.com/dns/apps/NxDomainApp-v7.zip",
+				"size": "13.6 KB"
+			}
+		]
+	},
+	{
+		"name": "NX Domain Override",
+		"description": "Overrides NX Domain response with custom A/AAAA record response for configured domain names.",
+		"versions": [
+			{
+				"serverVersion": "12.0",
+				"version": "1.0",
+				"url": "https://download.technitium.com/dns/apps/NxDomainOverrideApp-v1.zip",
+				"size": "13.0 KB"
+			},
+			{
+				"serverVersion": "13.0",
+				"version": "2.0",
+				"url": "https://download.technitium.com/dns/apps/NxDomainOverrideApp-v2.zip",
+				"size": "12.9 KB"
+			},
+			{
+				"serverVersion": "14.0",
+				"version": "3.0",
+				"url": "https://download.technitium.com/dns/apps/NxDomainOverrideApp-v3.zip",
+				"size": "13.0 KB"
+			}
+		]
+	},
+	{
+		"name": "Query Logs (MySQL)",
+		"description": "Logs all incoming DNS requests and their responses in a MySQL/MariaDB database that can be queried from the DNS Server web console.\n\nNote! You will need to create a user and grant all privileges on the database to the user so that the app will be able to access it. To do that run the following commands with the required database name and username on your mysql root prompt:\nCREATE USER 'user'@'%' IDENTIFIED BY 'password';\nGRANT ALL PRIVILEGES ON DatabaseName.* TO 'user'@'%';\n\nOnce the database is configured, edit the app's config to update the database name, connection string, and set enableLogging to true. The app will automatically create the required database schema for you and start logging queries once you save the config.",
+		"versions": [
+			{
+				"serverVersion": "13.4",
+				"version": "1.0",
+				"url": "https://download.technitium.com/dns/apps/QueryLogsMySqlApp-v1.zip",
+				"size": "6.70 MB"
+			},
+			{
+				"serverVersion": "13.4.1",
+				"version": "1.1",
+				"url": "https://download.technitium.com/dns/apps/QueryLogsMySqlApp-v1.1.zip",
+				"size": "6.70 MB"
+			},
+			{
+				"serverVersion": "13.4.2",
+				"version": "2.0",
+				"url": "https://download.technitium.com/dns/apps/QueryLogsMySqlApp-v2.zip",
+				"size": "472 KB"
+			},
+			{
+				"serverVersion": "13.5",
+				"version": "2.0.1",
+				"url": "https://download.technitium.com/dns/apps/QueryLogsMySqlApp-v2.0.1.zip",
+				"size": "472 KB"
+			},
+			{
+				"serverVersion": "14.0",
+				"version": "3.0",
+				"url": "https://download.technitium.com/dns/apps/QueryLogsMySqlApp-v3.zip",
+				"size": "478 KB"
+			},
+			{
+				"serverVersion": "14.3",
+				"version": "3.0.1",
+				"url": "https://download.technitium.com/dns/apps/QueryLogsMySqlApp-v3.0.1.zip",
+				"size": "482.76 KB"
+			}
+		]
+	},
+	{
+		"name": "Query Logs (Sqlite)",
+		"description": "Logs all incoming DNS requests and their responses in a Sqlite database that can be queried from the DNS Server web console. The query logging throughput is limited by the disk throughput on which the Sqlite db file is stored. This app is not recommended to be used with very high throughput (more than 20,000 requests/second).",
+		"versions": [
+			{
+				"serverVersion": "9.0",
+				"version": "2.0.4",
+				"url": "https://download.technitium.com/dns/apps/QueryLogsSqliteApp-v2.0.4.zip",
+				"size": "9.39 MB"
+			},
+			{
+				"serverVersion": "10.0",
+				"version": "3.0",
+				"url": "https://download.technitium.com/dns/apps/QueryLogsSqliteApp-v3.zip",
+				"size": "13.0 MB"
+			},
+			{
+				"serverVersion": "10.0.1",
+				"version": "3.1",
+				"url": "https://download.technitium.com/dns/apps/QueryLogsSqliteApp-v3.1.zip",
+				"size": "13.0 MB"
+			},
+			{
+				"serverVersion": "11.0",
+				"version": "4.0",
+				"url": "https://download.technitium.com/dns/apps/QueryLogsSqliteApp-v4.zip",
+				"size": "13.7 MB"
+			},
+			{
+				"serverVersion": "11.1",
+				"version": "4.0.1",
+				"url": "https://download.technitium.com/dns/apps/QueryLogsSqliteApp-v4.0.1.zip",
+				"size": "13.6 MB"
+			},
+			{
+				"serverVersion": "11.3",
+				"version": "4.0.2",
+				"url": "https://download.technitium.com/dns/apps/QueryLogsSqliteApp-v4.0.2.zip",
+				"size": "13.6 MB"
+			},
+			{
+				"serverVersion": "11.5.2",
+				"version": "4.0.3",
+				"url": "https://download.technitium.com/dns/apps/QueryLogsSqliteApp-v4.0.3.zip",
+				"size": "13.6 MB"
+			},
+			{
+				"serverVersion": "11.5.3",
+				"version": "4.1",
+				"url": "https://download.technitium.com/dns/apps/QueryLogsSqliteApp-v4.1.zip",
+				"size": "13.7 MB"
+			},
+			{
+				"serverVersion": "12.0",
+				"version": "5.0",
+				"url": "https://download.technitium.com/dns/apps/QueryLogsSqliteApp-v5.zip",
+				"size": "12.2 MB"
+			},
+			{
+				"serverVersion": "12.1",
+				"version": "5.0.1",
+				"url": "https://download.technitium.com/dns/apps/QueryLogsSqliteApp-v5.0.1.zip",
+				"size": "12.2 MB"
+			},
+			{
+				"serverVersion": "12.2",
+				"version": "5.0.2",
+				"url": "https://download.technitium.com/dns/apps/QueryLogsSqliteApp-v5.0.2.zip",
+				"size": "12.2 MB"
+			},
+			{
+				"serverVersion": "13.0",
+				"version": "6.0",
+				"url": "https://download.technitium.com/dns/apps/QueryLogsSqliteApp-v6.zip",
+				"size": "12.2 MB"
+			},
+			{
+				"serverVersion": "13.3",
+				"version": "6.1",
+				"url": "https://download.technitium.com/dns/apps/QueryLogsSqliteApp-v6.1.zip",
+				"size": "14.3 MB"
+			},
+			{
+				"serverVersion": "13.4",
+				"version": "7.0",
+				"url": "https://download.technitium.com/dns/apps/QueryLogsSqliteApp-v7.zip",
+				"size": "14.3 MB"
+			},
+			{
+				"serverVersion": "13.6",
+				"version": "7.1",
+				"url": "https://download.technitium.com/dns/apps/QueryLogsSqliteApp-v7.1.zip",
+				"size": "14.3 MB"
+			},
+			{
+				"serverVersion": "14.0",
+				"version": "8.0",
+				"url": "https://download.technitium.com/dns/apps/QueryLogsSqliteApp-v8.zip",
+				"size": "14.6 MB"
+			}
+		]
+	},
+	{
+		"name": "Query Logs (SQL Server)",
+		"description": "Logs all incoming DNS requests and their responses in a Microsoft SQL Server database that can be queried from the DNS Server web console.",
+		"versions": [
+			{
+				"serverVersion": "13.4",
+				"version": "1.0",
+				"url": "https://download.technitium.com/dns/apps/QueryLogsSqlServerApp-v1.zip",
+				"size": "4.67 MB"
+			},
+			{
+				"serverVersion": "13.4.1",
+				"version": "1.1",
+				"url": "https://download.technitium.com/dns/apps/QueryLogsSqlServerApp-v1.1.zip",
+				"size": "4.67 MB"
+			},
+			{
+				"serverVersion": "13.4.2",
+				"version": "1.2",
+				"url": "https://download.technitium.com/dns/apps/QueryLogsSqlServerApp-v1.2.zip",
+				"size": "4.67 MB"
+			},
+			{
+				"serverVersion": "13.5",
+				"version": "1.2.1",
+				"url": "https://download.technitium.com/dns/apps/QueryLogsSqlServerApp-v1.2.1.zip",
+				"size": "4.67 MB"
+			},
+			{
+				"serverVersion": "13.6",
+				"version": "1.2.2",
+				"url": "https://download.technitium.com/dns/apps/QueryLogsSqlServerApp-v1.2.2.zip",
+				"size": "4.67 MB"
+			},
+			{
+				"serverVersion": "14.0",
+				"version": "2.0",
+				"url": "https://download.technitium.com/dns/apps/QueryLogsSqlServerApp-v2.zip",
+				"size": "4.82 MB"
+			}
+		]
+	},
+	{
+		"name": "Split Horizon",
+		"description": "Allows creating APP records in primary and forwarder zones that can return different set of A or AAAA records, or CNAME record for clients querying over public, private, or other specified networks.\n\nEnables Address Translation of IP addresses in a DNS response for A & AAAA type request based on the client's network address or configured domain names, and the configured 1:1 translation.",
+		"versions": [
+			{
+				"serverVersion": "9.0",
+				"version": "4.0",
+				"url": "https://download.technitium.com/dns/apps/SplitHorizonApp-v4.zip",
+				"size": "14.3 KB"
+			},
+			{
+				"serverVersion": "10.0",
+				"version": "5.0",
+				"url": "https://download.technitium.com/dns/apps/SplitHorizonApp-v5.zip",
+				"size": "19.5 KB"
+			},
+			{
+				"serverVersion": "10.0.1",
+				"version": "5.0.1",
+				"url": "https://download.technitium.com/dns/apps/SplitHorizonApp-v5.0.1.zip",
+				"size": "19.5 KB"
+			},
+			{
+				"serverVersion": "11.0",
+				"version": "6.0",
+				"url": "https://download.technitium.com/dns/apps/SplitHorizonApp-v6.zip",
+				"size": "17.6 KB"
+			},
+			{
+				"serverVersion": "11.0.3",
+				"version": "6.0.1",
+				"url": "https://download.technitium.com/dns/apps/SplitHorizonApp-v6.0.1.zip",
+				"size": "17.7 KB"
+			},
+			{
+				"serverVersion": "11.2",
+				"version": "6.0.2",
+				"url": "https://download.technitium.com/dns/apps/SplitHorizonApp-v6.0.2.zip",
+				"size": "17.7 KB"
+			},
+			{
+				"serverVersion": "11.3",
+				"version": "6.0.4",
+				"url": "https://download.technitium.com/dns/apps/SplitHorizonApp-v6.0.4.zip",
+				"size": "17.7 KB"
+			},
+			{
+				"serverVersion": "11.5",
+				"version": "6.1",
+				"url": "https://download.technitium.com/dns/apps/SplitHorizonApp-v6.1.zip",
+				"size": "18.6 KB"
+			},
+			{
+				"serverVersion": "12.0",
+				"version": "7.0",
+				"url": "https://download.technitium.com/dns/apps/SplitHorizonApp-v7.zip",
+				"size": "19.5 KB"
+			},
+			{
+				"serverVersion": "13.0",
+				"version": "8.0",
+				"url": "https://download.technitium.com/dns/apps/SplitHorizonApp-v8.zip",
+				"size": "19.4 KB"
+			},
+			{
+				"serverVersion": "13.5",
+				"version": "8.1",
+				"url": "https://download.technitium.com/dns/apps/SplitHorizonApp-v8.1.zip",
+				"size": "19.5 KB"
+			},
+			{
+				"serverVersion": "14.0",
+				"version": "9.0",
+				"url": "https://download.technitium.com/dns/apps/SplitHorizonApp-v9.zip",
+				"size": "19.7 KB"
+			},
+			{
+				"serverVersion": "14.3",
+				"version": "10.0",
+				"url": "https://download.technitium.com/dns/apps/SplitHorizonApp-v10.zip",
+				"size": "20.27 KB"
+			}
+		]
+	},
+	{
+		"name": "Weighted Round Robin",
+		"description": "Allows creating APP records in primary and forwarder zones that can return A or AAAA records, or CNAME record using weighted round-robin load balancing.",
+		"versions": [
+			{
+				"serverVersion": "11.2",
+				"version": "1.0",
+				"url": "https://download.technitium.com/dns/apps/WeightedRoundRobinApp-v1.zip",
+				"size": "11.9 KB"
+			},
+			{
+				"serverVersion": "11.3",
+				"version": "1.0.2",
+				"url": "https://download.technitium.com/dns/apps/WeightedRoundRobinApp-v1.0.2.zip",
+				"size": "12.0 KB"
+			},
+			{
+				"serverVersion": "12.0",
+				"version": "2.0",
+				"url": "https://download.technitium.com/dns/apps/WeightedRoundRobinApp-v2.zip",
+				"size": "12.7 KB"
+			},
+			{
+				"serverVersion": "13.0",
+				"version": "3.0",
+				"url": "https://download.technitium.com/dns/apps/WeightedRoundRobinApp-v3.zip",
+				"size": "12.6 KB"
+			},
+			{
+				"serverVersion": "14.0",
+				"version": "4.0",
+				"url": "https://download.technitium.com/dns/apps/WeightedRoundRobinApp-v4.zip",
+				"size": "12.7 KB"
+			}
+		]
+	},
+	{
+		"name": "What Is My Dns",
+		"description": "Allows creating APP records in primary and forwarder zones that can return the IP address of the user's DNS Server for A, AAAA, and TXT queries.",
+		"versions": [
+			{
+				"serverVersion": "9.0",
+				"version": "4.0",
+				"url": "https://download.technitium.com/dns/apps/WhatIsMyDnsApp-v4.zip",
+				"size": "9.26 KB"
+			},
+			{
+				"serverVersion": "10.0",
+				"version": "5.0",
+				"url": "https://download.technitium.com/dns/apps/WhatIsMyDnsApp-v5.zip",
+				"size": "9.93 KB"
+			},
+			{
+				"serverVersion": "11.0",
+				"version": "5.0.1",
+				"url": "https://download.technitium.com/dns/apps/WhatIsMyDnsApp-v5.0.1.zip",
+				"size": "9.77 KB"
+			},
+			{
+				"serverVersion": "11.0.3",
+				"version": "5.0.2",
+				"url": "https://download.technitium.com/dns/apps/WhatIsMyDnsApp-v5.0.2.zip",
+				"size": "9.79 KB"
+			},
+			{
+				"serverVersion": "11.2",
+				"version": "5.0.3",
+				"url": "https://download.technitium.com/dns/apps/WhatIsMyDnsApp-v5.0.3.zip",
+				"size": "9.87 KB"
+			},
+			{
+				"serverVersion": "11.3",
+				"version": "5.0.5",
+				"url": "https://download.technitium.com/dns/apps/WhatIsMyDnsApp-v5.0.5.zip",
+				"size": "9.90 KB"
+			},
+			{
+				"serverVersion": "12.0",
+				"version": "6.0",
+				"url": "https://download.technitium.com/dns/apps/WhatIsMyDnsApp-v6.zip",
+				"size": "10.6 KB"
+			},
+			{
+				"serverVersion": "13.0",
+				"version": "7.0",
+				"url": "https://download.technitium.com/dns/apps/WhatIsMyDnsApp-v7.zip",
+				"size": "10.5 KB"
+			},
+			{
+				"serverVersion": "14.0",
+				"version": "8.0",
+				"url": "https://download.technitium.com/dns/apps/WhatIsMyDnsApp-v8.zip",
+				"size": "10.5 KB"
+			}
+		]
+	},
+	{
+		"name": "Wild IP",
+		"description": "Allows creating APP records in primary and forwarder zones that can return the IP address embedded in the subdomain name for A and AAAA queries. It works similar to sslip.io.",
+		"versions": [
+			{
+				"serverVersion": "9.0",
+				"version": "1.0",
+				"url": "https://download.technitium.com/dns/apps/WildIpApp-v1.zip",
+				"size": "9.66 KB"
+			},
+			{
+				"serverVersion": "10.0",
+				"version": "2.0",
+				"url": "https://download.technitium.com/dns/apps/WildIpApp-v2.zip",
+				"size": "10.3 KB"
+			},
+			{
+				"serverVersion": "11.0",
+				"version": "2.1",
+				"url": "https://download.technitium.com/dns/apps/WildIpApp-v2.1.zip",
+				"size": "11.0 KB"
+			},
+			{
+				"serverVersion": "11.0.3",
+				"version": "2.1.1",
+				"url": "https://download.technitium.com/dns/apps/WildIpApp-v2.1.1.zip",
+				"size": "11.0 KB"
+			},
+			{
+				"serverVersion": "11.2",
+				"version": "2.2",
+				"url": "https://download.technitium.com/dns/apps/WildIpApp-v2.2.zip",
+				"size": "11.2 KB"
+			},
+			{
+				"serverVersion": "12.0",
+				"version": "3.0",
+				"url": "https://download.technitium.com/dns/apps/WildIpApp-v3.zip",
+				"size": "12.2 KB"
+			},
+			{
+				"serverVersion": "13.0",
+				"version": "4.0",
+				"url": "https://download.technitium.com/dns/apps/WildIpApp-v4.zip",
+				"size": "12.1 KB"
+			},
+			{
+				"serverVersion": "14.0",
+				"version": "5.0",
+				"url": "https://download.technitium.com/dns/apps/WildIpApp-v5.zip",
+				"size": "12.2 KB"
+			}
+		]
+	},
+	{
+		"name": "Zone Alias",
+		"description": "Allows configuring aliases for any zone (internal or external) such that they all return the same set of records.",
+		"versions": [
+			{
+				"serverVersion": "11.3",
+				"version": "1.0",
+				"url": "https://download.technitium.com/dns/apps/ZoneAliasApp-v1.zip",
+				"size": "12.2 KB"
+			},
+			{
+				"serverVersion": "12.0",
+				"version": "2.0",
+				"url": "https://download.technitium.com/dns/apps/ZoneAliasApp-v2.zip",
+				"size": "13.0 KB"
+			},
+			{
+				"serverVersion": "13.0",
+				"version": "3.0",
+				"url": "https://download.technitium.com/dns/apps/ZoneAliasApp-v3.zip",
+				"size": "12.9 KB"
+			},
+			{
+				"serverVersion": "13.5",
+				"version": "3.1",
+				"url": "https://download.technitium.com/dns/apps/ZoneAliasApp-v3.1.zip",
+				"size": "13.0 KB"
+			},
+			{
+				"serverVersion": "14.0",
+				"version": "4.0",
+				"url": "https://download.technitium.com/dns/apps/ZoneAliasApp-v4.zip",
+				"size": "13.2 KB"
+			}
+		]
+	}
+]

@@ -1,0 +1,72 @@
+[
+	{
+		"name": "Hagezi [Multi Light - Basic protection]",
+		"urls": [
+			"https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@latest/wildcard/light-onlydomains.txt"
+		]
+	},
+	{
+		"name": "Hagezi [Multi Normal - All-round protection]",
+		"urls": [
+			"https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@latest/wildcard/multi-onlydomains.txt"
+		]
+	},
+	{
+		"name": "Hagezi [Multi PRO - Extended protection]",
+		"urls": [
+			"https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@latest/wildcard/pro-onlydomains.txt"
+		]
+	},
+	{
+		"name": "Hagezi [Multi PRO++ - Maximum protection]",
+		"urls": [
+			"https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@latest/wildcard/pro.plus-onlydomains.txt"
+		]
+	},
+	{
+		"name": "Hagezi [Multi ULTIMATE - Aggressive protection]",
+		"urls": [
+			"https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@latest/wildcard/ultimate-onlydomains.txt"
+		]
+	},
+	{
+		"name": "Hagezi Newly Registered Domains (NRD) - 7 days",
+		"urls": [
+			"https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@latest/domains/nrd7.txt"
+		]
+	},
+	{
+		"name": "Hagezi Newly Registered Domains (NRD) - 14 days",
+		"urls": [
+			"https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@latest/domains/nrd7.txt",
+			"https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@latest/domains/nrd14-8.txt"
+		]
+	},
+	{
+		"name": "Hagezi Newly Registered Domains (NRD) - 21 days",
+		"urls": [
+			"https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@latest/domains/nrd7.txt",
+			"https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@latest/domains/nrd14-8.txt",
+			"https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@latest/domains/nrd21-15.txt"
+		]
+	},
+	{
+		"name": "Hagezi Newly Registered Domains (NRD) - 28 days",
+		"urls": [
+			"https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@latest/domains/nrd7.txt",
+			"https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@latest/domains/nrd14-8.txt",
+			"https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@latest/domains/nrd21-15.txt",
+			"https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@latest/domains/nrd28-22.txt"
+		]
+	},
+	{
+		"name": "Hagezi Newly Registered Domains (NRD) - 35 days",
+		"urls": [
+			"https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@latest/domains/nrd7.txt",
+			"https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@latest/domains/nrd14-8.txt",
+			"https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@latest/domains/nrd21-15.txt",
+			"https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@latest/domains/nrd28-22.txt",
+			"https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@latest/domains/nrd35-29.txt"
+		]
+	}
+]
