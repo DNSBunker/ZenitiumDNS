@@ -16,17 +16,13 @@ namespace Zenitium.Dns.Security
         private class ClientProfile
         {
             public long IsVerified = 0;
-            
+
             public long TotalQueries = 0;
             public long NxDomainResponses = 0;
             public long TxtQueries = 0;
             public long AnyQueries = 0;
             public long RareTypeQueries = 0;
-            
-            public readonly ConcurrentDictionary<string, (int Strikes, long LastStrikeTicks)> DomainNxStrikes = new();
-            
-            public long SuppressUntilTicks = 0;
-            
+
             public long BanUntilTicks = 0;
 
             public long ExpirationTicks;
@@ -42,27 +38,22 @@ namespace Zenitium.Dns.Security
 
         private readonly ConcurrentDictionary<IPAddress, ClientProfile> _profiles = new();
         private readonly CancellationTokenSource _cts = new();
-        
-        private const double SOFT_TXT_RATIO        = 0.60;
-        private const double SOFT_ANY_RATIO        = 0.20;
-        private const double SOFT_RARE_TYPE_RATIO  = 0.15;
-        private const double SOFT_NX_RATIO         = 0.92;
-        
-        private const double HARD_TXT_RATIO        = 0.90;
-        private const double HARD_ANY_RATIO        = 0.50;
-        private const double HARD_RARE_TYPE_RATIO  = 0.40;
-        private const double HARD_NX_RATIO         = 0.99;
-        
-        private const int MIN_QUERIES_FOR_SOFT     = 200;
-        private const int MIN_QUERIES_FOR_HARD     = 500;
-        
-        private const int SOFT_DOMAIN_NX_STRIKES   = 30;
-        private const int HARD_DOMAIN_NX_STRIKES   = 80;
 
-        private const int SUPPRESS_SECONDS         = 60;
-        private const int HARD_BAN_MINUTES         = 15;
+        private const double SOFT_TXT_RATIO       = 0.60;
+        private const double SOFT_ANY_RATIO       = 0.20;
+        private const double SOFT_RARE_TYPE_RATIO = 0.15;
+        private const double SOFT_NX_RATIO        = 0.92;
 
-        private const int MAX_TRACKED_PROFILES     = 150000;
+        private const double HARD_TXT_RATIO       = 0.90;
+        private const double HARD_ANY_RATIO       = 0.50;
+        private const double HARD_RARE_TYPE_RATIO = 0.40;
+        private const double HARD_NX_RATIO        = 0.99;
+
+        private const int MIN_QUERIES_FOR_SOFT    = 200;
+        private const int MIN_QUERIES_FOR_HARD    = 500;
+        private const int HARD_BAN_MINUTES        = 15;
+
+        private const int MAX_TRACKED_PROFILES    = 150000;
 
         public ZenitiumFortressPreProcessor()
         {
@@ -120,9 +111,6 @@ namespace Zenitium.Dns.Security
                 return PreProcessorAction.TruncateToTcp;
             }
             
-            if (Interlocked.Read(ref profile.SuppressUntilTicks) > now)
-                return PreProcessorAction.SilentDrop;
-            
             Interlocked.Increment(ref profile.TotalQueries);
 
             if (recordType == "TXT")
@@ -135,11 +123,11 @@ namespace Zenitium.Dns.Security
 
             if (total >= MIN_QUERIES_FOR_SOFT)
             {
-                double txtRatio  = (double)Interlocked.Read(ref profile.TxtQueries)      / total;
-                double anyRatio  = (double)Interlocked.Read(ref profile.AnyQueries)      / total;
-                double rareRatio = (double)Interlocked.Read(ref profile.RareTypeQueries) / total;
+                double txtRatio  = (double)Interlocked.Read(ref profile.TxtQueries)        / total;
+                double anyRatio  = (double)Interlocked.Read(ref profile.AnyQueries)        / total;
+                double rareRatio = (double)Interlocked.Read(ref profile.RareTypeQueries)   / total;
                 double nxRatio   = (double)Interlocked.Read(ref profile.NxDomainResponses) / total;
-                
+
                 if (total >= MIN_QUERIES_FOR_HARD)
                 {
                     if (txtRatio  > HARD_TXT_RATIO  ||
@@ -152,13 +140,11 @@ namespace Zenitium.Dns.Security
                     }
                 }
 
-                // Soft-Drop
                 if (txtRatio  > SOFT_TXT_RATIO  ||
                     anyRatio  > SOFT_ANY_RATIO  ||
                     rareRatio > SOFT_RARE_TYPE_RATIO ||
                     nxRatio   > SOFT_NX_RATIO)
                 {
-                    ApplySoftSuppression(profile, now);
                     return PreProcessorAction.SilentDrop;
                 }
             }
@@ -172,28 +158,11 @@ namespace Zenitium.Dns.Security
             if (!_profiles.TryGetValue(effectiveIp, out var profile)) return;
 
             Interlocked.Increment(ref profile.NxDomainResponses);
-            
-            string root = GetRootDomain(fullDomain);
-            long now = DateTime.UtcNow.Ticks;
-
-            profile.DomainNxStrikes.AddOrUpdate(root,
-                _ => (1, now),
-                (_, val) => (val.Strikes + 1, now));
-
-            if (profile.DomainNxStrikes.TryGetValue(root, out var data))
-            {
-                if (data.Strikes > HARD_DOMAIN_NX_STRIKES)
-                    ApplyHardBan(profile, now);
-                else if (data.Strikes > SOFT_DOMAIN_NX_STRIKES)
-                    ApplySoftSuppression(profile, now);
-            }
         }
 
         public void ReportBadConnection(IPAddress clientIp, int penaltySeconds = 30)
         {
-            IPAddress effectiveIp = GetEffectiveIp(clientIp);
-            if (!_profiles.TryGetValue(effectiveIp, out var profile)) return;
-            ApplySoftSuppression(profile, DateTime.UtcNow.Ticks, penaltySeconds);
+            //no supression
         }
 
         public void ResetReputation(IPAddress clientIp)
@@ -201,17 +170,6 @@ namespace Zenitium.Dns.Security
             IPAddress effectiveIp = GetEffectiveIp(clientIp);
             if (_profiles.TryGetValue(effectiveIp, out var profile))
                 ResetProfile(profile);
-        }
-
-        private static void ApplySoftSuppression(ClientProfile p, long now, int seconds = SUPPRESS_SECONDS)
-        {
-            long newEnd = now + TimeSpan.FromSeconds(seconds).Ticks;
-            long current;
-            do
-            {
-                current = Interlocked.Read(ref p.SuppressUntilTicks);
-                if (newEnd <= current) return;
-            } while (Interlocked.CompareExchange(ref p.SuppressUntilTicks, newEnd, current) != current);
         }
 
         private static void ApplyHardBan(ClientProfile p, long now)
@@ -223,7 +181,7 @@ namespace Zenitium.Dns.Security
                 current = Interlocked.Read(ref p.BanUntilTicks);
                 if (newEnd <= current) return;
             } while (Interlocked.CompareExchange(ref p.BanUntilTicks, newEnd, current) != current);
-            
+
             Interlocked.Exchange(ref p.ExpirationTicks, newEnd + TimeSpan.FromHours(1).Ticks);
         }
 
@@ -239,13 +197,11 @@ namespace Zenitium.Dns.Security
         {
             Interlocked.Exchange(ref p.IsVerified, 0);
             Interlocked.Exchange(ref p.BanUntilTicks, 0);
-            Interlocked.Exchange(ref p.SuppressUntilTicks, 0);
             Interlocked.Exchange(ref p.TotalQueries, 0);
             Interlocked.Exchange(ref p.NxDomainResponses, 0);
             Interlocked.Exchange(ref p.TxtQueries, 0);
             Interlocked.Exchange(ref p.AnyQueries, 0);
             Interlocked.Exchange(ref p.RareTypeQueries, 0);
-            p.DomainNxStrikes.Clear();
         }
 
         private IPAddress GetEffectiveIp(IPAddress ip)
@@ -256,46 +212,16 @@ namespace Zenitium.Dns.Security
             return new IPAddress(bytes);
         }
 
-        private string GetRootDomain(string domain)
-        {
-            if (string.IsNullOrEmpty(domain)) return "unknown";
-            var parts = domain.TrimEnd('.').Split('.');
-            if (parts.Length <= 2) return domain;
-
-            string tld = parts[parts.Length - 1];
-            string sld = parts[parts.Length - 2];
-
-            if (tld.Length == 2 && (sld is "co" or "com" or "net" or "org" or "gov" or "edu"))
-            {
-                if (parts.Length >= 3)
-                    return $"{parts[parts.Length - 3]}.{sld}.{tld}";
-            }
-
-            return $"{sld}.{tld}";
-        }
-
         private void CleanUp()
         {
             long now = DateTime.UtcNow.Ticks;
-            long strikeDecayTime = DateTime.UtcNow.AddHours(-1).Ticks;
 
             foreach (var key in _profiles.Keys)
             {
                 if (!_profiles.TryGetValue(key, out var p)) continue;
 
                 if (now > Interlocked.Read(ref p.ExpirationTicks))
-                {
                     _profiles.TryRemove(key, out _);
-                    continue;
-                }
-                
-                var old = p.DomainNxStrikes
-                    .Where(kv => kv.Value.LastStrikeTicks < strikeDecayTime)
-                    .Select(kv => kv.Key)
-                    .ToList();
-
-                foreach (var k in old)
-                    p.DomainNxStrikes.TryRemove(k, out _);
             }
 
             if (_profiles.Count > MAX_TRACKED_PROFILES)

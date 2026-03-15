@@ -1915,7 +1915,7 @@ namespace DnsServerCore.Dns
             {
                 if (remoteEP != null)
                 {
-                    _log.Write(remoteEP, protocol, "[Zenitium Shield] Penalty: 20 Karma deducted due to AuthenticationException.");
+                    _log.Write(remoteEP, protocol, "[Zenitium Shield] TLS AuthenticationException from client.");
                     SecurityShield.ReportBadConnection(remoteEP.Address, 20);
                 }
             }
@@ -2461,7 +2461,7 @@ private async Task AcceptQuicConnectionAsync(QuicListener quicListener)
                 if (request.ParsingException is not IOException)
                     _log.Write(remoteEP, protocol, request.ParsingException);
 
-                _log.Write(remoteEP, protocol, "[Zenitium Shield] Penalty: 10 Karma deducted due to Parsing/Format Error.");
+                _log.Write(remoteEP, protocol, "[Zenitium Shield] Malformed DNS request from client.");
                 SecurityShield.ReportBadConnection(remoteEP.Address, 10);
 
                 //format error response
