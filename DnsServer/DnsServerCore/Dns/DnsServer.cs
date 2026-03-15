@@ -2508,12 +2508,6 @@ private async Task AcceptQuicConnectionAsync(QuicListener quicListener)
                     if (request.Question.Count > 0)
                         SecurityShield.ReportNxDomain(remoteEP.Address, request.Question[0].Name);
                 }
-                else if (finalResponse.RCODE == DnsResponseCode.NoError
-                         && finalResponse.Answer.Count > 0
-                         && protocol != DnsTransportProtocol.UdpProxy)
-                {
-                    SecurityShield.ReportSuccessfulQuery(remoteEP.Address);
-                }
             }
 
             return finalResponse;
