@@ -1693,9 +1693,9 @@ namespace DnsServerCore.Dns
                     string recordType = question.Type.ToString();
 
                     var action = SecurityShield.EvaluateRequest(
-                        clientIp, 
-                        Zenitium.Dns.Security.ZenitiumFortressPreProcessor.TransportProtocol.Udp, 
-                        domain, 
+                        clientIp,
+                        Zenitium.Dns.Security.ZenitiumFortressPreProcessor.TransportProtocol.Udp,
+                        domain,
                         recordType);
 
                     if (action == Zenitium.Dns.Security.ZenitiumFortressPreProcessor.PreProcessorAction.SilentDrop)
@@ -1911,7 +1911,8 @@ namespace DnsServerCore.Dns
             }
             catch (AuthenticationException)
             {
-                //ignore TLS auth exception
+                if (remoteEP != null)
+                    SecurityShield.ReportBadConnection(remoteEP.Address, 20);
             }
             catch (TimeoutException)
             {
@@ -1997,9 +1998,9 @@ namespace DnsServerCore.Dns
                     string recordType = question.Type.ToString();
 
                     var action = SecurityShield.EvaluateRequest(
-                        clientIp, 
-                        Zenitium.Dns.Security.ZenitiumFortressPreProcessor.TransportProtocol.Tcp, 
-                        domain, 
+                        clientIp,
+                        Zenitium.Dns.Security.ZenitiumFortressPreProcessor.TransportProtocol.Tcp,
+                        domain,
                         recordType);
 
                     if (action == Zenitium.Dns.Security.ZenitiumFortressPreProcessor.PreProcessorAction.SilentDrop)
@@ -2176,7 +2177,20 @@ private async Task AcceptQuicConnectionAsync(QuicListener quicListener)
                     request = await task;
                     request.SetMetadata(dnsEP);
                 }
+                
+                if (request.Question.Count > 0)
+                {
+                    var q = request.Question[0];
+                    var action = SecurityShield.EvaluateRequest(
+                        remoteEP.Address,
+                        Zenitium.Dns.Security.ZenitiumFortressPreProcessor.TransportProtocol.Tcp,
+                        q.Name,
+                        q.Type.ToString());
 
+                    if (action == Zenitium.Dns.Security.ZenitiumFortressPreProcessor.PreProcessorAction.SilentDrop)
+                        return;
+                }
+                
                 //process request async
                 DnsDatagram response = await ProcessRequestAsync(request, remoteEP, DnsTransportProtocol.Quic, IsRecursionAllowed(remoteEP.Address));
                 if (response is null)
@@ -2324,7 +2338,24 @@ private async Task AcceptQuicConnectionAsync(QuicListener quicListener)
                     default:
                         throw new InvalidOperationException();
                 }
+                
+                if (dnsRequest != null && dnsRequest.Question.Count > 0)
+                {
+                    var q = dnsRequest.Question[0];
+                    var action = SecurityShield.EvaluateRequest(
+                        remoteEP.Address,
+                        Zenitium.Dns.Security.ZenitiumFortressPreProcessor.TransportProtocol.Tcp,
+                        q.Name,
+                        q.Type.ToString());
 
+                    if (action == Zenitium.Dns.Security.ZenitiumFortressPreProcessor.PreProcessorAction.SilentDrop)
+                    {
+                        response.StatusCode = 429;
+                        await response.WriteAsync("Too Many Requests");
+                        return;
+                    }
+                }
+                
                 DnsDatagram dnsResponse = await ProcessRequestAsync(dnsRequest, remoteEP, DnsTransportProtocol.Https, IsRecursionAllowed(remoteEP.Address));
                 if (dnsResponse is null)
                 {
@@ -2456,14 +2487,21 @@ private async Task AcceptQuicConnectionAsync(QuicListener quicListener)
             DnsDatagram response = await ProcessQueryAsync(request, remoteEP, protocol, isRecursionAllowed, false, _clientTimeout, null);
             if (response is null)
                 return null;
-
-            DnsDatagram finalResponse = await PostProcessQueryAsync(request, remoteEP, protocol, response);
             
-            if (finalResponse != null && finalResponse.RCODE == DnsResponseCode.NxDomain)
+            DnsDatagram finalResponse = await PostProcessQueryAsync(request, remoteEP, protocol, response);
+
+            if (finalResponse != null)
             {
-                if (request.Question.Count > 0)
+                if (finalResponse.RCODE == DnsResponseCode.NxDomain)
                 {
-                    SecurityShield.ReportNxDomain(remoteEP.Address, request.Question[0].Name);
+                    if (request.Question.Count > 0)
+                        SecurityShield.ReportNxDomain(remoteEP.Address, request.Question[0].Name);
+                }
+                else if (finalResponse.RCODE == DnsResponseCode.NoError
+                         && finalResponse.Answer.Count > 0
+                         && protocol != DnsTransportProtocol.UdpProxy)
+                {
+                    SecurityShield.ReportSuccessfulQuery(remoteEP.Address);
                 }
             }
 
