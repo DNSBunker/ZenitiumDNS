@@ -2053,7 +2053,7 @@ namespace DnsServerCore.Dns
             }
         }
 
-        private async Task AcceptQuicConnectionAsync(QuicListener quicListener)
+private async Task AcceptQuicConnectionAsync(QuicListener quicListener)
         {
             try
             {
@@ -2074,7 +2074,23 @@ namespace DnsServerCore.Dns
                         if (ex.InnerException is OperationCanceledException)
                             continue;
 
-                        throw;
+                        if (ex.QuicError == QuicError.ConnectionIdle || 
+                            ex.QuicError == QuicError.ConnectionAborted || 
+                            ex.QuicError == QuicError.ConnectionTimeout ||
+                            ex.QuicError == QuicError.InternalError)
+                        {
+                            if (_log.IsDebugEnabled)
+                                _log.WriteDebug($"[QUIC] Handshake or internal error ignored: {ex.Message}");
+                                
+                            continue;
+                        }
+
+                        _log.Write(quicListener.LocalEndPoint, DnsTransportProtocol.Quic, "QUIC Accept Warning: " + ex.Message);
+                        continue;
+                    }
+                    catch (Exception ex)
+                    {
+                        _log.Write(quicListener.LocalEndPoint, DnsTransportProtocol.Quic, "Unexpected QUIC Accept Error: " + ex.Message);
                     }
                 }
             }
