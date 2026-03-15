@@ -1700,10 +1700,12 @@ namespace DnsServerCore.Dns
 
                     if (action == Zenitium.Dns.Security.ZenitiumFortressPreProcessor.PreProcessorAction.SilentDrop)
                     {
+                        _log.Write(remoteEP, protocol, $"[Zenitium Shield] Action: SilentDrop triggered for domain {domain} ({recordType}).");
                         return;
                     }
                     else if (action == Zenitium.Dns.Security.ZenitiumFortressPreProcessor.PreProcessorAction.TruncateToTcp)
                     {
+                        _log.Write(remoteEP, protocol, $"[Zenitium Shield] Action: TruncateToTcp triggered for domain {domain} ({recordType}).");
                         sendTruncationResponse = true;
                     }
                 }
@@ -1912,7 +1914,10 @@ namespace DnsServerCore.Dns
             catch (AuthenticationException)
             {
                 if (remoteEP != null)
+                {
+                    _log.Write(remoteEP, protocol, "[Zenitium Shield] Penalty: 20 Karma deducted due to AuthenticationException.");
                     SecurityShield.ReportBadConnection(remoteEP.Address, 20);
+                }
             }
             catch (TimeoutException)
             {
@@ -1957,7 +1962,6 @@ namespace DnsServerCore.Dns
 
                         if ((await Task.WhenAny(task, Task.Delay(_tcpReceiveTimeout, cancellationTokenSource.Token)) != task) && (task.Status != TaskStatus.RanToCompletion))
                         {
-                            //read timed out
                             await stream.DisposeAsync();
                             return;
                         }
@@ -2005,6 +2009,7 @@ namespace DnsServerCore.Dns
 
                     if (action == Zenitium.Dns.Security.ZenitiumFortressPreProcessor.PreProcessorAction.SilentDrop)
                     {
+                        _log.Write(remoteEP, protocol, $"[Zenitium Shield] Action: SilentDrop triggered for domain {domain} ({recordType}).");
                         return;
                     }
                 }
@@ -2167,7 +2172,6 @@ private async Task AcceptQuicConnectionAsync(QuicListener quicListener)
 
                     if ((await Task.WhenAny(task, Task.Delay(_tcpReceiveTimeout, cancellationTokenSource.Token)) != task) && (task.Status != TaskStatus.RanToCompletion))
                     {
-                        //read timed out
                         quicStream.Abort(QuicAbortDirection.Both, (long)DnsOverQuicErrorCodes.DOQ_UNSPECIFIED_ERROR);
                         return;
                     }
@@ -2188,7 +2192,10 @@ private async Task AcceptQuicConnectionAsync(QuicListener quicListener)
                         q.Type.ToString());
 
                     if (action == Zenitium.Dns.Security.ZenitiumFortressPreProcessor.PreProcessorAction.SilentDrop)
+                    {
+                        _log.Write(remoteEP, DnsTransportProtocol.Quic, $"[Zenitium Shield] Action: SilentDrop triggered for domain {q.Name} ({q.Type}).");
                         return;
+                    }
                 }
                 
                 //process request async
@@ -2350,6 +2357,7 @@ private async Task AcceptQuicConnectionAsync(QuicListener quicListener)
 
                     if (action == Zenitium.Dns.Security.ZenitiumFortressPreProcessor.PreProcessorAction.SilentDrop)
                     {
+                        _log.Write(remoteEP, DnsTransportProtocol.Https, $"[Zenitium Shield] Action: SilentDrop triggered for domain {q.Name} ({q.Type}).");
                         response.StatusCode = 429;
                         await response.WriteAsync("Too Many Requests");
                         return;
@@ -2452,6 +2460,9 @@ private async Task AcceptQuicConnectionAsync(QuicListener quicListener)
                 //format error
                 if (request.ParsingException is not IOException)
                     _log.Write(remoteEP, protocol, request.ParsingException);
+
+                _log.Write(remoteEP, protocol, "[Zenitium Shield] Penalty: 10 Karma deducted due to Parsing/Format Error.");
+                SecurityShield.ReportBadConnection(remoteEP.Address, 10);
 
                 //format error response
                 return new DnsDatagram(request.Identifier, true, request.OPCODE, false, false, request.RecursionDesired, isRecursionAllowed, false, request.CheckingDisabled, DnsResponseCode.FormatError, request.Question, null, null, null, request.EDNS is null ? ushort.MinValue : _udpPayloadSize, request.DnssecOk ? EDnsHeaderFlags.DNSSEC_OK : EDnsHeaderFlags.None) { Tag = DnsServerResponseType.Authoritative };

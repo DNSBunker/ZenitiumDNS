@@ -75,7 +75,7 @@ namespace Zenitium.Dns.Security
         private const double BASE_TOKENS_PER_SEC = 10.0;
 
         private const int BURST_WINDOW_TICKS = 5 * 10000000;
-        private const int BURST_MAX_QUERIES = 40;
+        private const int BURST_MAX_QUERIES = 250;
 
         private const int ENTROPY_BUFFER_SIZE = 50;
         private const double ENTROPY_THRESHOLD_NORMAL = 4.2;
