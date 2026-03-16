@@ -15,6 +15,8 @@ A fork of Technitium DNS
 * Better iterations of cache and blocklists for lower latency and ram and CPU usage.
 * Fixed hotpaths in the engines and improved usage of asyncs.
 * Removed obsolete .NET codes and replaced functions and logics with .NET8/9 code.
+* Fallback for QName minimizations on dumb NS Servers to unminimized.
+* Fallback to IPv4 NS Requests, if IPv6 is preferred but NS IPv6 is either misconfigured or not responding.
 
 > [!CAUTION]
 > This Fork is not meant for Homeserver or Homenetwork use!
