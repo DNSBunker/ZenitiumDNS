@@ -2184,8 +2184,21 @@ function refreshDashboard(hideLoader) {
                 dataset.borderWidth = 2;
             });
 
-	    if (window.chartDashboardMain == null) {
-                
+            var _steps = [0, 1, 5, 10, 25, 50, 100, 250, 500, 1000, 2500, 5000, 10000, 25000, 50000, 100000, 250000, 500000, 1000000, 2500000, 5000000, 10000000];
+
+            var _allRawVals = [];
+            responseJSON.response.mainChartData.datasets.forEach(function(ds) {
+                _allRawVals = _allRawVals.concat(ds.data);
+            });
+            var _dataMax = Math.max.apply(null, _allRawVals);
+
+            var _maxTick = _steps[_steps.length - 1];
+            for (var i = 0; i < _steps.length; i++) {
+                if (_steps[i] >= _dataMax) { _maxTick = _steps[i]; break; }
+            }
+
+            if (window.chartDashboardMain == null) {
+
                 document.getElementById("canvasDashboardMain").parentElement.style.height = "450px";
 
                 Chart.Tooltip.positioners.fixedCenter = function(elements, eventPosition) {
@@ -2193,7 +2206,7 @@ function refreshDashboard(hideLoader) {
                     var xPos = eventPosition ? eventPosition.x : elements[0]._model.x;
                     return {
                         x: xPos,
-                        y: chartArea.top + (chartArea.bottom - chartArea.top) / 2 
+                        y: chartArea.top + (chartArea.bottom - chartArea.top) / 2
                     };
                 };
 
@@ -2206,12 +2219,12 @@ function refreshDashboard(hideLoader) {
                         maintainAspectRatio: false,
                         elements: {
                             line: {
-                                tension: 0.35, 
+                                tension: 0.35,
                             },
                             point: {
-                                radius: 0, 
-                                hitRadius: 15, 
-                                hoverRadius: 5 
+                                radius: 0,
+                                hitRadius: 15,
+                                hoverRadius: 5
                             }
                         },
                         scales: {
@@ -2220,19 +2233,22 @@ function refreshDashboard(hideLoader) {
                                     display: false
                                 }
                             }],
-			    yAxes: [{
-                                type: 'logarithmic',
+                            yAxes: [{
                                 ticks: {
-                                    min: 1,
-                                    callback: function (value, index, values) {
-                                        if (value === 1 || value === 10 || value === 100 || value === 1000 || value === 10000 || value === 100000 || value === 1000000 || value === 10000000) {
-                                            return value.toLocaleString();
-                                        }
-                                        return null;
+                                    min: 0,
+                                    max: _maxTick,
+                                    callback: function(value) {
+                                        if (_steps.indexOf(value) === -1) return '';
+                                        if (value >= 1000000) return (value / 1000000).toFixed(0) + 'M';
+                                        if (value >= 1000)    return (value / 1000).toFixed(0) + 'k';
+                                        return value.toLocaleString();
                                     }
                                 },
                                 gridLines: {
                                     color: "rgba(128, 128, 128, 0.15)"
+                                },
+                                afterBuildTicks: function(scale) {
+                                    scale.ticks = _steps.filter(function(s) { return s <= _maxTick; });
                                 }
                             }]
                         },
@@ -2246,7 +2262,13 @@ function refreshDashboard(hideLoader) {
                             titleFontSize: 14,
                             bodySpacing: 6,
                             xPadding: 12,
-                            yPadding: 12
+                            yPadding: 12,
+                            callbacks: {
+                                label: function(item, data) {
+                                    var ds = data.datasets[item.datasetIndex];
+                                    return ds.label + ': ' + item.yLabel.toLocaleString();
+                                }
+                            }
                         },
                         hover: {
                             mode: 'index',
@@ -2255,7 +2277,7 @@ function refreshDashboard(hideLoader) {
                         legend: {
                             onClick: chartLegendOnClick,
                             labels: {
-                                usePointStyle: true, 
+                                usePointStyle: true,
                                 padding: 20
                             }
                         }
@@ -2265,6 +2287,7 @@ function refreshDashboard(hideLoader) {
                 loadChartLegendSettings(window.chartDashboardMain);
             }
             else {
+                window.chartDashboardMain.options.scales.yAxes[0].ticks.max = _maxTick;
                 updateChart(window.chartDashboardMain, responseJSON.response.mainChartData);
             }
 
