@@ -10,13 +10,10 @@ namespace Zenitium.Dns.Security
 {
     public class ZenitiumFortressPreProcessor : IDisposable
     {
-        public enum PreProcessorAction { Allow, TruncateToTcp, SilentDrop }
-        public enum TransportProtocol { Udp, Tcp }
+        public enum PreProcessorAction { Allow, SilentDrop }
 
         private class ClientProfile
         {
-            public long IsVerified = 0;
-
             public long TotalQueries = 0;
             public long NxDomainResponses = 0;
             public long TxtQueries = 0;
@@ -74,7 +71,6 @@ namespace Zenitium.Dns.Security
 
         public PreProcessorAction EvaluateRequest(
             IPAddress clientIp,
-            TransportProtocol protocol,
             string domain,
             string recordType)
         {
@@ -88,37 +84,23 @@ namespace Zenitium.Dns.Security
 
             Interlocked.Exchange(ref profile.LastSeenTicks, now);
             Interlocked.Exchange(ref profile.ExpirationTicks, now + TimeSpan.FromHours(6).Ticks);
-            
+
             long banUntil = Interlocked.Read(ref profile.BanUntilTicks);
             if (banUntil > now) return PreProcessorAction.SilentDrop;
             if (banUntil > 0 && banUntil <= now)
                 Interlocked.Exchange(ref profile.BanUntilTicks, 0);
-            
-            if (protocol == TransportProtocol.Udp)
-            {
-                if (Interlocked.Read(ref profile.IsVerified) == 0)
-                    return PreProcessorAction.TruncateToTcp;
-            }
-            else
-            {
-                Interlocked.Exchange(ref profile.IsVerified, 1);
-            }
-            
-            if (recordType == "ANY")
-            {
-                Interlocked.Increment(ref profile.AnyQueries);
-                Interlocked.Increment(ref profile.TotalQueries);
-                return PreProcessorAction.TruncateToTcp;
-            }
-            
+
             Interlocked.Increment(ref profile.TotalQueries);
 
             if (recordType == "TXT")
                 Interlocked.Increment(ref profile.TxtQueries);
 
+            if (recordType == "ANY")
+                Interlocked.Increment(ref profile.AnyQueries);
+
             if (IsRareType(recordType))
                 Interlocked.Increment(ref profile.RareTypeQueries);
-            
+
             long total = Interlocked.Read(ref profile.TotalQueries);
 
             if (total >= MIN_QUERIES_FOR_SOFT)
@@ -162,7 +144,7 @@ namespace Zenitium.Dns.Security
 
         public void ReportBadConnection(IPAddress clientIp, int penaltySeconds = 30)
         {
-            //no supression
+            //no suppression
         }
 
         public void ResetReputation(IPAddress clientIp)
@@ -195,7 +177,6 @@ namespace Zenitium.Dns.Security
 
         private void ResetProfile(ClientProfile p)
         {
-            Interlocked.Exchange(ref p.IsVerified, 0);
             Interlocked.Exchange(ref p.BanUntilTicks, 0);
             Interlocked.Exchange(ref p.TotalQueries, 0);
             Interlocked.Exchange(ref p.NxDomainResponses, 0);
