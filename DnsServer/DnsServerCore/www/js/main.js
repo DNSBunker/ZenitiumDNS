@@ -1,43 +1,20 @@
-﻿/*
-Technitium DNS Server
-Copyright (C) 2025  Shreyas Zare (shreyas@technitium.com)
-
-This program is free software: you can redistribute it and/or modify
-it under the terms of the GNU General Public License as published by
-the Free Software Foundation, either version 3 of the License, or
-(at your option) any later version.
-
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
-
-You should have received a copy of the GNU General Public License
-along with this program.  If not, see <http://www.gnu.org/licenses/>.
-
-*/
-
-var refreshTimerHandle;
-var reverseProxyDetected = false;
-var quickBlockLists = null;
-var quickForwardersList = null;
+﻿let refreshTimerHandle;
+let reverseProxyDetected = false;
+let quickBlockLists = null;
+let quickForwardersList = null;
 
 function showPageLogin() {
     hideAlert();
-
     localStorage.removeItem("token");
 
     $("#pageMain").hide();
     $("#mnuUser").hide();
-
     $("#txtUser").val("");
-    $("#txtPass").val("");
-    $("#txtPass").prop("disabled", false);
+    $("#txtPass").val("").prop("disabled", false);
     $("#div2FAOTP").hide();
     $("#txt2FATOTP").val("");
     $("#btnLogin").button("reset");
     $("#pageLogin").show();
-
     $("#txtUser").trigger("focus");
 
     if (refreshTimerHandle != null) {
@@ -48,38 +25,32 @@ function showPageLogin() {
 
 function showPageMain() {
     hideAlert();
-
     $("#pageLogin").hide();
     $("#mnuUser").show();
-    
-    $("#mainPanelTabListDhcp").hide();
-    $("#mainPanelTabPaneDhcp").hide();
-    $("#settingsTabListDhcp").hide();
-    
-    $("#mainPanelTabListCluster").hide();
-    $("#mainPanelTabPaneCluster").hide();
-    $("#settingsTabListCluster").hide();
 
-    if (sessionData && sessionData.info && sessionData.info.permissions) {
-        var expectedSections = ["Dashboard", "Zones", "Cache", "Allowed", "Blocked", "Apps", "DnsClient", "Settings", "Administration", "Logs"];
-        for(var i = 0; i < expectedSections.length; i++) {
-            var sec = expectedSections[i];
-            if (!sessionData.info.permissions[sec]) {
-                sessionData.info.permissions[sec] = { canView: false, canModify: false, canDelete: false };
-            }
+    $("#mainPanelTabListDhcp, #mainPanelTabPaneDhcp, #settingsTabListDhcp").hide();
+    $("#mainPanelTabListCluster, #mainPanelTabPaneCluster, #settingsTabListCluster").hide();
+
+    if (sessionData?.info?.permissions) {
+        const sections = ["Dashboard","Zones","Cache","Allowed","Blocked","Apps","DnsClient","Settings","Administration","Logs"];
+        for (const sec of sections) {
+            sessionData.info.permissions[sec] ??= { canView: false, canModify: false, canDelete: false };
         }
     }
 
     $(".nav-tabs li").removeClass("active");
     $(".tab-pane").removeClass("active");
-    $("#mainPanelTabListDashboard").addClass("active");
-    $("#mainPanelTabPaneDashboard").addClass("active");
-    $("#settingsTabListGeneral").addClass("active");
-    $("#settingsTabPaneGeneral").addClass("active");
-    $("#adminTabListSessions").addClass("active");
-    $("#adminTabPaneSessions").addClass("active");
-    $("#logsTabListLogViewer").addClass("active");
-    $("#logsTabPaneLogViewer").addClass("active");
+
+    for (const id of [
+        "#mainPanelTabListDashboard:#mainPanelTabPaneDashboard",
+        "#settingsTabListGeneral:#settingsTabPaneGeneral",
+        "#adminTabListSessions:#adminTabPaneSessions",
+        "#logsTabListLogViewer:#logsTabPaneLogViewer"
+    ]) {
+        const [tab, pane] = id.split(":");
+        $(tab).addClass("active");
+        $(pane).addClass("active");
+    }
 
     $("#divViewZones").show();
     $("#divEditZone").hide();
@@ -93,462 +64,231 @@ function showPageMain() {
     $("#divDnsClientLoader").hide();
     $("#preDnsClientFinalResponse").text("");
     $("#divDnsClientOutputAccordion").hide();
+    $("#divLogViewer, #divQueryLogsTable").hide();
 
-    $("#divLogViewer").hide();
-    $("#divQueryLogsTable").hide();
+    const perms = sessionData.info.permissions;
 
-    if (sessionData.info.permissions.Dashboard.canView) {
+    if (perms.Dashboard.canView) {
         $("#mainPanelTabListDashboard").show();
         refreshDashboard();
-    }
-    else {
-        $("#mainPanelTabListDashboard").hide();
-
-        $("#mainPanelTabListDashboard").removeClass("active");
+    } else {
+        $("#mainPanelTabListDashboard").hide().removeClass("active");
         $("#mainPanelTabPaneDashboard").removeClass("active");
 
-        if (sessionData.info.permissions.Zones.canView) {
-            $("#mainPanelTabListZones").addClass("active");
-            $("#mainPanelTabPaneZones").addClass("active");
-            refreshZones(true);
-        }
-        else if (sessionData.info.permissions.Cache.canView) {
-            $("#mainPanelTabListCachedZones").addClass("active");
-            $("#mainPanelTabPaneCachedZones").addClass("active");
-        }
-        else if (sessionData.info.permissions.Allowed.canView) {
-            $("#mainPanelTabListAllowedZones").addClass("active");
-            $("#mainPanelTabPaneAllowedZones").addClass("active");
-        }
-        else if (sessionData.info.permissions.Blocked.canView) {
-            $("#mainPanelTabListBlockedZones").addClass("active");
-            $("#mainPanelTabPaneBlockedZones").addClass("active");
-        }
-        else if (sessionData.info.permissions.Apps.canView) {
-            $("#mainPanelTabListApps").addClass("active");
-            $("#mainPanelTabPaneApps").addClass("active");
-            refreshApps();
-        }
-        else if (sessionData.info.permissions.DnsClient.canView) {
-            $("#mainPanelTabListDnsClient").addClass("active");
-            $("#mainPanelTabPaneDnsClient").addClass("active");
-        }
-        else if (sessionData.info.permissions.Settings.canView) {
-            $("#mainPanelTabListSettings").addClass("active");
-            $("#mainPanelTabPaneSettings").addClass("active");
-            refreshDnsSettings()
-        }
-        else if (sessionData.info.permissions.Administration.canView) {
-            $("#mainPanelTabListAdmin").addClass("active");
-            $("#mainPanelTabPaneAdmin").addClass("active");
-            refreshAdminTab();
-        }
-        else if (sessionData.info.permissions.Logs.canView) {
-            $("#mainPanelTabListLogs").addClass("active");
-            $("#mainPanelTabPaneLogs").addClass("active");
-            refreshLogsTab();
-        }
-        else {
+        const fallbacks = [
+            { perm: perms.Zones.canView,         tab: "#mainPanelTabListZones",        pane: "#mainPanelTabPaneZones",        fn: () => refreshZones(true) },
+            { perm: perms.Cache.canView,          tab: "#mainPanelTabListCachedZones",  pane: "#mainPanelTabPaneCachedZones" },
+            { perm: perms.Allowed.canView,        tab: "#mainPanelTabListAllowedZones", pane: "#mainPanelTabPaneAllowedZones" },
+            { perm: perms.Blocked.canView,        tab: "#mainPanelTabListBlockedZones", pane: "#mainPanelTabPaneBlockedZones" },
+            { perm: perms.Apps.canView,           tab: "#mainPanelTabListApps",         pane: "#mainPanelTabPaneApps",         fn: refreshApps },
+            { perm: perms.DnsClient.canView,      tab: "#mainPanelTabListDnsClient",    pane: "#mainPanelTabPaneDnsClient" },
+            { perm: perms.Settings.canView,       tab: "#mainPanelTabListSettings",     pane: "#mainPanelTabPaneSettings",     fn: refreshDnsSettings },
+            { perm: perms.Administration.canView, tab: "#mainPanelTabListAdmin",        pane: "#mainPanelTabPaneAdmin",        fn: refreshAdminTab },
+            { perm: perms.Logs.canView,           tab: "#mainPanelTabListLogs",         pane: "#mainPanelTabPaneLogs",         fn: refreshLogsTab },
+        ];
+
+        const found = fallbacks.find(f => f.perm);
+        if (found) {
+            $(found.tab).addClass("active");
+            $(found.pane).addClass("active");
+            found.fn?.();
+        } else {
             $("#mainPanelTabListAbout").addClass("active");
             $("#mainPanelTabPaneAbout").addClass("active");
         }
     }
 
-    if (sessionData.info.permissions.Zones.canView) {
-        $("#mainPanelTabListZones").show();
-    }
-    else {
-        $("#mainPanelTabListZones").hide();
-    }
+    const tabVisibility = [
+        { selector: "#mainPanelTabListZones",        perm: perms.Zones.canView,         fn: null },
+        { selector: "#mainPanelTabListCachedZones",  perm: perms.Cache.canView,         fn: () => refreshCachedZonesList("") },
+        { selector: "#mainPanelTabListAllowedZones", perm: perms.Allowed.canView,       fn: () => refreshAllowedZonesList("") },
+        { selector: "#mainPanelTabListBlockedZones", perm: perms.Blocked.canView,       fn: () => refreshBlockedZonesList("") },
+        { selector: "#mainPanelTabListApps",         perm: perms.Apps.canView,          fn: null },
+        { selector: "#mainPanelTabListDnsClient",    perm: perms.DnsClient.canView,     fn: null },
+        { selector: "#mainPanelTabListSettings",     perm: perms.Settings.canView,      fn: null },
+        { selector: "#mainPanelTabListAdmin",        perm: perms.Administration.canView,fn: null },
+        { selector: "#mainPanelTabListLogs",         perm: perms.Logs.canView,          fn: null },
+    ];
 
-    if (sessionData.info.permissions.Cache.canView) {
-        $("#mainPanelTabListCachedZones").show();
-        refreshCachedZonesList("");
-    }
-    else {
-        $("#mainPanelTabListCachedZones").hide();
-    }
-
-    if (sessionData.info.permissions.Allowed.canView) {
-        $("#mainPanelTabListAllowedZones").show();
-        refreshAllowedZonesList("");
-    }
-    else {
-        $("#mainPanelTabListAllowedZones").hide();
-    }
-
-    if (sessionData.info.permissions.Blocked.canView) {
-        $("#mainPanelTabListBlockedZones").show();
-        refreshBlockedZonesList("");
-    }
-    else {
-        $("#mainPanelTabListBlockedZones").hide();
-    }
-
-    if (sessionData.info.permissions.Apps.canView) {
-        $("#mainPanelTabListApps").show();
-    }
-    else {
-        $("#mainPanelTabListApps").hide();
-    }
-
-    if (sessionData.info.permissions.DnsClient.canView) {
-        $("#mainPanelTabListDnsClient").show();
-    }
-    else {
-        $("#mainPanelTabListDnsClient").hide();
-    }
-
-    if (sessionData.info.permissions.Settings.canView) {
-        $("#mainPanelTabListSettings").show();
-    }
-    else {
-        $("#mainPanelTabListSettings").hide();
-    }
-
-    if (sessionData.info.permissions.Administration.canView) {
-        $("#mainPanelTabListAdmin").show();
-    }
-    else {
-        $("#mainPanelTabListAdmin").hide();
-    }
-
-    if (sessionData.info.permissions.Logs.canView) {
-        $("#mainPanelTabListLogs").show();
-    }
-    else {
-        $("#mainPanelTabListLogs").hide();
+    for (const { selector, perm, fn } of tabVisibility) {
+        if (perm) { $(selector).show(); fn?.(); }
+        else        $(selector).hide();
     }
 
     $("#pageMain").show();
-
     checkForUpdate();
 
-    refreshTimerHandle = setInterval(function () {
-        var type = $("input[name=rdStatType]:checked").val();
-        if (type === "lastHour")
+    refreshTimerHandle = setInterval(() => {
+        if ($("input[name=rdStatType]:checked").val() === "lastHour")
             refreshDashboard(true);
-
-        $("#lblAboutUptime").text(moment(sessionData.info.uptimestamp).local().format("lll") + " (" + moment(sessionData.info.uptimestamp).fromNow() + ")");
+        $("#lblAboutUptime").text(
+            moment(sessionData.info.uptimestamp).local().format("lll") +
+            " (" + moment(sessionData.info.uptimestamp).fromNow() + ")"
+        );
     }, 60000);
 }
 
-$(function () {
-    var headerHtml = $("#header").html();
 
-    $("#header").html("<div class=\"title\"><a href=\".\"><span class=\"text\" style=\"color: #ffffff;\">Zenitium</span></a>" + headerHtml + "</div>");
+$(function () {
+    const headerHtml = $("#header").html();
+    $("#header").html(`<div class="title"><a href="."><span class="text" style="color:#ffffff;">Zenitium</span></a>${headerHtml}</div>`);
     $("#footer").html("Proudly presented by xRuffKez | Zenitium DNS | Codebase by Shreyas Zare");
 
     loadQuickBlockLists();
     loadQuickForwardersList();
 
     $("#chkEnableUdpSocketPool").on("click", function () {
-        var enableUdpSocketPool = $("#chkEnableUdpSocketPool").prop("checked");
-
-        $("#txtUdpSocketPoolExcludedPorts").prop("disabled", !enableUdpSocketPool);
+        $("#txtUdpSocketPoolExcludedPorts").prop("disabled", !this.checked);
     });
 
     $("#chkEDnsClientSubnet").on("click", function () {
-        var eDnsClientSubnet = $("#chkEDnsClientSubnet").prop("checked");
-
-        $("#txtEDnsClientSubnetIPv4PrefixLength").prop("disabled", !eDnsClientSubnet);
-        $("#txtEDnsClientSubnetIPv6PrefixLength").prop("disabled", !eDnsClientSubnet);
-        $("#txtEDnsClientSubnetIpv4Override").prop("disabled", !eDnsClientSubnet);
-        $("#txtEDnsClientSubnetIpv6Override").prop("disabled", !eDnsClientSubnet);
+        const on = this.checked;
+        $("#txtEDnsClientSubnetIPv4PrefixLength, #txtEDnsClientSubnetIPv6PrefixLength, #txtEDnsClientSubnetIpv4Override, #txtEDnsClientSubnetIpv6Override")
+            .prop("disabled", !on);
     });
 
     $("#chkEnableBlocking").on("click", updateBlockingState);
 
     $("input[type=radio][name=rdProxyType]").on("change", function () {
-        var proxyType = $("input[name=rdProxyType]:checked").val().toLowerCase();
-        if (proxyType === "none") {
-            $("#txtProxyAddress").prop("disabled", true);
-            $("#txtProxyPort").prop("disabled", true);
-            $("#txtProxyUsername").prop("disabled", true);
-            $("#txtProxyPassword").prop("disabled", true);
-            $("#txtProxyBypassList").prop("disabled", true);
-        }
-        else {
-            $("#txtProxyAddress").prop("disabled", false);
-            $("#txtProxyPort").prop("disabled", false);
-            $("#txtProxyUsername").prop("disabled", false);
-            $("#txtProxyPassword").prop("disabled", false);
-            $("#txtProxyBypassList").prop("disabled", false);
-        }
+        const on = $("input[name=rdProxyType]:checked").val().toLowerCase() !== "none";
+        $("#txtProxyAddress, #txtProxyPort, #txtProxyUsername, #txtProxyPassword, #txtProxyBypassList").prop("disabled", !on);
     });
 
     $("input[type=radio][name=rdRecursion]").on("change", function () {
-        var recursion = $("input[name=rdRecursion]:checked").val();
-
-        $("#txtRecursionNetworkACL").prop("disabled", recursion !== "UseSpecifiedNetworkACL");
+        $("#txtRecursionNetworkACL").prop("disabled", $("input[name=rdRecursion]:checked").val() !== "UseSpecifiedNetworkACL");
     });
 
     $("input[type=radio][name=rdBlockingType]").on("change", function () {
-        var recursion = $("input[name=rdBlockingType]:checked").val();
-        if (recursion === "CustomAddress") {
-            $("#txtCustomBlockingAddresses").prop("disabled", false);
-        }
-        else {
-            $("#txtCustomBlockingAddresses").prop("disabled", true);
-        }
+        $("#txtCustomBlockingAddresses").prop("disabled", $("input[name=rdBlockingType]:checked").val() !== "CustomAddress");
     });
 
     $("#chkWebServiceEnableTls").on("click", function () {
-        var webServiceEnableTls = $("#chkWebServiceEnableTls").prop("checked");
-        $("#chkWebServiceEnableHttp3").prop("disabled", !webServiceEnableTls);
-        $("#chkWebServiceHttpToTlsRedirect").prop("disabled", !webServiceEnableTls);
-        $("#chkWebServiceUseSelfSignedTlsCertificate").prop("disabled", !webServiceEnableTls);
-        $("#txtWebServiceTlsPort").prop("disabled", !webServiceEnableTls);
-        $("#txtWebServiceTlsCertificatePath").prop("disabled", !webServiceEnableTls);
-        $("#txtWebServiceTlsCertificatePassword").prop("disabled", !webServiceEnableTls);
+        const on = this.checked;
+        $("#chkWebServiceEnableHttp3, #chkWebServiceHttpToTlsRedirect, #chkWebServiceUseSelfSignedTlsCertificate, #txtWebServiceTlsPort, #txtWebServiceTlsCertificatePath, #txtWebServiceTlsCertificatePassword")
+            .prop("disabled", !on);
     });
 
-    $("#chkEnableDnsOverUdpProxy").on("click", function () {
-        var enableDnsOverUdpProxy = $("#chkEnableDnsOverUdpProxy").prop("checked");
-        var enableDnsOverTcpProxy = $("#chkEnableDnsOverTcpProxy").prop("checked");
-        var enableDnsOverHttp = $("#chkEnableDnsOverHttp").prop("checked");
-        var enableDnsOverHttps = $("#chkEnableDnsOverHttps").prop("checked");
+    function updateReverseProxyACL() {
+        const on = $("#chkEnableDnsOverUdpProxy, #chkEnableDnsOverTcpProxy, #chkEnableDnsOverHttp, #chkEnableDnsOverHttps")
+            .toArray().some(el => el.checked);
+        $("#txtReverseProxyNetworkACL").prop("disabled", !on);
+    }
 
-        $("#txtDnsOverUdpProxyPort").prop("disabled", !enableDnsOverUdpProxy);
-        $("#txtReverseProxyNetworkACL").prop("disabled", !enableDnsOverUdpProxy && !enableDnsOverTcpProxy && !enableDnsOverHttp && !enableDnsOverHttps);
+    function updateTlsCertFields() {
+        const on = ["#chkEnableDnsOverTls","#chkEnableDnsOverHttps","#chkEnableDnsOverQuic"]
+            .some(id => $(id).prop("checked"));
+        $("#txtDnsTlsCertificatePath, #txtDnsTlsCertificatePassword").prop("disabled", !on);
+    }
+
+    function updateHttpRealIpField() {
+        const on = $("#chkEnableDnsOverHttp").prop("checked") || $("#chkEnableDnsOverHttps").prop("checked");
+        $("#txtDnsOverHttpRealIpHeader").prop("disabled", !on);
+    }
+
+    $("#chkEnableDnsOverUdpProxy").on("click", function () {
+        $("#txtDnsOverUdpProxyPort").prop("disabled", !this.checked);
+        updateReverseProxyACL();
     });
 
     $("#chkEnableDnsOverTcpProxy").on("click", function () {
-        var enableDnsOverUdpProxy = $("#chkEnableDnsOverUdpProxy").prop("checked");
-        var enableDnsOverTcpProxy = $("#chkEnableDnsOverTcpProxy").prop("checked");
-        var enableDnsOverHttp = $("#chkEnableDnsOverHttp").prop("checked");
-        var enableDnsOverHttps = $("#chkEnableDnsOverHttps").prop("checked");
-
-        $("#txtDnsOverTcpProxyPort").prop("disabled", !enableDnsOverTcpProxy);
-        $("#txtReverseProxyNetworkACL").prop("disabled", !enableDnsOverUdpProxy && !enableDnsOverTcpProxy && !enableDnsOverHttp && !enableDnsOverHttps);
+        $("#txtDnsOverTcpProxyPort").prop("disabled", !this.checked);
+        updateReverseProxyACL();
     });
 
     $("#chkEnableDnsOverHttp").on("click", function () {
-        var enableDnsOverUdpProxy = $("#chkEnableDnsOverUdpProxy").prop("checked");
-        var enableDnsOverTcpProxy = $("#chkEnableDnsOverTcpProxy").prop("checked");
-        var enableDnsOverHttp = $("#chkEnableDnsOverHttp").prop("checked");
-        var enableDnsOverHttps = $("#chkEnableDnsOverHttps").prop("checked");
-
-        $("#txtDnsOverHttpPort").prop("disabled", !enableDnsOverHttp);
-        $("#txtReverseProxyNetworkACL").prop("disabled", !enableDnsOverUdpProxy && !enableDnsOverTcpProxy && !enableDnsOverHttp && !enableDnsOverHttps);
-        $("#txtDnsOverHttpRealIpHeader").prop("disabled", !enableDnsOverHttp && !enableDnsOverHttps);
+        $("#txtDnsOverHttpPort").prop("disabled", !this.checked);
+        updateReverseProxyACL();
+        updateHttpRealIpField();
     });
 
     $("#chkEnableDnsOverTls").on("click", function () {
-        var enableDnsOverTls = $("#chkEnableDnsOverTls").prop("checked");
-        var enableDnsOverHttps = $("#chkEnableDnsOverHttps").prop("checked");
-        var enableDnsOverQuic = $("#chkEnableDnsOverQuic").prop("checked");
-
-        $("#txtDnsOverTlsPort").prop("disabled", !enableDnsOverTls);
-        $("#txtDnsTlsCertificatePath").prop("disabled", !enableDnsOverTls && !enableDnsOverHttps && !enableDnsOverQuic);
-        $("#txtDnsTlsCertificatePassword").prop("disabled", !enableDnsOverTls && !enableDnsOverHttps && !enableDnsOverQuic);
+        $("#txtDnsOverTlsPort").prop("disabled", !this.checked);
+        updateTlsCertFields();
     });
 
     $("#chkEnableDnsOverHttps").on("click", function () {
-        var enableDnsOverUdpProxy = $("#chkEnableDnsOverUdpProxy").prop("checked");
-        var enableDnsOverTcpProxy = $("#chkEnableDnsOverTcpProxy").prop("checked");
-        var enableDnsOverTls = $("#chkEnableDnsOverTls").prop("checked");
-        var enableDnsOverHttp = $("#chkEnableDnsOverHttp").prop("checked");
-        var enableDnsOverHttps = $("#chkEnableDnsOverHttps").prop("checked");
-        var enableDnsOverQuic = $("#chkEnableDnsOverQuic").prop("checked");
-
-        $("#chkEnableDnsOverHttp3").prop("disabled", !enableDnsOverHttps);
-        $("#txtDnsOverHttpsPort").prop("disabled", !enableDnsOverHttps);
-        $("#txtReverseProxyNetworkACL").prop("disabled", !enableDnsOverUdpProxy && !enableDnsOverTcpProxy && !enableDnsOverHttp && !enableDnsOverHttps);
-        $("#txtDnsTlsCertificatePath").prop("disabled", !enableDnsOverTls && !enableDnsOverHttps && !enableDnsOverQuic);
-        $("#txtDnsTlsCertificatePassword").prop("disabled", !enableDnsOverTls && !enableDnsOverHttps && !enableDnsOverQuic);
-        $("#txtDnsOverHttpRealIpHeader").prop("disabled", !enableDnsOverHttp && !enableDnsOverHttps);
+        $("#chkEnableDnsOverHttp3").prop("disabled", !this.checked);
+        $("#txtDnsOverHttpsPort").prop("disabled", !this.checked);
+        updateReverseProxyACL();
+        updateTlsCertFields();
+        updateHttpRealIpField();
     });
 
     $("#chkEnableDnsOverQuic").on("click", function () {
-        var enableDnsOverTls = $("#chkEnableDnsOverTls").prop("checked");
-        var enableDnsOverHttps = $("#chkEnableDnsOverHttps").prop("checked");
-        var enableDnsOverQuic = $("#chkEnableDnsOverQuic").prop("checked");
-
-        $("#txtDnsOverQuicPort").prop("disabled", !enableDnsOverQuic);
-        $("#txtDnsTlsCertificatePath").prop("disabled", !enableDnsOverTls && !enableDnsOverHttps && !enableDnsOverQuic);
-        $("#txtDnsTlsCertificatePassword").prop("disabled", !enableDnsOverTls && !enableDnsOverHttps && !enableDnsOverQuic);
+        $("#txtDnsOverQuicPort").prop("disabled", !this.checked);
+        updateTlsCertFields();
     });
 
     $("#chkEnableConcurrentForwarding").on("click", function () {
-        var concurrentForwarding = $("#chkEnableConcurrentForwarding").prop("checked");
-        $("#txtForwarderConcurrency").prop("disabled", !concurrentForwarding)
+        $("#txtForwarderConcurrency").prop("disabled", !this.checked);
     });
 
     $("input[type=radio][name=rdLoggingType]").on("change", function () {
-        var rdLoggingType = $("input[name=rdLoggingType]:checked").val();
-        var enableLogging = rdLoggingType.toLowerCase() != "none";
-
-        $("#chkIgnoreResolverLogs").prop("disabled", !enableLogging);
-        $("#chkLogQueries").prop("disabled", !enableLogging);
-        $("#chkUseLocalTime").prop("disabled", !enableLogging);
-        $("#txtLogFolderPath").prop("disabled", !enableLogging);
+        const on = $("input[name=rdLoggingType]:checked").val().toLowerCase() !== "none";
+        $("#chkIgnoreResolverLogs, #chkLogQueries, #chkUseLocalTime, #txtLogFolderPath").prop("disabled", !on);
     });
 
     $("#chkServeStale").on("click", function () {
-        var serveStale = $("#chkServeStale").prop("checked");
-        $("#txtServeStaleTtl").prop("disabled", !serveStale);
-        $("#txtServeStaleAnswerTtl").prop("disabled", !serveStale);
-        $("#txtServeStaleResetTtl").prop("disabled", !serveStale);
-        $("#txtServeStaleMaxWaitTime").prop("disabled", !serveStale);
+        const on = this.checked;
+        $("#txtServeStaleTtl, #txtServeStaleAnswerTtl, #txtServeStaleResetTtl, #txtServeStaleMaxWaitTime").prop("disabled", !on);
     });
 
     $("#optQuickBlockList").on("change", function () {
-        var selectedOption = $("#optQuickBlockList").val();
+        const selected = this.value;
+        if (selected === "blank") return;
+        if (selected === "none") { $("#txtBlockListUrls").val(""); return; }
 
-        switch (selectedOption) {
-            case "blank":
-                break;
+        const entry = quickBlockLists.find(b => b.name === selected);
+        if (!entry) return;
 
-            case "none":
-                $("#txtBlockListUrls").val("");
-                break;
-
-            default:
-                for (var i = 0; i < quickBlockLists.length; i++) {
-                    if (quickBlockLists[i].name === selectedOption) {
-                        var existingList;
-
-                        if (selectedOption.toLowerCase() == "default")
-                            existingList = "";
-                        else
-                            existingList = $("#txtBlockListUrls").val();
-
-                        var newList = existingList;
-
-                        for (var j = 0; j < quickBlockLists[i].urls.length; j++) {
-                            var url = quickBlockLists[i].urls[j];
-
-                            if (existingList.indexOf(url) < 0)
-                                newList += url + "\n";
-                        }
-
-                        $("#txtBlockListUrls").val(newList);
-                        break;
-                    }
-                }
-
-                break;
-        }
+        const existing = selected.toLowerCase() === "default" ? "" : $("#txtBlockListUrls").val();
+        const newList = entry.urls.reduce((acc, url) => acc.indexOf(url) < 0 ? acc + url + "\n" : acc, existing);
+        $("#txtBlockListUrls").val(newList);
     });
 
     $("#optQuickForwarders").on("change", function () {
-        var selectedOption = $("#optQuickForwarders").val();
+        const selected = this.value;
+        if (selected === "blank") return;
+        if (selected === "none") {
+            $("#txtForwarders").val("");
+            $("#rdForwarderProtocolUdp").prop("checked", true);
+            return;
+        }
 
-        switch (selectedOption) {
-            case "blank":
-                break;
+        const entry = quickForwardersList.find(f => f.name === selected);
+        if (!entry) return;
 
-            case "none":
-                $("#txtForwarders").val("");
-                $("#rdForwarderProtocolUdp").prop("checked", true);
-                break;
+        $("#txtForwarders").val(entry.addresses.join("\n") + "\n");
 
-            default:
-                for (var i = 0; i < quickForwardersList.length; i++) {
-                    if (quickForwardersList[i].name === selectedOption) {
-                        var forwarders = "";
+        const protoMap = { TCP: "#rdForwarderProtocolTcp", TLS: "#rdForwarderProtocolTls", HTTPS: "#rdForwarderProtocolHttps", QUIC: "#rdForwarderProtocolQuic" };
+        $(protoMap[entry.protocol?.toUpperCase()] ?? "#rdForwarderProtocolUdp").prop("checked", true);
 
-                        for (var j = 0; j < quickForwardersList[i].addresses.length; j++) {
-                            forwarders += quickForwardersList[i].addresses[j] + "\n";
-                        }
-
-                        $("#txtForwarders").val(forwarders);
-
-                        switch (quickForwardersList[i].protocol.toUpperCase()) {
-                            case "TCP":
-                                $("#rdForwarderProtocolTcp").prop("checked", true);
-                                break;
-
-                            case "TLS":
-                                $("#rdForwarderProtocolTls").prop("checked", true);
-                                break;
-
-                            case "HTTPS":
-                                $("#rdForwarderProtocolHttps").prop("checked", true);
-                                break;
-
-                            case "QUIC":
-                                $("#rdForwarderProtocolQuic").prop("checked", true);
-                                break;
-
-                            default:
-                                $("#rdForwarderProtocolUdp").prop("checked", true);
-                                break;
-                        }
-
-                        if (quickForwardersList[i].proxyType == null)
-                            quickForwardersList[i].proxyType = "DefaultProxy";
-
-                        switch (quickForwardersList[i].proxyType.toUpperCase()) {
-                            case "SOCKS5":
-                            case "HTTP":
-                                if (quickForwardersList[i].proxyType.toUpperCase() == "SOCKS5")
-                                    $("#rdProxyTypeSocks5").prop("checked", true);
-                                else
-                                    $("#rdProxyTypeHttp").prop("checked", true);
-
-                                $("#txtProxyAddress").val(quickForwardersList[i].proxyAddress);
-                                $("#txtProxyPort").val(quickForwardersList[i].proxyPort);
-                                $("#txtProxyUsername").val(quickForwardersList[i].proxyUsername);
-                                $("#txtProxyPassword").val(quickForwardersList[i].proxyPassword);
-
-                                $("#txtProxyAddress").prop("disabled", false);
-                                $("#txtProxyPort").prop("disabled", false);
-                                $("#txtProxyUsername").prop("disabled", false);
-                                $("#txtProxyPassword").prop("disabled", false);
-                                break;
-
-                            case "NONE":
-                                $("#rdProxyTypeNone").prop("checked", true);
-
-                                $("#txtProxyAddress").prop("disabled", true);
-                                $("#txtProxyPort").prop("disabled", true);
-                                $("#txtProxyUsername").prop("disabled", true);
-                                $("#txtProxyPassword").prop("disabled", true);
-
-                                $("#txtProxyAddress").val("");
-                                $("#txtProxyPort").val("");
-                                $("#txtProxyUsername").val("");
-                                $("#txtProxyPassword").val("");
-                                break;
-                        }
-
-                        break;
-                    }
-                }
-
-                break;
+        const proxyType = (entry.proxyType ?? "DefaultProxy").toUpperCase();
+        if (proxyType === "SOCKS5" || proxyType === "HTTP") {
+            $(proxyType === "SOCKS5" ? "#rdProxyTypeSocks5" : "#rdProxyTypeHttp").prop("checked", true);
+            $("#txtProxyAddress").val(entry.proxyAddress).prop("disabled", false);
+            $("#txtProxyPort").val(entry.proxyPort).prop("disabled", false);
+            $("#txtProxyUsername").val(entry.proxyUsername).prop("disabled", false);
+            $("#txtProxyPassword").val(entry.proxyPassword).prop("disabled", false);
+        } else if (proxyType === "NONE") {
+            $("#rdProxyTypeNone").prop("checked", true);
+            $("#txtProxyAddress, #txtProxyPort, #txtProxyUsername, #txtProxyPassword").val("").prop("disabled", true);
         }
     });
 
     $("input[type=radio][name=rdStatType]").on("change", function () {
-        var type = $("input[name=rdStatType]:checked").val();
+        const type = $("input[name=rdStatType]:checked").val();
         if (type === "custom") {
             $("#divCustomDayWise").show();
-
-            if ($("#dpCustomDayWiseStart").val() === "") {
-                $("#dpCustomDayWiseStart").trigger("focus");
-                return;
-            }
-
-            if ($("#dpCustomDayWiseEnd").val() === "") {
-                $("#dpCustomDayWiseEnd").trigger("focus");
-                return;
-            }
-
-            refreshDashboard();
-        }
-        else {
+            if (!$("#dpCustomDayWiseStart").val()) { $("#dpCustomDayWiseStart").trigger("focus"); return; }
+            if (!$("#dpCustomDayWiseEnd").val())   { $("#dpCustomDayWiseEnd").trigger("focus");   return; }
+        } else {
             $("#divCustomDayWise").hide();
-
-            refreshDashboard();
         }
-    });
-
-    $("#btnCustomDayWise").on("click", function () {
         refreshDashboard();
     });
+
+    $("#btnCustomDayWise").on("click", () => refreshDashboard());
 
     applyTheme();
 });
@@ -556,2260 +296,1150 @@ $(function () {
 function showAbout() {
     if ($("#pageLogin").is(":visible")) {
         window.open("https://technitium.com/aboutus.html", "_blank");
+        return;
     }
-    else {
-        $("#mainPanelTabListDashboard").removeClass("active");
-        $("#mainPanelTabPaneDashboard").removeClass("active");
 
-        $("#mainPanelTabListZones").removeClass("active");
-        $("#mainPanelTabPaneZones").removeClass("active");
+    $([
+        "#mainPanelTabListDashboard","#mainPanelTabPaneDashboard",
+        "#mainPanelTabListZones","#mainPanelTabPaneZones",
+        "#mainPanelTabListCachedZones","#mainPanelTabPaneCachedZones",
+        "#mainPanelTabListAllowedZones","#mainPanelTabPaneAllowedZones",
+        "#mainPanelTabListBlockedZones","#mainPanelTabPaneBlockedZones",
+        "#mainPanelTabListApps","#mainPanelTabPaneApps",
+        "#mainPanelTabListDnsClient","#mainPanelTabPaneDnsClient",
+        "#mainPanelTabListSettings","#mainPanelTabPaneSettings",
+        "#mainPanelTabListAdmin","#mainPanelTabPaneAdmin",
+        "#mainPanelTabListLogs","#mainPanelTabPaneLogs"
+    ].join(",")).removeClass("active");
 
-        $("#mainPanelTabListCachedZones").removeClass("active");
-        $("#mainPanelTabPaneCachedZones").removeClass("active");
+    $("#mainPanelTabListAbout, #mainPanelTabPaneAbout").addClass("active");
 
-        $("#mainPanelTabListAllowedZones").removeClass("active");
-        $("#mainPanelTabPaneAllowedZones").removeClass("active");
-
-        $("#mainPanelTabListBlockedZones").removeClass("active");
-        $("#mainPanelTabPaneBlockedZones").removeClass("active");
-
-        $("#mainPanelTabListApps").removeClass("active");
-        $("#mainPanelTabPaneApps").removeClass("active");
-
-        $("#mainPanelTabListDnsClient").removeClass("active");
-        $("#mainPanelTabPaneDnsClient").removeClass("active");
-
-        $("#mainPanelTabListSettings").removeClass("active");
-        $("#mainPanelTabPaneSettings").removeClass("active");
-
-        $("#mainPanelTabListAdmin").removeClass("active");
-        $("#mainPanelTabPaneAdmin").removeClass("active");
-
-        $("#mainPanelTabListLogs").removeClass("active");
-        $("#mainPanelTabPaneLogs").removeClass("active");
-
-        $("#mainPanelTabListAbout").addClass("active");
-        $("#mainPanelTabPaneAbout").addClass("active");
-
-        setTimeout(function () {
-            window.scroll({
-                top: 0,
-                left: 0,
-                behavior: "smooth"
-            });
-        }, 500);
-    }
+    setTimeout(() => window.scroll({ top: 0, left: 0, behavior: "smooth" }), 500);
 }
 
 function checkForUpdate() {
     HTTPRequest({
         url: "api/user/checkForUpdate?token=" + sessionData.token,
-        success: function (responseJSON) {
-            var lnkUpdateAvailable = $("#lnkUpdateAvailable");
+        success(responseJSON) {
+            const r = responseJSON.response;
+            const lnk = $("#lnkUpdateAvailable");
+            if (!r.updateAvailable) { lnk.hide(); return; }
 
-            if (responseJSON.response.updateAvailable) {
-                $("#lblUpdateVersion").text(responseJSON.response.updateVersion);
-                $("#lblCurrentVersion").text(responseJSON.response.currentVersion);
+            $("#lblUpdateVersion").text(r.updateVersion);
+            $("#lblCurrentVersion").text(r.currentVersion);
 
-                if (responseJSON.response.updateTitle == null)
-                    responseJSON.response.updateTitle = "New Update Available!";
+            const title = r.updateTitle ?? "New Update Available!";
+            lnk.text(title);
+            $("#lblUpdateAvailableTitle").text(title);
 
-                lnkUpdateAvailable.text(responseJSON.response.updateTitle);
-                $("#lblUpdateAvailableTitle").text(responseJSON.response.updateTitle);
+            r.updateMessage  ? $("#lblUpdateMessage").text(r.updateMessage).show()          : $("#lblUpdateMessage").hide();
+            r.downloadLink   ? $("#lnkUpdateDownload").attr("href", r.downloadLink).show()  : $("#lnkUpdateDownload").hide();
+            r.instructionsLink ? $("#lnkUpdateInstructions").attr("href", r.instructionsLink).show() : $("#lnkUpdateInstructions").hide();
+            r.changeLogLink  ? $("#lnkUpdateChangeLog").attr("href", r.changeLogLink).show(): $("#lnkUpdateChangeLog").hide();
 
-                var lblUpdateMessage = $("#lblUpdateMessage");
-                var lnkUpdateDownload = $("#lnkUpdateDownload");
-                var lnkUpdateInstructions = $("#lnkUpdateInstructions");
-                var lnkUpdateChangeLog = $("#lnkUpdateChangeLog");
-
-                if (responseJSON.response.updateMessage == null) {
-                    lblUpdateMessage.hide();
-                }
-                else {
-                    lblUpdateMessage.text(responseJSON.response.updateMessage);
-                    lblUpdateMessage.show();
-                }
-
-                if (responseJSON.response.downloadLink == null) {
-                    lnkUpdateDownload.hide();
-                }
-                else {
-                    lnkUpdateDownload.attr("href", responseJSON.response.downloadLink);
-                    lnkUpdateDownload.show();
-                }
-
-                if (responseJSON.response.instructionsLink == null) {
-                    lnkUpdateInstructions.hide();
-                }
-                else {
-                    lnkUpdateInstructions.attr("href", responseJSON.response.instructionsLink);
-                    lnkUpdateInstructions.show();
-                }
-
-                if (responseJSON.response.changeLogLink == null) {
-                    lnkUpdateChangeLog.hide();
-                }
-                else {
-                    lnkUpdateChangeLog.attr("href", responseJSON.response.changeLogLink);
-                    lnkUpdateChangeLog.show();
-                }
-
-                lnkUpdateAvailable.show();
-            }
-            else {
-                lnkUpdateAvailable.hide();
-            }
+            lnk.show();
         },
-        invalidToken: function () {
-            showPageLogin();
-        }
+        invalidToken: showPageLogin
     });
 }
 
 function loadQuickBlockLists() {
-    $.ajax({
-        type: "GET",
-        url: "json/quick-block-lists-custom.json",
-        dataType: "json",
-        cache: false,
-        async: false,
-        success: function (responseJSON, status, jqXHR) {
-            loadQuickBlockListsFrom(responseJSON);
-        },
-        error: function (jqXHR, textStatus, errorThrown) {
-            $.ajax({
-                type: "GET",
-                url: "json/quick-block-lists-builtin.json",
-                dataType: "json",
-                cache: false,
-                async: false,
-                success: function (responseJSON, status, jqXHR) {
-                    loadQuickBlockListsFrom(responseJSON);
-                },
-                error: function (jqXHR, textStatus, errorThrown) {
-                }
-            });
-        }
-    });
+    $.getJSON("json/quick-block-lists-custom.json")
+        .then(loadQuickBlockListsFrom)
+        .catch(() => $.getJSON("json/quick-block-lists-builtin.json").then(loadQuickBlockListsFrom));
 }
 
-function loadQuickBlockListsFrom(responseJSON) {
-    var htmlList = "<option value=\"blank\" selected></option><option value=\"none\">None</option>";
-
-    for (var i = 0; i < responseJSON.length; i++) {
-        htmlList += "<option>" + htmlEncode(responseJSON[i].name) + "</option>";
-    }
-
-    quickBlockLists = responseJSON;
-    $("#optQuickBlockList").html(htmlList);
+function loadQuickBlockListsFrom(data) {
+    quickBlockLists = data;
+    $("#optQuickBlockList").html(
+        '<option value="blank" selected></option><option value="none">None</option>' +
+        data.map(b => `<option>${htmlEncode(b.name)}</option>`).join("")
+    );
 }
 
 function loadQuickForwardersList() {
-    $.ajax({
-        type: "GET",
-        url: "json/quick-forwarders-list-custom.json",
-        dataType: "json",
-        cache: false,
-        async: false,
-        success: function (responseJSON, status, jqXHR) {
-            loadQuickForwardersListFrom(responseJSON);
-        },
-        error: function (jqXHR, textStatus, errorThrown) {
-            $.ajax({
-                type: "GET",
-                url: "json/quick-forwarders-list-builtin.json",
-                dataType: "json",
-                cache: false,
-                async: false,
-                success: function (responseJSON, status, jqXHR) {
-                    loadQuickForwardersListFrom(responseJSON);
-                },
-                error: function (jqXHR, textStatus, errorThrown) {
-                }
-            });
-        }
-    });
+    $.getJSON("json/quick-forwarders-list-custom.json")
+        .then(loadQuickForwardersListFrom)
+        .catch(() => $.getJSON("json/quick-forwarders-list-builtin.json").then(loadQuickForwardersListFrom));
 }
 
-function loadQuickForwardersListFrom(responseJSON) {
-    var htmlList = "<option value=\"blank\" selected></option><option value=\"none\">None</option>";
-
-    for (var i = 0; i < responseJSON.length; i++) {
-        htmlList += "<option>" + htmlEncode(responseJSON[i].name) + "</option>";
-    }
-
-    quickForwardersList = responseJSON;
-    $("#optQuickForwarders").html(htmlList);
+function loadQuickForwardersListFrom(data) {
+    quickForwardersList = data;
+    $("#optQuickForwarders").html(
+        '<option value="blank" selected></option><option value="none">None</option>' +
+        data.map(f => `<option>${htmlEncode(f.name)}</option>`).join("")
+    );
 }
 
 function refreshDnsSettings() {
-    var divDnsSettingsLoader = $("#divDnsSettingsLoader");
-    var divDnsSettings = $("#divDnsSettings");
-
-    divDnsSettings.hide();
-    divDnsSettingsLoader.show();
+    const loader = $("#divDnsSettingsLoader");
+    const panel  = $("#divDnsSettings");
+    panel.hide();
+    loader.show();
 
     HTTPRequest({
         url: "api/settings/get?token=" + sessionData.token,
-        success: function (responseJSON) {
+        success(responseJSON) {
             updateDnsSettingsDataAndGui(responseJSON);
             loadDnsSettings(responseJSON);
             checkForReverseProxy(responseJSON);
 
-            //general
-            $("#divSettingsGeneralLocalParameters").show();
-            $("#divSettingsGeneralDefaultParameters").show();
-            $("#divSettingsGeneralDnsApps").show();
-            $("#divSettingsGeneralIpv6").show();
-            $("#divSettingsGeneralUdpSocketPool").show();
-            $("#divSettingsGeneralEDns").show();
-            $("#divSettingsGeneralDnssec").show();
-            $("#divSettingsGeneralEDnsClientSubnet").show();
-            $("#divSettingsGeneralRateLimiting").show();
-            $("#divSettingsGeneralAdvancedOptions").show();
+            [
+                "#divSettingsGeneralLocalParameters","#divSettingsGeneralDefaultParameters",
+                "#divSettingsGeneralDnsApps","#divSettingsGeneralIpv6",
+                "#divSettingsGeneralUdpSocketPool","#divSettingsGeneralEDns",
+                "#divSettingsGeneralDnssec","#divSettingsGeneralEDnsClientSubnet",
+                "#divSettingsGeneralRateLimiting","#divSettingsGeneralAdvancedOptions",
+                "#settingsTabListWebService","#settingsTabListOptionalProtocols",
+                "#settingsTabListTsig","#settingsTabListRecursion","#settingsTabListCache",
+                "#settingsTabListBlocking","#settingsTabListProxyForwarders","#settingsTabListLogging",
+                "#btnSettingsFlushCache","#btnShowBackupSettingsModal","#btnShowRestoreSettingsModal"
+            ].forEach(sel => $(sel).show());
 
-            //web service
-            $("#settingsTabListWebService").show();
-
-            //optional protocols
-            $("#settingsTabListOptionalProtocols").show();
-
-            //tsig
-            $("#settingsTabListTsig").show();
-
-            //recursion
-            $("#settingsTabListRecursion").show();
-
-            //cache
-            $("#settingsTabListCache").show();
-
-            //blocking
-            $("#settingsTabListBlocking").show();
-
-            //proxy & forwarders
-            $("#settingsTabListProxyForwarders").show();
-
-            //logging
-            $("#settingsTabListLogging").show();
-
-            //buttons
-            $("#btnSettingsFlushCache").show();
-            $("#btnShowBackupSettingsModal").show();
-            $("#btnShowRestoreSettingsModal").show();
-
-            divDnsSettingsLoader.hide();
-            divDnsSettings.show();
+            loader.hide();
+            panel.show();
         },
-        error: function () {
-            divDnsSettingsLoader.hide();
-            divDnsSettings.show();
-        },
-        invalidToken: function () {
-            showPageLogin();
-        },
-        objLoaderPlaceholder: divDnsSettingsLoader
+        error()  { loader.hide(); panel.show(); },
+        invalidToken: showPageLogin,
+        objLoaderPlaceholder: loader
     });
 }
 
 function getArrayAsString(array) {
-    var value = "";
-
-    for (var i = 0; i < array.length; i++)
-        value += array[i] + "\r\n";
-
-    return value;
+    return array ? array.join("\r\n") + (array.length ? "\r\n" : "") : "";
 }
 
 function updateDnsSettingsDataAndGui(responseJSON) {
-    sessionData.info.dnsServerDomain = responseJSON.response.dnsServerDomain;
-    sessionData.info.uptimestamp = responseJSON.response.uptimestamp; //update timestamp since server may have restarted during current session
+    const r = responseJSON.response;
+    sessionData.info.dnsServerDomain = r.dnsServerDomain;
+    sessionData.info.uptimestamp      = r.uptimestamp;
 
-    document.title = responseJSON.response.dnsServerDomain + " - " + "Zenitium DNS Server v" + responseJSON.response.version;
-    $("#lblAboutVersion").text(responseJSON.response.version);
-    $("#lblAboutUptime").text(moment(responseJSON.response.uptimestamp).local().format("lll") + " (" + moment(responseJSON.response.uptimestamp).fromNow() + ")");
-    $("#lblDnsServerDomain").text(" - " + responseJSON.response.dnsServerDomain);
+    document.title = `${r.dnsServerDomain} - Zenitium DNS Server v${r.version}`;
+    $("#lblAboutVersion").text(r.version);
+    $("#lblAboutUptime").text(moment(r.uptimestamp).local().format("lll") + " (" + moment(r.uptimestamp).fromNow() + ")");
+    $("#lblDnsServerDomain").text(" - " + r.dnsServerDomain);
 }
 
 function loadDnsSettings(responseJSON) {
-    //general
-    $("#txtDnsServerDomain").val(responseJSON.response.dnsServerDomain);
+    const r = responseJSON.response;
 
-    var dnsServerLocalEndPoints = responseJSON.response.dnsServerLocalEndPoints;
-    if (dnsServerLocalEndPoints == null)
-        $("#txtDnsServerLocalEndPoints").val("");
-    else
-        $("#txtDnsServerLocalEndPoints").val(getArrayAsString(dnsServerLocalEndPoints));
+    // general
+    $("#txtDnsServerDomain").val(r.dnsServerDomain);
+    $("#txtDnsServerLocalEndPoints").val(r.dnsServerLocalEndPoints ? getArrayAsString(r.dnsServerLocalEndPoints) : "");
+    $("#txtDnsServerIPv4SourceAddresses").val(getArrayAsString(r.dnsServerIPv4SourceAddresses));
+    $("#txtDnsServerIPv6SourceAddresses").val(getArrayAsString(r.dnsServerIPv6SourceAddresses));
+    $("#txtDefaultRecordTtl").val(r.defaultRecordTtl);
+    $("#txtDefaultNsRecordTtl").val(r.defaultNsRecordTtl);
+    $("#txtDefaultSoaRecordTtl").val(r.defaultSoaRecordTtl);
 
-    $("#txtDnsServerIPv4SourceAddresses").val(getArrayAsString(responseJSON.response.dnsServerIPv4SourceAddresses));
-    $("#txtDnsServerIPv6SourceAddresses").val(getArrayAsString(responseJSON.response.dnsServerIPv6SourceAddresses));
+    sessionData.info.defaultRecordTtl   = r.defaultRecordTtl;
+    sessionData.info.defaultNsRecordTtl = r.defaultNsRecordTtl;
+    sessionData.info.defaultSoaRecordTtl= r.defaultSoaRecordTtl;
 
-    $("#txtDefaultRecordTtl").val(responseJSON.response.defaultRecordTtl);
-    $("#txtDefaultNsRecordTtl").val(responseJSON.response.defaultNsRecordTtl);
-    $("#txtDefaultSoaRecordTtl").val(responseJSON.response.defaultSoaRecordTtl);
+    $("#txtDefaultResponsiblePerson").val(r.defaultResponsiblePerson);
+    $("#chkUseSoaSerialDateScheme").prop("checked", r.useSoaSerialDateScheme);
+    $("#txtMinSoaRefresh").val(r.minSoaRefresh);
+    $("#txtMinSoaRetry").val(r.minSoaRetry);
+    $("#txtZoneTransferAllowedNetworks").val(getArrayAsString(r.zoneTransferAllowedNetworks));
+    $("#txtNotifyAllowedNetworks").val(getArrayAsString(r.notifyAllowedNetworks));
+    $("#chkDnsAppsEnableAutomaticUpdate").prop("checked", r.dnsAppsEnableAutomaticUpdate);
+    $("#chkPreferIPv6").prop("checked", r.preferIPv6);
+    $("#chkEnableUdpSocketPool").prop("checked", r.enableUdpSocketPool);
+    $("#txtUdpSocketPoolExcludedPorts").prop("disabled", !r.enableUdpSocketPool)
+        .val(getArrayAsString(r.socketPoolExcludedPorts));
+    $("#txtEdnsUdpPayloadSize").val(r.udpPayloadSize);
+    $("#chkDnssecValidation").prop("checked", r.dnssecValidation);
+    $("#chkEDnsClientSubnet").prop("checked", r.eDnsClientSubnet);
 
-    sessionData.info.defaultRecordTtl = responseJSON.response.defaultRecordTtl;
-    sessionData.info.defaultNsRecordTtl = responseJSON.response.defaultNsRecordTtl;
-    sessionData.info.defaultSoaRecordTtl = responseJSON.response.defaultSoaRecordTtl;
-
-    $("#txtDefaultResponsiblePerson").val(responseJSON.response.defaultResponsiblePerson);
-    $("#chkUseSoaSerialDateScheme").prop("checked", responseJSON.response.useSoaSerialDateScheme);
-    $("#txtMinSoaRefresh").val(responseJSON.response.minSoaRefresh);
-    $("#txtMinSoaRetry").val(responseJSON.response.minSoaRetry);
-
-    $("#txtZoneTransferAllowedNetworks").val(getArrayAsString(responseJSON.response.zoneTransferAllowedNetworks));
-    $("#txtNotifyAllowedNetworks").val(getArrayAsString(responseJSON.response.notifyAllowedNetworks));
-
-    $("#chkDnsAppsEnableAutomaticUpdate").prop("checked", responseJSON.response.dnsAppsEnableAutomaticUpdate);
-
-    $("#chkPreferIPv6").prop("checked", responseJSON.response.preferIPv6);
-    $("#chkEnableUdpSocketPool").prop("checked", responseJSON.response.enableUdpSocketPool);
-    $("#txtUdpSocketPoolExcludedPorts").prop("disabled", !responseJSON.response.enableUdpSocketPool);
-    $("#txtUdpSocketPoolExcludedPorts").val(getArrayAsString(responseJSON.response.socketPoolExcludedPorts));
-    $("#txtEdnsUdpPayloadSize").val(responseJSON.response.udpPayloadSize);
-    $("#chkDnssecValidation").prop("checked", responseJSON.response.dnssecValidation);
-
-    $("#chkEDnsClientSubnet").prop("checked", responseJSON.response.eDnsClientSubnet);
-    $("#txtEDnsClientSubnetIPv4PrefixLength").prop("disabled", !responseJSON.response.eDnsClientSubnet);
-    $("#txtEDnsClientSubnetIPv6PrefixLength").prop("disabled", !responseJSON.response.eDnsClientSubnet);
-    $("#txtEDnsClientSubnetIpv4Override").prop("disabled", !responseJSON.response.eDnsClientSubnet);
-    $("#txtEDnsClientSubnetIpv6Override").prop("disabled", !responseJSON.response.eDnsClientSubnet);
-
-    $("#txtEDnsClientSubnetIPv4PrefixLength").val(responseJSON.response.eDnsClientSubnetIPv4PrefixLength);
-    $("#txtEDnsClientSubnetIPv6PrefixLength").val(responseJSON.response.eDnsClientSubnetIPv6PrefixLength);
-    $("#txtEDnsClientSubnetIpv4Override").val(responseJSON.response.eDnsClientSubnetIpv4Override);
-    $("#txtEDnsClientSubnetIpv6Override").val(responseJSON.response.eDnsClientSubnetIpv6Override);
+    $("#txtEDnsClientSubnetIPv4PrefixLength, #txtEDnsClientSubnetIPv6PrefixLength, #txtEDnsClientSubnetIpv4Override, #txtEDnsClientSubnetIpv6Override")
+        .prop("disabled", !r.eDnsClientSubnet);
+    $("#txtEDnsClientSubnetIPv4PrefixLength").val(r.eDnsClientSubnetIPv4PrefixLength);
+    $("#txtEDnsClientSubnetIPv6PrefixLength").val(r.eDnsClientSubnetIPv6PrefixLength);
+    $("#txtEDnsClientSubnetIpv4Override").val(r.eDnsClientSubnetIpv4Override);
+    $("#txtEDnsClientSubnetIpv6Override").val(r.eDnsClientSubnetIpv6Override);
 
     $("#tableQpmPrefixLimitsIPv4").html("");
-
-    if (responseJSON.response.qpmPrefixLimitsIPv4 != null) {
-        for (var i = 0; i < responseJSON.response.qpmPrefixLimitsIPv4.length; i++) {
-            addQpmPrefixLimitsIPv4Row(responseJSON.response.qpmPrefixLimitsIPv4[i].prefix, responseJSON.response.qpmPrefixLimitsIPv4[i].udpLimit, responseJSON.response.qpmPrefixLimitsIPv4[i].tcpLimit);
-        }
-    }
+    r.qpmPrefixLimitsIPv4?.forEach(row => addQpmPrefixLimitsIPv4Row(row.prefix, row.udpLimit, row.tcpLimit));
 
     $("#tableQpmPrefixLimitsIPv6").html("");
+    r.qpmPrefixLimitsIPv6?.forEach(row => addQpmPrefixLimitsIPv6Row(row.prefix, row.udpLimit, row.tcpLimit));
 
-    if (responseJSON.response.qpmPrefixLimitsIPv6 != null) {
-        for (var i = 0; i < responseJSON.response.qpmPrefixLimitsIPv6.length; i++) {
-            addQpmPrefixLimitsIPv6Row(responseJSON.response.qpmPrefixLimitsIPv6[i].prefix, responseJSON.response.qpmPrefixLimitsIPv6[i].udpLimit, responseJSON.response.qpmPrefixLimitsIPv6[i].tcpLimit);
-        }
-    }
+    $("#txtQpmLimitSampleMinutes").val(r.qpmLimitSampleMinutes);
+    $("#txtQpmLimitUdpTruncation").val(r.qpmLimitUdpTruncationPercentage);
+    $("#txtQpmLimitBypassList").val(getArrayAsString(r.qpmLimitBypassList));
+    $("#txtClientTimeout").val(r.clientTimeout);
+    $("#txtTcpSendTimeout").val(r.tcpSendTimeout);
+    $("#txtTcpReceiveTimeout").val(r.tcpReceiveTimeout);
+    $("#txtQuicIdleTimeout").val(r.quicIdleTimeout);
+    $("#txtQuicMaxInboundStreams").val(r.quicMaxInboundStreams);
+    $("#txtListenBacklog").val(r.listenBacklog);
+    $("#txtMaxConcurrentResolutionsPerCore").val(r.maxConcurrentResolutionsPerCore);
 
-    $("#txtQpmLimitSampleMinutes").val(responseJSON.response.qpmLimitSampleMinutes);
-    $("#txtQpmLimitUdpTruncation").val(responseJSON.response.qpmLimitUdpTruncationPercentage);
-    $("#txtQpmLimitBypassList").val(getArrayAsString(responseJSON.response.qpmLimitBypassList));
+    // web service
+    $("#txtWebServiceLocalAddresses").val(r.webServiceLocalAddresses ? getArrayAsString(r.webServiceLocalAddresses) : "");
+    $("#txtWebServiceHttpPort").val(r.webServiceHttpPort);
+    $("#chkWebServiceEnableTls").prop("checked", r.webServiceEnableTls);
 
-    $("#txtClientTimeout").val(responseJSON.response.clientTimeout);
-    $("#txtTcpSendTimeout").val(responseJSON.response.tcpSendTimeout);
-    $("#txtTcpReceiveTimeout").val(responseJSON.response.tcpReceiveTimeout);
-    $("#txtQuicIdleTimeout").val(responseJSON.response.quicIdleTimeout);
-    $("#txtQuicMaxInboundStreams").val(responseJSON.response.quicMaxInboundStreams);
-    $("#txtListenBacklog").val(responseJSON.response.listenBacklog);
-    $("#txtMaxConcurrentResolutionsPerCore").val(responseJSON.response.maxConcurrentResolutionsPerCore);
+    $("#chkWebServiceEnableHttp3, #chkWebServiceHttpToTlsRedirect, #chkWebServiceUseSelfSignedTlsCertificate, #txtWebServiceTlsPort, #txtWebServiceTlsCertificatePath, #txtWebServiceTlsCertificatePassword")
+        .prop("disabled", !r.webServiceEnableTls);
 
-    //web service
-    var webServiceLocalAddresses = responseJSON.response.webServiceLocalAddresses;
-    if (webServiceLocalAddresses == null)
-        $("#txtWebServiceLocalAddresses").val("");
-    else
-        $("#txtWebServiceLocalAddresses").val(getArrayAsString(webServiceLocalAddresses));
+    $("#chkWebServiceEnableHttp3").prop("checked", r.webServiceEnableHttp3);
+    $("#chkWebServiceHttpToTlsRedirect").prop("checked", r.webServiceHttpToTlsRedirect);
+    $("#chkWebServiceUseSelfSignedTlsCertificate").prop("checked", r.webServiceUseSelfSignedTlsCertificate);
+    $("#txtWebServiceTlsPort").val(r.webServiceTlsPort);
+    $("#txtWebServiceTlsCertificatePath").val(r.webServiceTlsCertificatePath);
+    $("#txtWebServiceTlsCertificatePassword").val(r.webServiceTlsCertificatePath ? r.webServiceTlsCertificatePassword : "");
+    $("#txtWebServiceRealIpHeader").val(r.webServiceRealIpHeader);
+    $("#lblWebServiceRealIpHeader").text(r.webServiceRealIpHeader);
+    $("#lblWebServiceRealIpNginx").text(`proxy_set_header ${r.webServiceRealIpHeader} $remote_addr;`);
 
-    $("#txtWebServiceHttpPort").val(responseJSON.response.webServiceHttpPort);
+    // optional protocols
+    const proto = {
+        udpProxy: r.enableDnsOverUdpProxy, tcpProxy: r.enableDnsOverTcpProxy,
+        http: r.enableDnsOverHttp, tls: r.enableDnsOverTls,
+        https: r.enableDnsOverHttps, quic: r.enableDnsOverQuic
+    };
 
-    $("#chkWebServiceEnableTls").prop("checked", responseJSON.response.webServiceEnableTls);
+    $("#chkEnableDnsOverUdpProxy").prop("checked", proto.udpProxy);
+    $("#chkEnableDnsOverTcpProxy").prop("checked", proto.tcpProxy);
+    $("#chkEnableDnsOverHttp").prop("checked", proto.http);
+    $("#chkEnableDnsOverTls").prop("checked", proto.tls);
+    $("#chkEnableDnsOverHttps").prop("checked", proto.https);
+    $("#chkEnableDnsOverHttp3").prop("disabled", !proto.https).prop("checked", r.enableDnsOverHttp3);
+    $("#chkEnableDnsOverQuic").prop("checked", proto.quic);
 
-    $("#chkWebServiceEnableHttp3").prop("disabled", !responseJSON.response.webServiceEnableTls);
-    $("#chkWebServiceHttpToTlsRedirect").prop("disabled", !responseJSON.response.webServiceEnableTls);
-    $("#chkWebServiceUseSelfSignedTlsCertificate").prop("disabled", !responseJSON.response.webServiceEnableTls);
-    $("#txtWebServiceTlsPort").prop("disabled", !responseJSON.response.webServiceEnableTls);
-    $("#txtWebServiceTlsCertificatePath").prop("disabled", !responseJSON.response.webServiceEnableTls);
-    $("#txtWebServiceTlsCertificatePassword").prop("disabled", !responseJSON.response.webServiceEnableTls);
+    $("#txtDnsOverUdpProxyPort").prop("disabled", !proto.udpProxy).val(r.dnsOverUdpProxyPort);
+    $("#txtDnsOverTcpProxyPort").prop("disabled", !proto.tcpProxy).val(r.dnsOverTcpProxyPort);
+    $("#txtDnsOverHttpPort").prop("disabled", !proto.http).val(r.dnsOverHttpPort);
+    $("#txtDnsOverTlsPort").prop("disabled", !proto.tls).val(r.dnsOverTlsPort);
+    $("#txtDnsOverHttpsPort").prop("disabled", !proto.https).val(r.dnsOverHttpsPort);
+    $("#txtDnsOverQuicPort").prop("disabled", !proto.quic).val(r.dnsOverQuicPort);
 
-    $("#chkWebServiceEnableHttp3").prop("checked", responseJSON.response.webServiceEnableHttp3);
-    $("#chkWebServiceHttpToTlsRedirect").prop("checked", responseJSON.response.webServiceHttpToTlsRedirect);
-    $("#chkWebServiceUseSelfSignedTlsCertificate").prop("checked", responseJSON.response.webServiceUseSelfSignedTlsCertificate);
-    $("#txtWebServiceTlsPort").val(responseJSON.response.webServiceTlsPort);
-    $("#txtWebServiceTlsCertificatePath").val(responseJSON.response.webServiceTlsCertificatePath);
+    $("#txtReverseProxyNetworkACL")
+        .prop("disabled", !proto.udpProxy && !proto.tcpProxy && !proto.http && !proto.https)
+        .val(getArrayAsString(r.reverseProxyNetworkACL));
 
-    if (responseJSON.response.webServiceTlsCertificatePath == null)
-        $("#txtWebServiceTlsCertificatePassword").val("");
-    else
-        $("#txtWebServiceTlsCertificatePassword").val(responseJSON.response.webServiceTlsCertificatePassword);
+    $("#txtDnsTlsCertificatePath, #txtDnsTlsCertificatePassword")
+        .prop("disabled", !proto.tls && !proto.https && !proto.quic);
+    $("#txtDnsTlsCertificatePath").val(r.dnsTlsCertificatePath);
+    $("#txtDnsTlsCertificatePassword").val(r.dnsTlsCertificatePath ? r.dnsTlsCertificatePassword : "");
 
-    $("#txtWebServiceRealIpHeader").val(responseJSON.response.webServiceRealIpHeader);
-    $("#lblWebServiceRealIpHeader").text(responseJSON.response.webServiceRealIpHeader);
-    $("#lblWebServiceRealIpNginx").text("proxy_set_header " + responseJSON.response.webServiceRealIpHeader + " $remote_addr;");
+    const httpHost = window.location.hostname;
+    $("#lblDoHHost").text(httpHost + (r.dnsOverHttpPort == 80 ? "" : ":" + r.dnsOverHttpPort));
+    $("#lblDoTHost").text("tls-certificate-domain:" + r.dnsOverTlsPort);
+    $("#lblDoQHost").text("tls-certificate-domain:" + r.dnsOverQuicPort);
+    $("#lblDoHsHost").text("tls-certificate-domain" + (r.dnsOverHttpsPort == 443 ? "" : ":" + r.dnsOverHttpsPort));
 
-    //optional protocols
-    $("#chkEnableDnsOverUdpProxy").prop("checked", responseJSON.response.enableDnsOverUdpProxy);
-    $("#chkEnableDnsOverTcpProxy").prop("checked", responseJSON.response.enableDnsOverTcpProxy);
-    $("#chkEnableDnsOverHttp").prop("checked", responseJSON.response.enableDnsOverHttp);
-    $("#chkEnableDnsOverTls").prop("checked", responseJSON.response.enableDnsOverTls);
-    $("#chkEnableDnsOverHttps").prop("checked", responseJSON.response.enableDnsOverHttps);
-    $("#chkEnableDnsOverHttp3").prop("disabled", !responseJSON.response.enableDnsOverHttps);
-    $("#chkEnableDnsOverHttp3").prop("checked", responseJSON.response.enableDnsOverHttp3);
-    $("#chkEnableDnsOverQuic").prop("checked", responseJSON.response.enableDnsOverQuic);
+    $("#txtDnsOverHttpRealIpHeader").prop("disabled", !proto.http && !proto.https).val(r.dnsOverHttpRealIpHeader);
+    $("#lblDnsOverHttpRealIpHeader").text(r.dnsOverHttpRealIpHeader);
+    $("#lblDnsOverHttpRealIpNginx").text(`proxy_set_header ${r.dnsOverHttpRealIpHeader} $remote_addr;`);
 
-    $("#txtDnsOverUdpProxyPort").prop("disabled", !responseJSON.response.enableDnsOverUdpProxy);
-    $("#txtDnsOverTcpProxyPort").prop("disabled", !responseJSON.response.enableDnsOverTcpProxy);
-    $("#txtDnsOverHttpPort").prop("disabled", !responseJSON.response.enableDnsOverHttp);
-    $("#txtDnsOverTlsPort").prop("disabled", !responseJSON.response.enableDnsOverTls);
-    $("#txtDnsOverHttpsPort").prop("disabled", !responseJSON.response.enableDnsOverHttps);
-    $("#txtDnsOverQuicPort").prop("disabled", !responseJSON.response.enableDnsOverQuic);
-
-    $("#txtDnsOverUdpProxyPort").val(responseJSON.response.dnsOverUdpProxyPort);
-    $("#txtDnsOverTcpProxyPort").val(responseJSON.response.dnsOverTcpProxyPort);
-    $("#txtDnsOverHttpPort").val(responseJSON.response.dnsOverHttpPort);
-    $("#txtDnsOverTlsPort").val(responseJSON.response.dnsOverTlsPort);
-    $("#txtDnsOverHttpsPort").val(responseJSON.response.dnsOverHttpsPort);
-    $("#txtDnsOverQuicPort").val(responseJSON.response.dnsOverQuicPort);
-
-    $("#txtReverseProxyNetworkACL").prop("disabled", !responseJSON.response.enableDnsOverUdpProxy && !responseJSON.response.enableDnsOverTcpProxy && !responseJSON.response.enableDnsOverHttp && !responseJSON.response.enableDnsOverHttps);
-    $("#txtReverseProxyNetworkACL").val(getArrayAsString(responseJSON.response.reverseProxyNetworkACL));
-
-    $("#txtDnsTlsCertificatePath").prop("disabled", !responseJSON.response.enableDnsOverTls && !responseJSON.response.enableDnsOverHttps && !responseJSON.response.enableDnsOverQuic);
-    $("#txtDnsTlsCertificatePassword").prop("disabled", !responseJSON.response.enableDnsOverTls && !responseJSON.response.enableDnsOverHttps && !responseJSON.response.enableDnsOverQuic);
-
-    $("#txtDnsTlsCertificatePath").val(responseJSON.response.dnsTlsCertificatePath);
-
-    if (responseJSON.response.dnsTlsCertificatePath == null)
-        $("#txtDnsTlsCertificatePassword").val("");
-    else
-        $("#txtDnsTlsCertificatePassword").val(responseJSON.response.dnsTlsCertificatePassword);
-
-    $("#lblDoHHost").text(window.location.hostname + (responseJSON.response.dnsOverHttpPort == 80 ? "" : ":" + responseJSON.response.dnsOverHttpPort));
-    $("#lblDoTHost").text("tls-certificate-domain:" + responseJSON.response.dnsOverTlsPort);
-    $("#lblDoQHost").text("tls-certificate-domain:" + responseJSON.response.dnsOverQuicPort);
-    $("#lblDoHsHost").text("tls-certificate-domain" + (responseJSON.response.dnsOverHttpsPort == 443 ? "" : ":" + responseJSON.response.dnsOverHttpsPort));
-
-    $("#txtDnsOverHttpRealIpHeader").prop("disabled", !responseJSON.response.enableDnsOverHttp && !responseJSON.response.enableDnsOverHttps);
-    $("#txtDnsOverHttpRealIpHeader").val(responseJSON.response.dnsOverHttpRealIpHeader);
-    $("#lblDnsOverHttpRealIpHeader").text(responseJSON.response.dnsOverHttpRealIpHeader);
-    $("#lblDnsOverHttpRealIpNginx").text("proxy_set_header " + responseJSON.response.dnsOverHttpRealIpHeader + " $remote_addr;");
-
-    //tsig
+    // tsig
     $("#tableTsigKeys").html("");
+    r.tsigKeys?.forEach(k => addTsigKeyRow(k.keyName, k.sharedSecret, k.algorithmName));
 
-    if (responseJSON.response.tsigKeys != null) {
-        for (var i = 0; i < responseJSON.response.tsigKeys.length; i++) {
-            addTsigKeyRow(responseJSON.response.tsigKeys[i].keyName, responseJSON.response.tsigKeys[i].sharedSecret, responseJSON.response.tsigKeys[i].algorithmName);
-        }
-    }
-
-    //recursion
+    // recursion
     $("#txtRecursionNetworkACL").prop("disabled", true);
+    const recursionRadioMap = {
+        Allow: "#rdRecursionAllow",
+        AllowOnlyForPrivateNetworks: "#rdRecursionAllowOnlyForPrivateNetworks",
+        UseSpecifiedNetworkACL: "#rdRecursionUseSpecifiedNetworkACL",
+        Deny: "#rdRecursionDeny"
+    };
+    $(recursionRadioMap[r.recursion] ?? "#rdRecursionDeny").prop("checked", true);
+    if (r.recursion === "UseSpecifiedNetworkACL")
+        $("#txtRecursionNetworkACL").prop("disabled", false);
+    $("#txtRecursionNetworkACL").val(getArrayAsString(r.recursionNetworkACL));
 
-    switch (responseJSON.response.recursion) {
-        case "Allow":
-            $("#rdRecursionAllow").prop("checked", true);
-            break;
+    $("#chkRandomizeName").prop("checked", r.randomizeName);
+    $("#chkQnameMinimization").prop("checked", r.qnameMinimization);
+    $("#txtResolverRetries").val(r.resolverRetries);
+    $("#txtResolverTimeout").val(r.resolverTimeout);
+    $("#txtResolverConcurrency").val(r.resolverConcurrency);
+    $("#txtResolverMaxStackCount").val(r.resolverMaxStackCount);
 
-        case "AllowOnlyForPrivateNetworks":
-            $("#rdRecursionAllowOnlyForPrivateNetworks").prop("checked", true);
-            break;
+    // cache
+    $("#chkSaveCache").prop("checked", r.saveCache);
+    $("#chkServeStale").prop("checked", r.serveStale);
+    $("#txtServeStaleTtl, #txtServeStaleAnswerTtl, #txtServeStaleResetTtl, #txtServeStaleMaxWaitTime")
+        .prop("disabled", !r.serveStale);
+    $("#txtServeStaleTtl").val(r.serveStaleTtl);
+    $("#txtServeStaleAnswerTtl").val(r.serveStaleAnswerTtl);
+    $("#txtServeStaleResetTtl").val(r.serveStaleResetTtl);
+    $("#txtServeStaleMaxWaitTime").val(r.serveStaleMaxWaitTime);
+    $("#txtCacheMaximumEntries").val(r.cacheMaximumEntries);
+    $("#txtCacheMinimumRecordTtl").val(r.cacheMinimumRecordTtl);
+    $("#txtCacheMaximumRecordTtl").val(r.cacheMaximumRecordTtl);
+    $("#txtCacheNegativeRecordTtl").val(r.cacheNegativeRecordTtl);
+    $("#txtCacheFailureRecordTtl").val(r.cacheFailureRecordTtl);
+    $("#txtCachePrefetchEligibility").val(r.cachePrefetchEligibility);
+    $("#txtCachePrefetchTrigger").val(r.cachePrefetchTrigger);
+    $("#txtCachePrefetchSampleIntervalInMinutes").val(r.cachePrefetchSampleIntervalInMinutes);
+    $("#txtCachePrefetchSampleEligibilityHitsPerHour").val(r.cachePrefetchSampleEligibilityHitsPerHour);
 
-        case "UseSpecifiedNetworkACL":
-            $("#rdRecursionUseSpecifiedNetworkACL").prop("checked", true);
-            $("#txtRecursionNetworkACL").prop("disabled", false);
-            break;
+    // blocking
+    $("#chkEnableBlocking").prop("checked", r.enableBlocking);
+    ["#chkAllowTxtBlockingReport","#txtTemporaryDisableBlockingMinutes","#btnTemporaryDisableBlockingNow",
+        "#txtBlockingBypassList","#rdBlockingTypeAnyAddress","#rdBlockingTypeNxDomain",
+        "#rdBlockingTypeCustomAddress","#txtBlockListUrls","#optQuickBlockList",
+        "#txtBlockListUpdateIntervalHours"
+    ].forEach(sel => $(sel).prop("disabled", !r.enableBlocking));
 
-        case "Deny":
-        default:
-            $("#rdRecursionDeny").prop("checked", true);
-            break;
-    }
-
-    $("#txtRecursionNetworkACL").val(getArrayAsString(responseJSON.response.recursionNetworkACL));
-
-    $("#chkRandomizeName").prop("checked", responseJSON.response.randomizeName);
-    $("#chkQnameMinimization").prop("checked", responseJSON.response.qnameMinimization);
-
-    $("#txtResolverRetries").val(responseJSON.response.resolverRetries);
-    $("#txtResolverTimeout").val(responseJSON.response.resolverTimeout);
-    $("#txtResolverConcurrency").val(responseJSON.response.resolverConcurrency);
-    $("#txtResolverMaxStackCount").val(responseJSON.response.resolverMaxStackCount);
-
-    //cache
-    $("#chkSaveCache").prop("checked", responseJSON.response.saveCache);
-
-    $("#chkServeStale").prop("checked", responseJSON.response.serveStale);
-
-    $("#txtServeStaleTtl").prop("disabled", !responseJSON.response.serveStale);
-    $("#txtServeStaleAnswerTtl").prop("disabled", !responseJSON.response.serveStale);
-    $("#txtServeStaleResetTtl").prop("disabled", !responseJSON.response.serveStale);
-    $("#txtServeStaleMaxWaitTime").prop("disabled", !responseJSON.response.serveStale);
-
-    $("#txtServeStaleTtl").val(responseJSON.response.serveStaleTtl);
-    $("#txtServeStaleAnswerTtl").val(responseJSON.response.serveStaleAnswerTtl);
-    $("#txtServeStaleResetTtl").val(responseJSON.response.serveStaleResetTtl);
-    $("#txtServeStaleMaxWaitTime").val(responseJSON.response.serveStaleMaxWaitTime);
-
-    $("#txtCacheMaximumEntries").val(responseJSON.response.cacheMaximumEntries);
-    $("#txtCacheMinimumRecordTtl").val(responseJSON.response.cacheMinimumRecordTtl);
-    $("#txtCacheMaximumRecordTtl").val(responseJSON.response.cacheMaximumRecordTtl);
-    $("#txtCacheNegativeRecordTtl").val(responseJSON.response.cacheNegativeRecordTtl);
-    $("#txtCacheFailureRecordTtl").val(responseJSON.response.cacheFailureRecordTtl);
-
-    $("#txtCachePrefetchEligibility").val(responseJSON.response.cachePrefetchEligibility);
-    $("#txtCachePrefetchTrigger").val(responseJSON.response.cachePrefetchTrigger);
-    $("#txtCachePrefetchSampleIntervalInMinutes").val(responseJSON.response.cachePrefetchSampleIntervalInMinutes);
-    $("#txtCachePrefetchSampleEligibilityHitsPerHour").val(responseJSON.response.cachePrefetchSampleEligibilityHitsPerHour);
-
-    //blocking
-    $("#chkEnableBlocking").prop("checked", responseJSON.response.enableBlocking);
-
-    $("#chkAllowTxtBlockingReport").prop("disabled", !responseJSON.response.enableBlocking);
-    $("#txtTemporaryDisableBlockingMinutes").prop("disabled", !responseJSON.response.enableBlocking);
-    $("#btnTemporaryDisableBlockingNow").prop("disabled", !responseJSON.response.enableBlocking);
-    $("#txtBlockingBypassList").prop("disabled", !responseJSON.response.enableBlocking);
-    $("#rdBlockingTypeAnyAddress").prop("disabled", !responseJSON.response.enableBlocking);
-    $("#rdBlockingTypeNxDomain").prop("disabled", !responseJSON.response.enableBlocking);
-    $("#rdBlockingTypeCustomAddress").prop("disabled", !responseJSON.response.enableBlocking);
-    $("#txtBlockListUrls").prop("disabled", !responseJSON.response.enableBlocking);
-    $("#optQuickBlockList").prop("disabled", !responseJSON.response.enableBlocking);
-    $("#txtBlockListUpdateIntervalHours").prop("disabled", !responseJSON.response.enableBlocking);
-
-    $("#chkAllowTxtBlockingReport").prop("checked", responseJSON.response.allowTxtBlockingReport);
-
-    if (responseJSON.response.temporaryDisableBlockingTill == null)
-        $("#lblTemporaryDisableBlockingTill").text("Not Set");
-    else
-        $("#lblTemporaryDisableBlockingTill").text(moment(responseJSON.response.temporaryDisableBlockingTill).local().format("YYYY-MM-DD HH:mm:ss"));
-
+    $("#chkAllowTxtBlockingReport").prop("checked", r.allowTxtBlockingReport);
+    $("#lblTemporaryDisableBlockingTill").text(
+        r.temporaryDisableBlockingTill
+            ? moment(r.temporaryDisableBlockingTill).local().format("YYYY-MM-DD HH:mm:ss")
+            : "Not Set"
+    );
     $("#txtTemporaryDisableBlockingMinutes").val("");
-
     $("#txtCustomBlockingAddresses").prop("disabled", true);
+    $("#txtBlockingBypassList").val(getArrayAsString(r.blockingBypassList));
 
-    $("#txtBlockingBypassList").val(getArrayAsString(responseJSON.response.blockingBypassList));
+    const blockingRadioMap = {
+        NxDomain:      "#rdBlockingTypeNxDomain",
+        CustomAddress: "#rdBlockingTypeCustomAddress",
+        AnyAddress:    "#rdBlockingTypeAnyAddress"
+    };
+    $(blockingRadioMap[r.blockingType] ?? "#rdBlockingTypeAnyAddress").prop("checked", true);
+    if (r.blockingType === "CustomAddress")
+        $("#txtCustomBlockingAddresses").prop("disabled", !r.enableBlocking);
+    $("#txtCustomBlockingAddresses").val(getArrayAsString(r.customBlockingAddresses));
+    $("#txtBlockingAnswerTtl").val(r.blockingAnswerTtl);
 
-    switch (responseJSON.response.blockingType) {
-        case "NxDomain":
-            $("#rdBlockingTypeNxDomain").prop("checked", true);
-            break;
-
-        case "CustomAddress":
-            $("#rdBlockingTypeCustomAddress").prop("checked", true);
-            $("#txtCustomBlockingAddresses").prop("disabled", !responseJSON.response.enableBlocking);
-            break;
-
-        case "AnyAddress":
-        default:
-            $("#rdBlockingTypeAnyAddress").prop("checked", true);
-            break;
-    }
-
-    $("#txtCustomBlockingAddresses").val(getArrayAsString(responseJSON.response.customBlockingAddresses));
-
-    $("#txtBlockingAnswerTtl").val(responseJSON.response.blockingAnswerTtl);
-
-    var blockListUrls = responseJSON.response.blockListUrls;
-    if (blockListUrls == null) {
+    if (!r.blockListUrls) {
         $("#txtBlockListUrls").val("");
         $("#btnUpdateBlockListsNow").prop("disabled", true);
+    } else {
+        $("#txtBlockListUrls").val(getArrayAsString(r.blockListUrls));
+        $("#btnUpdateBlockListsNow").prop("disabled", !r.enableBlocking);
     }
-    else {
-        $("#txtBlockListUrls").val(getArrayAsString(blockListUrls));
-        $("#btnUpdateBlockListsNow").prop("disabled", !responseJSON.response.enableBlocking);
-    }
-
     $("#optQuickBlockList").val("blank");
+    $("#txtBlockListUpdateIntervalHours").val(r.blockListUpdateIntervalHours);
 
-    $("#txtBlockListUpdateIntervalHours").val(responseJSON.response.blockListUpdateIntervalHours);
-
-    if (responseJSON.response.blockListNextUpdatedOn == null) {
+    if (!r.blockListNextUpdatedOn) {
         $("#lblBlockListNextUpdatedOn").text("Not Scheduled");
-    }
-    else {
-        var blockListNextUpdatedOn = moment(responseJSON.response.blockListNextUpdatedOn);
-
-        if (moment().utc().isBefore(blockListNextUpdatedOn))
-            $("#lblBlockListNextUpdatedOn").text(blockListNextUpdatedOn.local().format("YYYY-MM-DD HH:mm:ss"));
-        else
-            $("#lblBlockListNextUpdatedOn").text("Updating Now");
+    } else {
+        const next = moment(r.blockListNextUpdatedOn);
+        $("#lblBlockListNextUpdatedOn").text(moment().utc().isBefore(next)
+            ? next.local().format("YYYY-MM-DD HH:mm:ss")
+            : "Updating Now");
     }
 
-    //proxy & forwarders
-    var proxy = responseJSON.response.proxy;
-    if (proxy === null) {
+    // proxy & forwarders
+    if (!r.proxy) {
         $("#rdProxyTypeNone").prop("checked", true);
-
-        $("#txtProxyAddress").prop("disabled", true);
-        $("#txtProxyPort").prop("disabled", true);
-        $("#txtProxyUsername").prop("disabled", true);
-        $("#txtProxyPassword").prop("disabled", true);
-        $("#txtProxyBypassList").prop("disabled", true);
-
-        $("#txtProxyAddress").val("");
-        $("#txtProxyPort").val("");
-        $("#txtProxyUsername").val("");
-        $("#txtProxyPassword").val("");
-        $("#txtProxyBypassList").val("");
-    }
-    else {
-        switch (proxy.type.toLowerCase()) {
-            case "http":
-                $("#rdProxyTypeHttp").prop("checked", true);
-                break;
-
-            case "socks5":
-                $("#rdProxyTypeSocks5").prop("checked", true);
-                break;
-
-            default:
-                $("#rdProxyTypeNone").prop("checked", true);
-                break;
-        }
-
-        $("#txtProxyAddress").val(proxy.address);
-        $("#txtProxyPort").val(proxy.port);
-        $("#txtProxyUsername").val(proxy.username);
-        $("#txtProxyPassword").val(proxy.password);
-        $("#txtProxyBypassList").val(getArrayAsString(proxy.bypass));
-
-        $("#txtProxyAddress").prop("disabled", false);
-        $("#txtProxyPort").prop("disabled", false);
-        $("#txtProxyUsername").prop("disabled", false);
-        $("#txtProxyPassword").prop("disabled", false);
-        $("#txtProxyBypassList").prop("disabled", false);
+        $("#txtProxyAddress, #txtProxyPort, #txtProxyUsername, #txtProxyPassword, #txtProxyBypassList")
+            .prop("disabled", true).val("");
+    } else {
+        const proxyTypeMap = { http: "#rdProxyTypeHttp", socks5: "#rdProxyTypeSocks5" };
+        $(proxyTypeMap[r.proxy.type.toLowerCase()] ?? "#rdProxyTypeNone").prop("checked", true);
+        $("#txtProxyAddress").val(r.proxy.address).prop("disabled", false);
+        $("#txtProxyPort").val(r.proxy.port).prop("disabled", false);
+        $("#txtProxyUsername").val(r.proxy.username).prop("disabled", false);
+        $("#txtProxyPassword").val(r.proxy.password).prop("disabled", false);
+        $("#txtProxyBypassList").val(getArrayAsString(r.proxy.bypass)).prop("disabled", false);
     }
 
-    var forwarders = responseJSON.response.forwarders;
-    if (forwarders == null)
-        $("#txtForwarders").val("");
-    else
-        $("#txtForwarders").val(getArrayAsString(forwarders));
-
+    $("#txtForwarders").val(r.forwarders ? getArrayAsString(r.forwarders) : "");
     $("#optQuickForwarders").val("blank");
 
-    switch (responseJSON.response.forwarderProtocol.toLowerCase()) {
-        case "tcp":
-            $("#rdForwarderProtocolTcp").prop("checked", true);
-            break;
+    const fwdProtoMap = { tcp: "#rdForwarderProtocolTcp", tls: "#rdForwarderProtocolTls", https: "#rdForwarderProtocolHttps", quic: "#rdForwarderProtocolQuic" };
+    $(fwdProtoMap[r.forwarderProtocol.toLowerCase()] ?? "#rdForwarderProtocolUdp").prop("checked", true);
 
-        case "tls":
-            $("#rdForwarderProtocolTls").prop("checked", true);
-            break;
+    $("#chkEnableConcurrentForwarding").prop("checked", r.concurrentForwarding);
+    $("#txtForwarderConcurrency").prop("disabled", !r.concurrentForwarding).val(r.forwarderConcurrency);
+    $("#txtForwarderRetries").val(r.forwarderRetries);
+    $("#txtForwarderTimeout").val(r.forwarderTimeout);
 
-        case "https":
-            $("#rdForwarderProtocolHttps").prop("checked", true);
-            break;
-
-        case "quic":
-            $("#rdForwarderProtocolQuic").prop("checked", true);
-            break;
-
-        default:
-            $("#rdForwarderProtocolUdp").prop("checked", true);
-            break;
-    }
-
-    $("#chkEnableConcurrentForwarding").prop("checked", responseJSON.response.concurrentForwarding);
-    $("#txtForwarderConcurrency").prop("disabled", !responseJSON.response.concurrentForwarding)
-
-    $("#txtForwarderRetries").val(responseJSON.response.forwarderRetries);
-    $("#txtForwarderTimeout").val(responseJSON.response.forwarderTimeout);
-    $("#txtForwarderConcurrency").val(responseJSON.response.forwarderConcurrency);
-
-    //logging
-    var enableLogging;
-
-    switch (responseJSON.response.loggingType.toLowerCase()) {
-        case "file":
-            $("#rdLoggingTypeFile").prop("checked", true);
-            enableLogging = true;
-            break;
-
-        case "console":
-            $("#rdLoggingTypeConsole").prop("checked", true);
-            enableLogging = true;
-            break;
-
-        case "fileandconsole":
-            $("#rdLoggingTypeFileAndConsole").prop("checked", true);
-            enableLogging = true;
-            break;
-
-        default:
-            $("#rdLoggingTypeNone").prop("checked", true);
-            enableLogging = false;
-            break;
-    }
-
-    $("#chkIgnoreResolverLogs").prop("disabled", !enableLogging);
-    $("#chkLogQueries").prop("disabled", !enableLogging);
-    $("#chkUseLocalTime").prop("disabled", !enableLogging);
-    $("#txtLogFolderPath").prop("disabled", !enableLogging);
-
-    $("#chkIgnoreResolverLogs").prop("checked", responseJSON.response.ignoreResolverLogs);
-    $("#chkLogQueries").prop("checked", responseJSON.response.logQueries);
-    $("#chkUseLocalTime").prop("checked", responseJSON.response.useLocalTime);
-    $("#txtLogFolderPath").val(responseJSON.response.logFolder);
-    $("#txtMaxLogFileDays").val(responseJSON.response.maxLogFileDays);
-
-    $("#chkEnableInMemoryStats").prop("checked", responseJSON.response.enableInMemoryStats);
-    $("#txtMaxStatFileDays").val(responseJSON.response.maxStatFileDays);
+    // logging
+    const loggingMap = { file: "#rdLoggingTypeFile", console: "#rdLoggingTypeConsole", fileandconsole: "#rdLoggingTypeFileAndConsole" };
+    const loggingOn = r.loggingType.toLowerCase() !== "none";
+    $(loggingMap[r.loggingType.toLowerCase()] ?? "#rdLoggingTypeNone").prop("checked", true);
+    $("#chkIgnoreResolverLogs, #chkLogQueries, #chkUseLocalTime, #txtLogFolderPath").prop("disabled", !loggingOn);
+    $("#chkIgnoreResolverLogs").prop("checked", r.ignoreResolverLogs);
+    $("#chkLogQueries").prop("checked", r.logQueries);
+    $("#chkUseLocalTime").prop("checked", r.useLocalTime);
+    $("#txtLogFolderPath").val(r.logFolder);
+    $("#txtMaxLogFileDays").val(r.maxLogFileDays);
+    $("#chkEnableInMemoryStats").prop("checked", r.enableInMemoryStats);
+    $("#txtMaxStatFileDays").val(r.maxStatFileDays);
 }
 
 function saveDnsSettings(objBtn) {
-    var formData = "";
+    const params = new URLSearchParams();
 
-    //general
-    var dnsServerDomain = $("#txtDnsServerDomain").val();
-
-    if ((dnsServerDomain === null) || (dnsServerDomain === "")) {
+    // ── general ──
+    const dnsServerDomain = $("#txtDnsServerDomain").val();
+    if (!dnsServerDomain) {
         showAlert("warning", "Missing!", "Please enter server domain name.");
         $("#txtDnsServerDomain").trigger("focus");
         return;
     }
 
-    var dnsServerLocalEndPoints = cleanTextList($("#txtDnsServerLocalEndPoints").val());
-
-    if ((dnsServerLocalEndPoints.length === 0) || (dnsServerLocalEndPoints === ","))
+    let dnsServerLocalEndPoints = cleanTextList($("#txtDnsServerLocalEndPoints").val());
+    if (!dnsServerLocalEndPoints || dnsServerLocalEndPoints === ",")
         dnsServerLocalEndPoints = "0.0.0.0:53,[::]:53";
     else
         $("#txtDnsServerLocalEndPoints").val(dnsServerLocalEndPoints.replace(/,/g, "\n"));
 
-    var dnsServerIPv4SourceAddresses = cleanTextList($("#txtDnsServerIPv4SourceAddresses").val());
-    if ((dnsServerIPv4SourceAddresses.length == 0) || (dnsServerIPv4SourceAddresses === ","))
-        dnsServerIPv4SourceAddresses = false;
-
-    var dnsServerIPv6SourceAddresses = cleanTextList($("#txtDnsServerIPv6SourceAddresses").val());
-    if ((dnsServerIPv6SourceAddresses.length == 0) || (dnsServerIPv6SourceAddresses === ","))
-        dnsServerIPv6SourceAddresses = false;
-
-    formData += "dnsServerDomain=" + dnsServerDomain + "&dnsServerLocalEndPoints=" + encodeURIComponent(dnsServerLocalEndPoints) + "&dnsServerIPv4SourceAddresses=" + encodeURIComponent(dnsServerIPv4SourceAddresses) + "&dnsServerIPv6SourceAddresses=" + encodeURIComponent(dnsServerIPv6SourceAddresses)
-    
-    var defaultRecordTtl = $("#txtDefaultRecordTtl").val();
-    var defaultNsRecordTtl = $("#txtDefaultNsRecordTtl").val();
-    var defaultSoaRecordTtl = $("#txtDefaultSoaRecordTtl").val();
-    var defaultResponsiblePerson = $("#txtDefaultResponsiblePerson").val();
-    var useSoaSerialDateScheme = $("#chkUseSoaSerialDateScheme").prop("checked");
-    var minSoaRefresh = $("#txtMinSoaRefresh").val();
-    var minSoaRetry = $("#txtMinSoaRetry").val();
-
-    var zoneTransferAllowedNetworks = cleanTextList($("#txtZoneTransferAllowedNetworks").val());
-    if ((zoneTransferAllowedNetworks.length == 0) || (zoneTransferAllowedNetworks === ","))
-        zoneTransferAllowedNetworks = false;
-    else
-        $("#txtZoneTransferAllowedNetworks").val(zoneTransferAllowedNetworks.replace(/,/g, "\n") + "\n");
-
-    var notifyAllowedNetworks = cleanTextList($("#txtNotifyAllowedNetworks").val());
-    if ((notifyAllowedNetworks.length == 0) || (notifyAllowedNetworks === ","))
-        notifyAllowedNetworks = false;
-    else
-        $("#txtNotifyAllowedNetworks").val(notifyAllowedNetworks.replace(/,/g, "\n") + "\n");
-
-    var dnsAppsEnableAutomaticUpdate = $("#chkDnsAppsEnableAutomaticUpdate").prop("checked");
-
-    formData += "&defaultRecordTtl=" + encodeURIComponent(defaultRecordTtl) + "&defaultNsRecordTtl=" + encodeURIComponent(defaultNsRecordTtl) + "&defaultSoaRecordTtl=" + encodeURIComponent(defaultSoaRecordTtl) + "&defaultResponsiblePerson=" + encodeURIComponent(defaultResponsiblePerson) + "&useSoaSerialDateScheme=" + useSoaSerialDateScheme + "&minSoaRefresh=" + encodeURIComponent(minSoaRefresh) + "&minSoaRetry=" + encodeURIComponent(minSoaRetry) + "&zoneTransferAllowedNetworks=" + encodeURIComponent(zoneTransferAllowedNetworks) + "&notifyAllowedNetworks=" + encodeURIComponent(notifyAllowedNetworks) + "&dnsAppsEnableAutomaticUpdate=" + dnsAppsEnableAutomaticUpdate;
-    
-    var preferIPv6 = $("#chkPreferIPv6").prop("checked");
-    var enableUdpSocketPool = $("#chkEnableUdpSocketPool").prop("checked");
-
-    var socketPoolExcludedPorts = cleanTextList($("#txtUdpSocketPoolExcludedPorts").val());
-    if ((socketPoolExcludedPorts.length == 0) || (socketPoolExcludedPorts === ","))
-        socketPoolExcludedPorts = false;
-    else
-        $("#txtUdpSocketPoolExcludedPorts").val(socketPoolExcludedPorts.replace(/,/g, "\n") + "\n");
-
-    formData += "&preferIPv6=" + preferIPv6 + "&enableUdpSocketPool=" + enableUdpSocketPool + "&socketPoolExcludedPorts=" + encodeURIComponent(socketPoolExcludedPorts);
-    
-    var udpPayloadSize = $("#txtEdnsUdpPayloadSize").val();
-    var dnssecValidation = $("#chkDnssecValidation").prop("checked");
-
-    var eDnsClientSubnet = $("#chkEDnsClientSubnet").prop("checked");
-
-    var eDnsClientSubnetIPv4PrefixLength = $("#txtEDnsClientSubnetIPv4PrefixLength").val();
-    if ((eDnsClientSubnetIPv4PrefixLength == null) || (eDnsClientSubnetIPv4PrefixLength === "")) {
-        showAlert("warning", "Missing!", "Please enter EDNS Client Subnet IPv4 prefix length.");
-        $("#txtEDnsClientSubnetIPv4PrefixLength").trigger("focus");
-        return;
-    }
-
-    var eDnsClientSubnetIPv6PrefixLength = $("#txtEDnsClientSubnetIPv6PrefixLength").val();
-    if ((eDnsClientSubnetIPv6PrefixLength == null) || (eDnsClientSubnetIPv6PrefixLength === "")) {
-        showAlert("warning", "Missing!", "Please enter EDNS Client Subnet IPv6 prefix length.");
-        $("#txtEDnsClientSubnetIPv6PrefixLength").trigger("focus");
-        return;
-    }
-
-    var eDnsClientSubnetIpv4Override = $("#txtEDnsClientSubnetIpv4Override").val();
-    var eDnsClientSubnetIpv6Override = $("#txtEDnsClientSubnetIpv6Override").val();
-
-    var qpmPrefixLimitsIPv4 = serializeTableData($("#tableQpmPrefixLimitsIPv4"), 3);
-    if (qpmPrefixLimitsIPv4 === false)
-        return;
-
-    if (qpmPrefixLimitsIPv4.length === 0)
-        qpmPrefixLimitsIPv4 = false;
-
-    var qpmPrefixLimitsIPv6 = serializeTableData($("#tableQpmPrefixLimitsIPv6"), 3);
-    if (qpmPrefixLimitsIPv6 === false)
-        return;
-
-    if (qpmPrefixLimitsIPv6.length === 0)
-        qpmPrefixLimitsIPv6 = false;
-
-    var qpmLimitSampleMinutes = $("#txtQpmLimitSampleMinutes").val();
-    if ((qpmLimitSampleMinutes == null) || (qpmLimitSampleMinutes === "")) {
-        showAlert("warning", "Missing!", "Please enter Queries Per Minute (QPM) sample value.");
-        $("#txtQpmLimitSampleMinutes").trigger("focus");
-        return;
-    }
-
-    var qpmLimitUdpTruncationPercentage = $("#txtQpmLimitUdpTruncation").val();
-    if ((qpmLimitUdpTruncationPercentage == null) || (qpmLimitUdpTruncationPercentage === "")) {
-        showAlert("warning", "Missing!", "Please enter Queries Per Minute (QPM) limit UDP truncation percentage value.");
-        $("#txtQpmLimitUdpTruncation").trigger("focus");
-        return;
-    }
-
-    var qpmLimitBypassList = cleanTextList($("#txtQpmLimitBypassList").val());
-    if ((qpmLimitBypassList.length == 0) || (qpmLimitBypassList === ","))
-        qpmLimitBypassList = false;
-    else
-        $("#txtQpmLimitBypassList").val(qpmLimitBypassList.replace(/,/g, "\n") + "\n");
-
-    var clientTimeout = $("#txtClientTimeout").val();
-    if ((clientTimeout == null) || (clientTimeout === "")) {
-        showAlert("warning", "Missing!", "Please enter a value for Client Timeout.");
-        $("#txtClientTimeout").trigger("focus");
-        return;
-    }
-
-    var tcpSendTimeout = $("#txtTcpSendTimeout").val();
-    if ((tcpSendTimeout == null) || (tcpSendTimeout === "")) {
-        showAlert("warning", "Missing!", "Please enter a value for TCP Send Timeout.");
-        $("#txtTcpSendTimeout").trigger("focus");
-        return;
-    }
-
-    var tcpReceiveTimeout = $("#txtTcpReceiveTimeout").val();
-    if ((tcpReceiveTimeout == null) || (tcpReceiveTimeout === "")) {
-        showAlert("warning", "Missing!", "Please enter a value for TCP Receive Timeout.");
-        $("#txtTcpReceiveTimeout").trigger("focus");
-        return;
-    }
-
-    var quicIdleTimeout = $("#txtQuicIdleTimeout").val();
-    if ((quicIdleTimeout == null) || (quicIdleTimeout === "")) {
-        showAlert("warning", "Missing!", "Please enter a value for QUIC Idle Timeout.");
-        $("#txtQuicIdleTimeout").trigger("focus");
-        return;
-    }
-
-    var quicMaxInboundStreams = $("#txtQuicMaxInboundStreams").val();
-    if ((quicMaxInboundStreams == null) || (quicMaxInboundStreams === "")) {
-        showAlert("warning", "Missing!", "Please enter a value for QUIC Max Inbound Streams.");
-        $("#txtQuicMaxInboundStreams").trigger("focus");
-        return;
-    }
-
-    var listenBacklog = $("#txtListenBacklog").val();
-    if ((listenBacklog == null) || (listenBacklog === "")) {
-        showAlert("warning", "Missing!", "Please enter a value for Listen Backlog.");
-        $("#txtListenBacklog").trigger("focus");
-        return;
-    }
-
-    var maxConcurrentResolutionsPerCore = $("#txtMaxConcurrentResolutionsPerCore").val();
-    if ((maxConcurrentResolutionsPerCore == null) || (maxConcurrentResolutionsPerCore === "")) {
-        showAlert("warning", "Missing!", "Please enter a value for Max Concurrent Resolutions.");
-        $("#txtMaxConcurrentResolutionsPerCore").trigger("focus");
-        return;
-    }
-
-    formData += "&udpPayloadSize=" + udpPayloadSize + "&dnssecValidation=" + dnssecValidation;
-    formData += "&eDnsClientSubnet=" + eDnsClientSubnet + "&eDnsClientSubnetIPv4PrefixLength=" + eDnsClientSubnetIPv4PrefixLength + "&eDnsClientSubnetIPv6PrefixLength=" + eDnsClientSubnetIPv6PrefixLength + "&eDnsClientSubnetIpv4Override=" + encodeURIComponent(eDnsClientSubnetIpv4Override) + "&eDnsClientSubnetIpv6Override=" + encodeURIComponent(eDnsClientSubnetIpv6Override);
-    formData += "&qpmPrefixLimitsIPv4=" + encodeURIComponent(qpmPrefixLimitsIPv4) + "&qpmPrefixLimitsIPv6=" + encodeURIComponent(qpmPrefixLimitsIPv6) + "&qpmLimitSampleMinutes=" + qpmLimitSampleMinutes + "&qpmLimitUdpTruncationPercentage=" + qpmLimitUdpTruncationPercentage + "&qpmLimitBypassList=" + encodeURIComponent(qpmLimitBypassList);
-    formData += "&clientTimeout=" + clientTimeout + "&tcpSendTimeout=" + tcpSendTimeout + "&tcpReceiveTimeout=" + tcpReceiveTimeout + "&quicIdleTimeout=" + quicIdleTimeout + "&quicMaxInboundStreams=" + quicMaxInboundStreams + "&listenBacklog=" + listenBacklog + "&maxConcurrentResolutionsPerCore=" + maxConcurrentResolutionsPerCore;
-    
-
-    //web service
-    var webServiceLocalAddresses = cleanTextList($("#txtWebServiceLocalAddresses").val());
-
-    if ((webServiceLocalAddresses.length === 0) || (webServiceLocalAddresses === ","))
-        webServiceLocalAddresses = "0.0.0.0,[::]";
-    else
-        $("#txtWebServiceLocalAddresses").val(webServiceLocalAddresses.replace(/,/g, "\n"));
-
-    var webServiceHttpPort = $("#txtWebServiceHttpPort").val();
-
-    if ((webServiceHttpPort === null) || (webServiceHttpPort === ""))
-        webServiceHttpPort = 5380;
-
-    var webServiceEnableTls = $("#chkWebServiceEnableTls").prop("checked");
-    var webServiceEnableHttp3 = $("#chkWebServiceEnableHttp3").prop("checked");
-    var webServiceHttpToTlsRedirect = $("#chkWebServiceHttpToTlsRedirect").prop("checked");
-    var webServiceUseSelfSignedTlsCertificate = $("#chkWebServiceUseSelfSignedTlsCertificate").prop("checked");
-    var webServiceTlsPort = $("#txtWebServiceTlsPort").val();
-    var webServiceTlsCertificatePath = $("#txtWebServiceTlsCertificatePath").val();
-    var webServiceTlsCertificatePassword = $("#txtWebServiceTlsCertificatePassword").val();
-    var webServiceRealIpHeader = $("#txtWebServiceRealIpHeader").val();
-
-    formData += "&webServiceLocalAddresses=" + encodeURIComponent(webServiceLocalAddresses) + "&webServiceHttpPort=" + webServiceHttpPort + "&webServiceEnableTls=" + webServiceEnableTls + "&webServiceEnableHttp3=" + webServiceEnableHttp3 + "&webServiceHttpToTlsRedirect=" + webServiceHttpToTlsRedirect + "&webServiceUseSelfSignedTlsCertificate=" + webServiceUseSelfSignedTlsCertificate + "&webServiceTlsPort=" + webServiceTlsPort + "&webServiceTlsCertificatePath=" + encodeURIComponent(webServiceTlsCertificatePath) + "&webServiceTlsCertificatePassword=" + encodeURIComponent(webServiceTlsCertificatePassword) + "&webServiceRealIpHeader=" + encodeURIComponent(webServiceRealIpHeader);
-    
-
-    //optional protocols
-    var enableDnsOverUdpProxy = $("#chkEnableDnsOverUdpProxy").prop("checked");
-    var enableDnsOverTcpProxy = $("#chkEnableDnsOverTcpProxy").prop("checked");
-    var enableDnsOverHttp = $("#chkEnableDnsOverHttp").prop("checked");
-    var enableDnsOverTls = $("#chkEnableDnsOverTls").prop("checked");
-    var enableDnsOverHttps = $("#chkEnableDnsOverHttps").prop("checked");
-    var enableDnsOverHttp3 = $("#chkEnableDnsOverHttp3").prop("checked");
-    var enableDnsOverQuic = $("#chkEnableDnsOverQuic").prop("checked");
-
-    var dnsOverUdpProxyPort = $("#txtDnsOverUdpProxyPort").val();
-    if ((dnsOverUdpProxyPort == null) || (dnsOverUdpProxyPort === "")) {
-        showAlert("warning", "Missing!", "Please enter a value for DNS-over-UDP-PROXY Port.");
-        $("#txtDnsOverUdpProxyPort").trigger("focus");
-        return;
-    }
-
-    var dnsOverTcpProxyPort = $("#txtDnsOverTcpProxyPort").val();
-    if ((dnsOverTcpProxyPort == null) || (dnsOverTcpProxyPort === "")) {
-        showAlert("warning", "Missing!", "Please enter a value for DNS-over-TCP-PROXY Port.");
-        $("#txtDnsOverTcpProxyPort").trigger("focus");
-        return;
-    }
-
-    var dnsOverHttpPort = $("#txtDnsOverHttpPort").val();
-    if ((dnsOverHttpPort == null) || (dnsOverHttpPort === "")) {
-        showAlert("warning", "Missing!", "Please enter a value for DNS-over-HTTP Port.");
-        $("#txtDnsOverHttpPort").trigger("focus");
-        return;
-    }
-
-    var dnsOverTlsPort = $("#txtDnsOverTlsPort").val();
-    if ((dnsOverTlsPort == null) || (dnsOverTlsPort === "")) {
-        showAlert("warning", "Missing!", "Please enter a value for DNS-over-TLS Port.");
-        $("#txtDnsOverTlsPort").trigger("focus");
-        return;
-    }
-
-    var dnsOverHttpsPort = $("#txtDnsOverHttpsPort").val();
-    if ((dnsOverHttpsPort == null) || (dnsOverHttpsPort === "")) {
-        showAlert("warning", "Missing!", "Please enter a value for DNS-over-HTTPS Port.");
-        $("#txtDnsOverHttpsPort").trigger("focus");
-        return;
-    }
-
-    var dnsOverQuicPort = $("#txtDnsOverQuicPort").val();
-    if ((dnsOverQuicPort == null) || (dnsOverQuicPort === "")) {
-        showAlert("warning", "Missing!", "Please enter a value for DNS-over-QUIC Port.");
-        $("#txtDnsOverQuicPort").trigger("focus");
-        return;
-    }
-
-    var reverseProxyNetworkACL = cleanTextList($("#txtReverseProxyNetworkACL").val());
-
-    if ((reverseProxyNetworkACL.length === 0) || (reverseProxyNetworkACL === ","))
-        reverseProxyNetworkACL = false;
-    else
-        $("#txtReverseProxyNetworkACL").val(reverseProxyNetworkACL.replace(/,/g, "\n"));
-
-    var dnsTlsCertificatePath = $("#txtDnsTlsCertificatePath").val();
-    var dnsTlsCertificatePassword = $("#txtDnsTlsCertificatePassword").val();
-
-    var dnsOverHttpRealIpHeader = $("#txtDnsOverHttpRealIpHeader").val();
-
-    formData += "&enableDnsOverUdpProxy=" + enableDnsOverUdpProxy + "&enableDnsOverTcpProxy=" + enableDnsOverTcpProxy + "&enableDnsOverHttp=" + enableDnsOverHttp + "&enableDnsOverTls=" + enableDnsOverTls + "&enableDnsOverHttps=" + enableDnsOverHttps + "&enableDnsOverHttp3=" + enableDnsOverHttp3 + "&enableDnsOverQuic=" + enableDnsOverQuic + "&dnsOverUdpProxyPort=" + dnsOverUdpProxyPort + "&dnsOverTcpProxyPort=" + dnsOverTcpProxyPort + "&dnsOverHttpPort=" + dnsOverHttpPort + "&dnsOverTlsPort=" + dnsOverTlsPort + "&dnsOverHttpsPort=" + dnsOverHttpsPort + "&dnsOverQuicPort=" + dnsOverQuicPort + "&reverseProxyNetworkACL=" + encodeURIComponent(reverseProxyNetworkACL) + "&dnsTlsCertificatePath=" + encodeURIComponent(dnsTlsCertificatePath) + "&dnsTlsCertificatePassword=" + encodeURIComponent(dnsTlsCertificatePassword) + "&dnsOverHttpRealIpHeader=" + encodeURIComponent(dnsOverHttpRealIpHeader);
-    
-
-    //tsig
-    var tsigKeys = serializeTableData($("#tableTsigKeys"), 3);
-    if (tsigKeys === false)
-        return;
-
-    if (tsigKeys.length === 0)
-        tsigKeys = false;
-
-    formData += "&tsigKeys=" + encodeURIComponent(tsigKeys);
-    
-
-    //recursion
-    var recursion = $("input[name=rdRecursion]:checked").val();
-
-    var recursionNetworkACL = cleanTextList($("#txtRecursionNetworkACL").val());
-
-    if ((recursionNetworkACL.length === 0) || (recursionNetworkACL === ","))
-        recursionNetworkACL = false;
-    else
-        $("#txtRecursionNetworkACL").val(recursionNetworkACL.replace(/,/g, "\n"));
-
-    var randomizeName = $("#chkRandomizeName").prop("checked");
-    var qnameMinimization = $("#chkQnameMinimization").prop("checked");
-
-    var resolverRetries = $("#txtResolverRetries").val();
-    if ((resolverRetries == null) || (resolverRetries === "")) {
-        showAlert("warning", "Missing!", "Please enter a value for Resolver Retries.");
-        $("#txtResolverRetries").trigger("focus");
-        return;
-    }
-
-    var resolverTimeout = $("#txtResolverTimeout").val();
-    if ((resolverTimeout == null) || (resolverTimeout === "")) {
-        showAlert("warning", "Missing!", "Please enter a value for Resolver Timeout.");
-        $("#txtResolverTimeout").trigger("focus");
-        return;
-    }
-
-    var resolverConcurrency = $("#txtResolverConcurrency").val();
-    if ((resolverConcurrency == null) || (resolverConcurrency === "")) {
-        showAlert("warning", "Missing!", "Please enter a value for Resolver Concurrency.");
-        $("#txtResolverConcurrency").trigger("focus");
-        return;
-    }
-
-    var resolverMaxStackCount = $("#txtResolverMaxStackCount").val();
-    if ((resolverMaxStackCount == null) || (resolverMaxStackCount === "")) {
-        showAlert("warning", "Missing!", "Please enter a value for Resolver Max Stack Count.");
-        $("#txtResolverMaxStackCount").trigger("focus");
-        return;
-    }
-
-    formData += "&recursion=" + recursion + "&recursionNetworkACL=" + encodeURIComponent(recursionNetworkACL) + "&randomizeName=" + randomizeName + "&qnameMinimization=" + qnameMinimization + "&resolverRetries=" + resolverRetries + "&resolverTimeout=" + resolverTimeout + "&resolverConcurrency=" + resolverConcurrency + "&resolverMaxStackCount=" + resolverMaxStackCount;
-    
-
-    //cache
-    var saveCache = $("#chkSaveCache").prop("checked");
-
-    var serveStale = $("#chkServeStale").prop("checked");
-    var serveStaleTtl = $("#txtServeStaleTtl").val();
-    var serveStaleAnswerTtl = $("#txtServeStaleAnswerTtl").val();
-    var serveStaleResetTtl = $("#txtServeStaleResetTtl").val();
-    var serveStaleMaxWaitTime = $("#txtServeStaleMaxWaitTime").val();
-
-    var cacheMaximumEntries = $("#txtCacheMaximumEntries").val();
-    if ((cacheMaximumEntries === null) || (cacheMaximumEntries === "")) {
-        showAlert("warning", "Missing!", "Please enter cache maximum entries value.");
-        $("#txtCacheMaximumEntries").trigger("focus");
-        return;
-    }
-
-    var cacheMinimumRecordTtl = $("#txtCacheMinimumRecordTtl").val();
-    if ((cacheMinimumRecordTtl === null) || (cacheMinimumRecordTtl === "")) {
-        showAlert("warning", "Missing!", "Please enter cache minimum record TTL value.");
-        $("#txtCacheMinimumRecordTtl").trigger("focus");
-        return;
-    }
-
-    var cacheMaximumRecordTtl = $("#txtCacheMaximumRecordTtl").val();
-    if ((cacheMaximumRecordTtl === null) || (cacheMaximumRecordTtl === "")) {
-        showAlert("warning", "Missing!", "Please enter cache maximum record TTL value.");
-        $("#txtCacheMaximumRecordTtl").trigger("focus");
-        return;
-    }
-
-    var cacheNegativeRecordTtl = $("#txtCacheNegativeRecordTtl").val();
-    if ((cacheNegativeRecordTtl === null) || (cacheNegativeRecordTtl === "")) {
-        showAlert("warning", "Missing!", "Please enter cache negative record TTL value.");
-        $("#txtCacheNegativeRecordTtl").trigger("focus");
-        return;
-    }
-
-    var cacheFailureRecordTtl = $("#txtCacheFailureRecordTtl").val();
-    if ((cacheFailureRecordTtl === null) || (cacheFailureRecordTtl === "")) {
-        showAlert("warning", "Missing!", "Please enter cache failure record TTL value.");
-        $("#txtCacheFailureRecordTtl").trigger("focus");
-        return;
-    }
-
-    var cachePrefetchEligibility = $("#txtCachePrefetchEligibility").val();
-    if ((cachePrefetchEligibility === null) || (cachePrefetchEligibility === "")) {
-        showAlert("warning", "Missing!", "Please enter cache prefetch eligibility value.");
-        $("#txtCachePrefetchEligibility").trigger("focus");
-        return;
-    }
-
-    var cachePrefetchTrigger = $("#txtCachePrefetchTrigger").val();
-    if ((cachePrefetchTrigger === null) || (cachePrefetchTrigger === "")) {
-        showAlert("warning", "Missing!", "Please enter cache prefetch trigger value.");
-        $("#txtCachePrefetchTrigger").trigger("focus");
-        return;
-    }
-
-    var cachePrefetchSampleIntervalInMinutes = $("#txtCachePrefetchSampleIntervalInMinutes").val();
-    if ((cachePrefetchSampleIntervalInMinutes === null) || (cachePrefetchSampleIntervalInMinutes === "")) {
-        showAlert("warning", "Missing!", "Please enter cache auto prefetch sample interval value.");
-        $("#txtCachePrefetchSampleIntervalInMinutes").trigger("focus");
-        return;
-    }
-
-    var cachePrefetchSampleEligibilityHitsPerHour = $("#txtCachePrefetchSampleEligibilityHitsPerHour").val();
-    if ((cachePrefetchSampleEligibilityHitsPerHour === null) || (cachePrefetchSampleEligibilityHitsPerHour === "")) {
-        showAlert("warning", "Missing!", "Please enter cache auto prefetch sample eligibility value.");
-        $("#txtCachePrefetchSampleEligibilityHitsPerHour").trigger("focus");
-        return;
-    }
-
-    formData += "&saveCache=" + saveCache + "&serveStale=" + serveStale + "&serveStaleTtl=" + serveStaleTtl + "&serveStaleAnswerTtl=" + serveStaleAnswerTtl + "&serveStaleResetTtl=" + serveStaleResetTtl + "&serveStaleMaxWaitTime=" + serveStaleMaxWaitTime + "&cacheMaximumEntries=" + cacheMaximumEntries + "&cacheMinimumRecordTtl=" + cacheMinimumRecordTtl + "&cacheMaximumRecordTtl=" + cacheMaximumRecordTtl + "&cacheNegativeRecordTtl=" + cacheNegativeRecordTtl + "&cacheFailureRecordTtl=" + cacheFailureRecordTtl + "&cachePrefetchEligibility=" + cachePrefetchEligibility + "&cachePrefetchTrigger=" + cachePrefetchTrigger + "&cachePrefetchSampleIntervalInMinutes=" + cachePrefetchSampleIntervalInMinutes + "&cachePrefetchSampleEligibilityHitsPerHour=" + cachePrefetchSampleEligibilityHitsPerHour;
-    
-
-    //blocking
-    var enableBlocking = $("#chkEnableBlocking").prop("checked");
-    var allowTxtBlockingReport = $("#chkAllowTxtBlockingReport").prop("checked");
-
-    var blockingBypassList = cleanTextList($("#txtBlockingBypassList").val());
-    if ((blockingBypassList.length == 0) || (blockingBypassList === ","))
-        blockingBypassList = false;
-    else
-        $("#txtBlockingBypassList").val(blockingBypassList.replace(/,/g, "\n") + "\n");
-
-    var blockingType = $("input[name=rdBlockingType]:checked").val();
-
-    var customBlockingAddresses = cleanTextList($("#txtCustomBlockingAddresses").val());
-    if ((customBlockingAddresses.length === 0) || customBlockingAddresses === ",")
-        customBlockingAddresses = false;
-    else
-        $("#txtCustomBlockingAddresses").val(customBlockingAddresses.replace(/,/g, "\n") + "\n");
-
-    var blockingAnswerTtl = $("#txtBlockingAnswerTtl").val();
-
-    var blockListUrls = cleanTextList($("#txtBlockListUrls").val());
-
-    if ((blockListUrls.length === 0) || (blockListUrls === ","))
-        blockListUrls = false;
-    else
-        $("#txtBlockListUrls").val(blockListUrls.replace(/,/g, "\n") + "\n");
-
-    var blockListUpdateIntervalHours = $("#txtBlockListUpdateIntervalHours").val();
-
-    formData += "&enableBlocking=" + enableBlocking + "&allowTxtBlockingReport=" + allowTxtBlockingReport + "&blockingBypassList=" + encodeURIComponent(blockingBypassList) + "&blockingType=" + blockingType + "&customBlockingAddresses=" + encodeURIComponent(customBlockingAddresses) + "&blockingAnswerTtl=" + blockingAnswerTtl + "&blockListUrls=" + encodeURIComponent(blockListUrls) + "&blockListUpdateIntervalHours=" + blockListUpdateIntervalHours;
-    
-
-    //proxy & forwarders
-    var proxy;
-
-    var proxyType = $("input[name=rdProxyType]:checked").val().toLowerCase();
-    if (proxyType === "none") {
-        proxy = "&proxyType=" + proxyType;
-    }
-    else {
-        var proxyAddress = $("#txtProxyAddress").val();
-
-        if ((proxyAddress === null) || (proxyAddress === "")) {
-            showAlert("warning", "Missing!", "Please enter proxy server address.");
-            $("#txtProxyAddress").trigger("focus");
+    let dnsServerIPv4SourceAddresses = cleanTextList($("#txtDnsServerIPv4SourceAddresses").val());
+    if (!dnsServerIPv4SourceAddresses || dnsServerIPv4SourceAddresses === ",") dnsServerIPv4SourceAddresses = false;
+
+    let dnsServerIPv6SourceAddresses = cleanTextList($("#txtDnsServerIPv6SourceAddresses").val());
+    if (!dnsServerIPv6SourceAddresses || dnsServerIPv6SourceAddresses === ",") dnsServerIPv6SourceAddresses = false;
+
+    params.set("dnsServerDomain", dnsServerDomain);
+    params.set("dnsServerLocalEndPoints", dnsServerLocalEndPoints);
+    params.set("dnsServerIPv4SourceAddresses", dnsServerIPv4SourceAddresses || "");
+    params.set("dnsServerIPv6SourceAddresses", dnsServerIPv6SourceAddresses || "");
+    params.set("defaultRecordTtl", $("#txtDefaultRecordTtl").val());
+    params.set("defaultNsRecordTtl", $("#txtDefaultNsRecordTtl").val());
+    params.set("defaultSoaRecordTtl", $("#txtDefaultSoaRecordTtl").val());
+    params.set("defaultResponsiblePerson", $("#txtDefaultResponsiblePerson").val());
+    params.set("useSoaSerialDateScheme", $("#chkUseSoaSerialDateScheme").prop("checked"));
+    params.set("minSoaRefresh", $("#txtMinSoaRefresh").val());
+    params.set("minSoaRetry", $("#txtMinSoaRetry").val());
+
+    const requiredFields = [
+        ["#txtQpmLimitSampleMinutes", "Queries Per Minute (QPM) sample value"],
+        ["#txtQpmLimitUdpTruncation", "QPM limit UDP truncation percentage value"],
+        ["#txtClientTimeout", "Client Timeout"],
+        ["#txtTcpSendTimeout", "TCP Send Timeout"],
+        ["#txtTcpReceiveTimeout", "TCP Receive Timeout"],
+        ["#txtQuicIdleTimeout", "QUIC Idle Timeout"],
+        ["#txtQuicMaxInboundStreams", "QUIC Max Inbound Streams"],
+        ["#txtListenBacklog", "Listen Backlog"],
+        ["#txtMaxConcurrentResolutionsPerCore", "Max Concurrent Resolutions"],
+        ["#txtDnsOverUdpProxyPort", "DNS-over-UDP-PROXY Port"],
+        ["#txtDnsOverTcpProxyPort", "DNS-over-TCP-PROXY Port"],
+        ["#txtDnsOverHttpPort", "DNS-over-HTTP Port"],
+        ["#txtDnsOverTlsPort", "DNS-over-TLS Port"],
+        ["#txtDnsOverHttpsPort", "DNS-over-HTTPS Port"],
+        ["#txtDnsOverQuicPort", "DNS-over-QUIC Port"],
+        ["#txtResolverRetries", "Resolver Retries"],
+        ["#txtResolverTimeout", "Resolver Timeout"],
+        ["#txtResolverConcurrency", "Resolver Concurrency"],
+        ["#txtResolverMaxStackCount", "Resolver Max Stack Count"],
+        ["#txtCacheMaximumEntries", "cache maximum entries"],
+        ["#txtCacheMinimumRecordTtl", "cache minimum record TTL"],
+        ["#txtCacheMaximumRecordTtl", "cache maximum record TTL"],
+        ["#txtCacheNegativeRecordTtl", "cache negative record TTL"],
+        ["#txtCacheFailureRecordTtl", "cache failure record TTL"],
+        ["#txtCachePrefetchEligibility", "cache prefetch eligibility"],
+        ["#txtCachePrefetchTrigger", "cache prefetch trigger"],
+        ["#txtCachePrefetchSampleIntervalInMinutes", "cache auto prefetch sample interval"],
+        ["#txtCachePrefetchSampleEligibilityHitsPerHour", "cache auto prefetch sample eligibility"],
+        ["#txtForwarderRetries", "Forwarder Retries"],
+        ["#txtForwarderTimeout", "Forwarder Timeout"],
+        ["#txtForwarderConcurrency", "Forwarder Concurrency"],
+    ];
+
+    for (const [sel, label] of requiredFields) {
+        if (!$(sel).val()) {
+            showAlert("warning", "Missing!", `Please enter a value for ${label}.`);
+            $(sel).trigger("focus");
             return;
         }
-
-        var proxyPort = $("#txtProxyPort").val();
-
-        if ((proxyPort === null) || (proxyPort === "")) {
-            showAlert("warning", "Missing!", "Please enter proxy server port.");
-            $("#txtProxyPort").trigger("focus");
-            return;
-        }
-
-        var proxyBypass = cleanTextList($("#txtProxyBypassList").val());
-
-        if ((proxyBypass.length === 0) || (proxyBypass === ","))
-            proxyBypass = "";
-        else
-            $("#txtProxyBypassList").val(proxyBypass.replace(/,/g, "\n"));
-
-        proxy = "&proxyType=" + proxyType + "&proxyAddress=" + encodeURIComponent(proxyAddress) + "&proxyPort=" + proxyPort + "&proxyUsername=" + encodeURIComponent($("#txtProxyUsername").val()) + "&proxyPassword=" + encodeURIComponent($("#txtProxyPassword").val()) + "&proxyBypass=" + encodeURIComponent(proxyBypass);
     }
 
-    var forwarders = cleanTextList($("#txtForwarders").val());
+    const listFields = [
+        ["#txtZoneTransferAllowedNetworks", "zoneTransferAllowedNetworks"],
+        ["#txtNotifyAllowedNetworks",       "notifyAllowedNetworks"],
+        ["#txtUdpSocketPoolExcludedPorts",  "socketPoolExcludedPorts"],
+        ["#txtQpmLimitBypassList",          "qpmLimitBypassList"],
+        ["#txtReverseProxyNetworkACL",       "reverseProxyNetworkACL"],
+        ["#txtRecursionNetworkACL",          "recursionNetworkACL"],
+        ["#txtBlockingBypassList",           "blockingBypassList"],
+        ["#txtCustomBlockingAddresses",      "customBlockingAddresses"],
+        ["#txtBlockListUrls",                "blockListUrls"],
+    ];
 
-    if ((forwarders.length === 0) || (forwarders === ","))
-        forwarders = false;
-    else
-        $("#txtForwarders").val(forwarders.replace(/,/g, "\n"));
-
-    var forwarderProtocol = $("input[name=rdForwarderProtocol]:checked").val();
-
-    var concurrentForwarding = $("#chkEnableConcurrentForwarding").prop("checked");
-
-    var forwarderRetries = $("#txtForwarderRetries").val();
-    if ((forwarderRetries == null) || (forwarderRetries === "")) {
-        showAlert("warning", "Missing!", "Please enter a value for Forwarder Retries.");
-        $("#txtForwarderRetries").trigger("focus");
-        return;
+    for (const [sel, key] of listFields) {
+        let val = cleanTextList($(sel).val());
+        if (!val || val === ",") val = false;
+        else $(sel).val(val.replace(/,/g, "\n") + "\n");
+        params.set(key, val || "");
     }
 
-    var forwarderTimeout = $("#txtForwarderTimeout").val();
-    if ((forwarderTimeout == null) || (forwarderTimeout === "")) {
-        showAlert("warning", "Missing!", "Please enter a value for Forwarder Timeout.");
-        $("#txtForwarderTimeout").trigger("focus");
-        return;
+    params.set("dnsAppsEnableAutomaticUpdate", $("#chkDnsAppsEnableAutomaticUpdate").prop("checked"));
+    params.set("preferIPv6", $("#chkPreferIPv6").prop("checked"));
+    params.set("enableUdpSocketPool", $("#chkEnableUdpSocketPool").prop("checked"));
+    params.set("udpPayloadSize", $("#txtEdnsUdpPayloadSize").val());
+    params.set("dnssecValidation", $("#chkDnssecValidation").prop("checked"));
+    params.set("eDnsClientSubnet", $("#chkEDnsClientSubnet").prop("checked"));
+    params.set("eDnsClientSubnetIPv4PrefixLength", $("#txtEDnsClientSubnetIPv4PrefixLength").val());
+    params.set("eDnsClientSubnetIPv6PrefixLength", $("#txtEDnsClientSubnetIPv6PrefixLength").val());
+    params.set("eDnsClientSubnetIpv4Override", $("#txtEDnsClientSubnetIpv4Override").val());
+    params.set("eDnsClientSubnetIpv6Override", $("#txtEDnsClientSubnetIpv6Override").val());
+
+    const qpmIPv4 = serializeTableData($("#tableQpmPrefixLimitsIPv4"), 3);
+    const qpmIPv6 = serializeTableData($("#tableQpmPrefixLimitsIPv6"), 3);
+    const tsigKeys = serializeTableData($("#tableTsigKeys"), 3);
+    if (qpmIPv4 === false || qpmIPv6 === false || tsigKeys === false) return;
+
+    params.set("qpmPrefixLimitsIPv4", qpmIPv4.length ? qpmIPv4 : "");
+    params.set("qpmPrefixLimitsIPv6", qpmIPv6.length ? qpmIPv6 : "");
+    params.set("qpmLimitSampleMinutes", $("#txtQpmLimitSampleMinutes").val());
+    params.set("qpmLimitUdpTruncationPercentage", $("#txtQpmLimitUdpTruncation").val());
+    params.set("clientTimeout", $("#txtClientTimeout").val());
+    params.set("tcpSendTimeout", $("#txtTcpSendTimeout").val());
+    params.set("tcpReceiveTimeout", $("#txtTcpReceiveTimeout").val());
+    params.set("quicIdleTimeout", $("#txtQuicIdleTimeout").val());
+    params.set("quicMaxInboundStreams", $("#txtQuicMaxInboundStreams").val());
+    params.set("listenBacklog", $("#txtListenBacklog").val());
+    params.set("maxConcurrentResolutionsPerCore", $("#txtMaxConcurrentResolutionsPerCore").val());
+
+    // web service
+    let wsLocalAddresses = cleanTextList($("#txtWebServiceLocalAddresses").val());
+    if (!wsLocalAddresses || wsLocalAddresses === ",") wsLocalAddresses = "0.0.0.0,[::]";
+    else $("#txtWebServiceLocalAddresses").val(wsLocalAddresses.replace(/,/g, "\n"));
+    params.set("webServiceLocalAddresses", wsLocalAddresses);
+    params.set("webServiceHttpPort", $("#txtWebServiceHttpPort").val() || 5380);
+    params.set("webServiceEnableTls", $("#chkWebServiceEnableTls").prop("checked"));
+    params.set("webServiceEnableHttp3", $("#chkWebServiceEnableHttp3").prop("checked"));
+    params.set("webServiceHttpToTlsRedirect", $("#chkWebServiceHttpToTlsRedirect").prop("checked"));
+    params.set("webServiceUseSelfSignedTlsCertificate", $("#chkWebServiceUseSelfSignedTlsCertificate").prop("checked"));
+    params.set("webServiceTlsPort", $("#txtWebServiceTlsPort").val());
+    params.set("webServiceTlsCertificatePath", $("#txtWebServiceTlsCertificatePath").val());
+    params.set("webServiceTlsCertificatePassword", $("#txtWebServiceTlsCertificatePassword").val());
+    params.set("webServiceRealIpHeader", $("#txtWebServiceRealIpHeader").val());
+
+    // optional protocols
+    params.set("enableDnsOverUdpProxy", $("#chkEnableDnsOverUdpProxy").prop("checked"));
+    params.set("enableDnsOverTcpProxy", $("#chkEnableDnsOverTcpProxy").prop("checked"));
+    params.set("enableDnsOverHttp", $("#chkEnableDnsOverHttp").prop("checked"));
+    params.set("enableDnsOverTls", $("#chkEnableDnsOverTls").prop("checked"));
+    params.set("enableDnsOverHttps", $("#chkEnableDnsOverHttps").prop("checked"));
+    params.set("enableDnsOverHttp3", $("#chkEnableDnsOverHttp3").prop("checked"));
+    params.set("enableDnsOverQuic", $("#chkEnableDnsOverQuic").prop("checked"));
+    params.set("dnsOverUdpProxyPort", $("#txtDnsOverUdpProxyPort").val());
+    params.set("dnsOverTcpProxyPort", $("#txtDnsOverTcpProxyPort").val());
+    params.set("dnsOverHttpPort", $("#txtDnsOverHttpPort").val());
+    params.set("dnsOverTlsPort", $("#txtDnsOverTlsPort").val());
+    params.set("dnsOverHttpsPort", $("#txtDnsOverHttpsPort").val());
+    params.set("dnsOverQuicPort", $("#txtDnsOverQuicPort").val());
+    params.set("dnsTlsCertificatePath", $("#txtDnsTlsCertificatePath").val());
+    params.set("dnsTlsCertificatePassword", $("#txtDnsTlsCertificatePassword").val());
+    params.set("dnsOverHttpRealIpHeader", $("#txtDnsOverHttpRealIpHeader").val());
+    params.set("tsigKeys", tsigKeys.length ? tsigKeys : "");
+
+    // recursion
+    params.set("recursion", $("input[name=rdRecursion]:checked").val());
+    params.set("randomizeName", $("#chkRandomizeName").prop("checked"));
+    params.set("qnameMinimization", $("#chkQnameMinimization").prop("checked"));
+    params.set("resolverRetries", $("#txtResolverRetries").val());
+    params.set("resolverTimeout", $("#txtResolverTimeout").val());
+    params.set("resolverConcurrency", $("#txtResolverConcurrency").val());
+    params.set("resolverMaxStackCount", $("#txtResolverMaxStackCount").val());
+
+    // cache
+    params.set("saveCache", $("#chkSaveCache").prop("checked"));
+    params.set("serveStale", $("#chkServeStale").prop("checked"));
+    params.set("serveStaleTtl", $("#txtServeStaleTtl").val());
+    params.set("serveStaleAnswerTtl", $("#txtServeStaleAnswerTtl").val());
+    params.set("serveStaleResetTtl", $("#txtServeStaleResetTtl").val());
+    params.set("serveStaleMaxWaitTime", $("#txtServeStaleMaxWaitTime").val());
+    params.set("cacheMaximumEntries", $("#txtCacheMaximumEntries").val());
+    params.set("cacheMinimumRecordTtl", $("#txtCacheMinimumRecordTtl").val());
+    params.set("cacheMaximumRecordTtl", $("#txtCacheMaximumRecordTtl").val());
+    params.set("cacheNegativeRecordTtl", $("#txtCacheNegativeRecordTtl").val());
+    params.set("cacheFailureRecordTtl", $("#txtCacheFailureRecordTtl").val());
+    params.set("cachePrefetchEligibility", $("#txtCachePrefetchEligibility").val());
+    params.set("cachePrefetchTrigger", $("#txtCachePrefetchTrigger").val());
+    params.set("cachePrefetchSampleIntervalInMinutes", $("#txtCachePrefetchSampleIntervalInMinutes").val());
+    params.set("cachePrefetchSampleEligibilityHitsPerHour", $("#txtCachePrefetchSampleEligibilityHitsPerHour").val());
+
+    // blocking
+    params.set("enableBlocking", $("#chkEnableBlocking").prop("checked"));
+    params.set("allowTxtBlockingReport", $("#chkAllowTxtBlockingReport").prop("checked"));
+    params.set("blockingType", $("input[name=rdBlockingType]:checked").val());
+    params.set("blockingAnswerTtl", $("#txtBlockingAnswerTtl").val());
+    params.set("blockListUpdateIntervalHours", $("#txtBlockListUpdateIntervalHours").val());
+
+    // proxy & forwarders
+    const proxyType = $("input[name=rdProxyType]:checked").val().toLowerCase();
+    params.set("proxyType", proxyType);
+    if (proxyType !== "none") {
+        const proxyAddress = $("#txtProxyAddress").val();
+        const proxyPort    = $("#txtProxyPort").val();
+        if (!proxyAddress) { showAlert("warning", "Missing!", "Please enter proxy server address."); $("#txtProxyAddress").trigger("focus"); return; }
+        if (!proxyPort)    { showAlert("warning", "Missing!", "Please enter proxy server port.");    $("#txtProxyPort").trigger("focus");    return; }
+        params.set("proxyAddress",  proxyAddress);
+        params.set("proxyPort",     proxyPort);
+        params.set("proxyUsername", $("#txtProxyUsername").val());
+        params.set("proxyPassword", $("#txtProxyPassword").val());
+        let proxyBypass = cleanTextList($("#txtProxyBypassList").val());
+        if (!proxyBypass || proxyBypass === ",") proxyBypass = "";
+        else $("#txtProxyBypassList").val(proxyBypass.replace(/,/g, "\n"));
+        params.set("proxyBypass", proxyBypass);
     }
 
-    var forwarderConcurrency = $("#txtForwarderConcurrency").val();
-    if ((forwarderConcurrency == null) || (forwarderConcurrency === "")) {
-        showAlert("warning", "Missing!", "Please enter a value for Forwarder Concurrency.");
-        $("#txtForwarderConcurrency").trigger("focus");
-        return;
-    }
+    let forwarders = cleanTextList($("#txtForwarders").val());
+    if (!forwarders || forwarders === ",") forwarders = false;
+    else $("#txtForwarders").val(forwarders.replace(/,/g, "\n"));
+    params.set("forwarders", forwarders || "");
+    params.set("forwarderProtocol", $("input[name=rdForwarderProtocol]:checked").val());
+    params.set("concurrentForwarding", $("#chkEnableConcurrentForwarding").prop("checked"));
+    params.set("forwarderRetries", $("#txtForwarderRetries").val());
+    params.set("forwarderTimeout", $("#txtForwarderTimeout").val());
+    params.set("forwarderConcurrency", $("#txtForwarderConcurrency").val());
 
-    formData += proxy + "&forwarders=" + encodeURIComponent(forwarders) + "&forwarderProtocol=" + forwarderProtocol + "&concurrentForwarding=" + concurrentForwarding + "&forwarderRetries=" + forwarderRetries + "&forwarderTimeout=" + forwarderTimeout + "&forwarderConcurrency=" + forwarderConcurrency;
-    
+    // logging
+    params.set("loggingType", $("input[name=rdLoggingType]:checked").val());
+    params.set("ignoreResolverLogs", $("#chkIgnoreResolverLogs").prop("checked"));
+    params.set("logQueries", $("#chkLogQueries").prop("checked"));
+    params.set("useLocalTime", $("#chkUseLocalTime").prop("checked"));
+    params.set("logFolder", $("#txtLogFolderPath").val());
+    params.set("maxLogFileDays", $("#txtMaxLogFileDays").val());
+    params.set("enableInMemoryStats", $("#chkEnableInMemoryStats").prop("checked"));
+    params.set("maxStatFileDays", $("#txtMaxStatFileDays").val());
 
-    //logging
-    var loggingType = $("input[name=rdLoggingType]:checked").val();
-    var ignoreResolverLogs = $("#chkIgnoreResolverLogs").prop("checked");
-    var logQueries = $("#chkLogQueries").prop("checked");
-    var useLocalTime = $("#chkUseLocalTime").prop("checked");
-    var logFolder = $("#txtLogFolderPath").val();
-    var maxLogFileDays = $("#txtMaxLogFileDays").val();
-
-    var enableInMemoryStats = $("#chkEnableInMemoryStats").prop("checked");
-    var maxStatFileDays = $("#txtMaxStatFileDays").val();
-
-    formData += "&loggingType=" + loggingType + "&ignoreResolverLogs=" + ignoreResolverLogs + "&logQueries=" + logQueries + "&useLocalTime=" + useLocalTime + "&logFolder=" + encodeURIComponent(logFolder) + "&maxLogFileDays=" + maxLogFileDays + "&enableInMemoryStats=" + enableInMemoryStats + "&maxStatFileDays=" + maxStatFileDays;
-    
-
-    //send request
-    var btn = $(objBtn);
+    const btn = $(objBtn);
     btn.button("loading");
 
     HTTPRequest({
         url: "api/settings/set?token=" + sessionData.token,
         method: "POST",
-        data: formData,
+        data: params.toString(),
         processData: false,
         showInnerError: true,
-        success: function (responseJSON) {
+        success(responseJSON) {
             updateDnsSettingsDataAndGui(responseJSON);
             loadDnsSettings(responseJSON);
-
             btn.button("reset");
             showAlert("success", "Settings Saved!", "DNS Server settings were saved successfully.");
-
-            if (sessionData.info.dnsServerDomain == responseJSON.server)
+            if (sessionData.info.dnsServerDomain === responseJSON.server)
                 checkForWebConsoleRedirection(responseJSON);
         },
-        error: function () {
-            btn.button("reset");
-        },
-        invalidToken: function () {
-            btn.button("reset");
-            showPageLogin();
-        }
+        error()  { btn.button("reset"); },
+        invalidToken() { btn.button("reset"); showPageLogin(); }
     });
 }
 
+function makeQpmRow(tableId, prefix, udpLimit, tcpLimit) {
+    const id = Math.floor(Math.random() * 10000);
+    $(`#${tableId}`).append(`
+        <tr id="${tableId}Row${id}">
+            <td><input type="number" class="form-control" value="${htmlEncode(prefix)}"></td>
+            <td><input type="number" class="form-control" value="${htmlEncode(udpLimit)}"></td>
+            <td><input type="number" class="form-control" value="${htmlEncode(tcpLimit)}"></td>
+            <td><button type="button" class="btn btn-danger" onclick="$('#${tableId}Row${id}').remove();">Delete</button></td>
+        </tr>`);
+}
+
 function addQpmPrefixLimitsIPv4Row(prefix, udpLimit, tcpLimit) {
-    var id = Math.floor(Math.random() * 10000);
-
-    var tableHtmlRows = "<tr id=\"tableQpmPrefixLimitsIPv4Row" + id + "\"><td><input type=\"number\" class=\"form-control\" value=\"" + htmlEncode(prefix) + "\"></td>";
-    tableHtmlRows += "<td><input type=\"number\" class=\"form-control\" value=\"" + htmlEncode(udpLimit) + "\"></td>";
-    tableHtmlRows += "<td><input type=\"number\" class=\"form-control\" value=\"" + htmlEncode(tcpLimit) + "\"></td>";
-
-    tableHtmlRows += "<td><button type=\"button\" class=\"btn btn-danger\" onclick=\"$('#tableQpmPrefixLimitsIPv4Row" + id + "').remove();\">Delete</button></td></tr>";
-
-    $("#tableQpmPrefixLimitsIPv4").append(tableHtmlRows);
+    makeQpmRow("tableQpmPrefixLimitsIPv4", prefix, udpLimit, tcpLimit);
 }
 
 function addQpmPrefixLimitsIPv6Row(prefix, udpLimit, tcpLimit) {
-    var id = Math.floor(Math.random() * 10000);
-
-    var tableHtmlRows = "<tr id=\"tableQpmPrefixLimitsIPv6Row" + id + "\"><td><input type=\"number\" class=\"form-control\" value=\"" + htmlEncode(prefix) + "\"></td>";
-    tableHtmlRows += "<td><input type=\"number\" class=\"form-control\" value=\"" + htmlEncode(udpLimit) + "\"></td>";
-    tableHtmlRows += "<td><input type=\"number\" class=\"form-control\" value=\"" + htmlEncode(tcpLimit) + "\"></td>";
-
-    tableHtmlRows += "<td><button type=\"button\" class=\"btn btn-danger\" onclick=\"$('#tableQpmPrefixLimitsIPv6Row" + id + "').remove();\">Delete</button></td></tr>";
-
-    $("#tableQpmPrefixLimitsIPv6").append(tableHtmlRows);
+    makeQpmRow("tableQpmPrefixLimitsIPv6", prefix, udpLimit, tcpLimit);
 }
 
 function addTsigKeyRow(keyName, sharedSecret, algorithmName) {
-    var id = Math.floor(Math.random() * 10000);
+    const id = Math.floor(Math.random() * 10000);
+    const algos = [
+        ["hmac-md5.sig-alg.reg.int", "HMAC-MD5 (obsolete)"],
+        ["hmac-sha1",                "HMAC-SHA1"],
+        ["hmac-sha256",              "HMAC-SHA256 (recommended)"],
+        ["hmac-sha256-128",          "HMAC-SHA256 (128 bits)"],
+        ["hmac-sha384",              "HMAC-SHA384"],
+        ["hmac-sha384-192",          "HMAC-SHA384 (192 bits)"],
+        ["hmac-sha512",              "HMAC-SHA512"],
+        ["hmac-sha512-256",          "HMAC-SHA512 (256 bits)"],
+    ];
+    const options = algos.map(([v, l]) => `<option value="${v}"${algorithmName === v ? " selected" : ""}>${l}</option>`).join("");
 
-    var tableHtmlRows = "<tr id=\"tableTsigKeyRow" + id + "\"><td><input type=\"text\" class=\"form-control\" value=\"" + htmlEncode(keyName) + "\"></td>";
-    tableHtmlRows += "<td><input type=\"text\" class=\"form-control\" data-optional=\"true\" value=\"" + htmlEncode(sharedSecret) + "\"></td>";
-
-    tableHtmlRows += "<td><select class=\"form-control\">";
-    tableHtmlRows += "<option value=\"hmac-md5.sig-alg.reg.int\"" + (algorithmName == "hmac-md5.sig-alg.reg.int" ? " selected" : "") + ">HMAC-MD5 (obsolete)</option>";
-    tableHtmlRows += "<option value=\"hmac-sha1\"" + (algorithmName == "hmac-sha1" ? " selected" : "") + ">HMAC-SHA1</option>";
-    tableHtmlRows += "<option value=\"hmac-sha256\"" + (algorithmName == "hmac-sha256" ? " selected" : "") + ">HMAC-SHA256 (recommended)</option>";
-    tableHtmlRows += "<option value=\"hmac-sha256-128\"" + (algorithmName == "hmac-sha256-128" ? " selected" : "") + ">HMAC-SHA256 (128 bits)</option>";
-    tableHtmlRows += "<option value=\"hmac-sha384\"" + (algorithmName == "hmac-sha384" ? " selected" : "") + ">HMAC-SHA384</option>";
-    tableHtmlRows += "<option value=\"hmac-sha384-192\"" + (algorithmName == "hmac-sha384-192" ? " selected" : "") + ">HMAC-SHA384 (192 bits)</option>";
-    tableHtmlRows += "<option value=\"hmac-sha512\"" + (algorithmName == "hmac-sha512" ? " selected" : "") + ">HMAC-SHA512</option>";
-    tableHtmlRows += "<option value=\"hmac-sha512-256\"" + (algorithmName == "hmac-sha512-256" ? " selected" : "") + ">HMAC-SHA512 (256 bits)</option>";
-    tableHtmlRows += "</select></td>";
-
-    tableHtmlRows += "<td><button type=\"button\" class=\"btn btn-danger\" onclick=\"$('#tableTsigKeyRow" + id + "').remove();\">Delete</button></td></tr>";
-
-    $("#tableTsigKeys").append(tableHtmlRows);
+    $("#tableTsigKeys").append(`
+        <tr id="tableTsigKeyRow${id}">
+            <td><input type="text" class="form-control" value="${htmlEncode(keyName)}"></td>
+            <td><input type="text" class="form-control" data-optional="true" value="${htmlEncode(sharedSecret)}"></td>
+            <td><select class="form-control">${options}</select></td>
+            <td><button type="button" class="btn btn-danger" onclick="$('#tableTsigKeyRow${id}').remove();">Delete</button></td>
+        </tr>`);
 }
 
 function checkForReverseProxy(responseJSON) {
-    if (window.location.protocol == "https:") {
-        var currentPort = window.location.port;
-
-        if ((currentPort == 0) || (currentPort == ""))
-            currentPort = 443;
-
-        reverseProxyDetected = !responseJSON.response.webServiceEnableTls || (currentPort != responseJSON.response.webServiceTlsPort);
+    const r = responseJSON.response;
+    if (window.location.protocol === "https:") {
+        const currentPort = window.location.port || 443;
+        reverseProxyDetected = !r.webServiceEnableTls || Number(currentPort) !== r.webServiceTlsPort;
     } else {
-        var currentPort = window.location.port;
-
-        if ((currentPort == 0) || (currentPort == ""))
-            currentPort = 80;
-
-        reverseProxyDetected = currentPort != responseJSON.response.webServiceHttpPort
+        const currentPort = window.location.port || 80;
+        reverseProxyDetected = Number(currentPort) !== r.webServiceHttpPort;
     }
 }
 
 function checkForWebConsoleRedirection(responseJSON) {
-    if (reverseProxyDetected)
-        return;
+    if (reverseProxyDetected) return;
+    const r = responseJSON.response;
 
-    if (location.protocol == "https:") {
-        if (!responseJSON.response.webServiceEnableTls) {
-            setTimeout(function () {
-                window.open("http://" + window.location.hostname + ":" + responseJSON.response.webServiceHttpPort, "_self");
-            }, 2500); //delay redirection to allow web server to restart
+    const redirect = (url) => setTimeout(() => window.open(url, "_self"), 2500);
 
-            return;
-        }
-
-        var currentPort = window.location.port;
-
-        if ((currentPort == 0) || (currentPort == ""))
-            currentPort = 443;
-
-        if (currentPort != responseJSON.response.webServiceTlsPort) {
-            setTimeout(function () {
-                window.open("https://" + window.location.hostname + ":" + responseJSON.response.webServiceTlsPort, "_self");
-            }, 2500); //delay redirection to allow web server to restart
-        }
-    }
-    else {
-        if (responseJSON.response.webServiceEnableTls && responseJSON.response.webServiceHttpToTlsRedirect) {
-            setTimeout(function () {
-                window.open("https://" + window.location.hostname + ":" + responseJSON.response.webServiceTlsPort, "_self");
-            }, 2500); //delay redirection to allow web server to restart
-
-            return;
-        }
-
-        var currentPort = window.location.port;
-
-        if ((currentPort == 0) || (currentPort == ""))
-            currentPort = 80;
-
-        if (currentPort != responseJSON.response.webServiceHttpPort) {
-            setTimeout(function () {
-                window.open("http://" + window.location.hostname + ":" + responseJSON.response.webServiceHttpPort, "_self");
-            }, 2500); //delay redirection to allow web server to restart
-        }
+    if (location.protocol === "https:") {
+        if (!r.webServiceEnableTls) { redirect(`http://${window.location.hostname}:${r.webServiceHttpPort}`); return; }
+        const cur = window.location.port || 443;
+        if (Number(cur) !== r.webServiceTlsPort) redirect(`https://${window.location.hostname}:${r.webServiceTlsPort}`);
+    } else {
+        if (r.webServiceEnableTls && r.webServiceHttpToTlsRedirect) { redirect(`https://${window.location.hostname}:${r.webServiceTlsPort}`); return; }
+        const cur = window.location.port || 80;
+        if (Number(cur) !== r.webServiceHttpPort) redirect(`http://${window.location.hostname}:${r.webServiceHttpPort}`);
     }
 }
 
 function forceUpdateBlockLists() {
-    if (!confirm("Are you sure to force download and update the block lists?"))
-        return;
-
-    var btn = $("#btnUpdateBlockListsNow");
-    btn.button("loading");
+    if (!confirm("Are you sure to force download and update the block lists?")) return;
+    const btn = $("#btnUpdateBlockListsNow").button("loading");
 
     HTTPRequest({
         url: "api/settings/forceUpdateBlockLists?token=" + sessionData.token,
-        success: function (responseJSON) {
+        success() {
             btn.button("reset");
-
             $("#lblBlockListNextUpdatedOn").text("Updating Now");
-
             showAlert("success", "Updating Block List!", "Block list update was triggered successfully.");
         },
-        error: function () {
-            btn.button("reset");
-        },
-        invalidToken: function () {
-            btn.button("reset");
-            showPageLogin();
-        }
+        error()  { btn.button("reset"); },
+        invalidToken() { btn.button("reset"); showPageLogin(); }
     });
 }
 
 function temporaryDisableBlockingNow() {
-    var minutes = $("#txtTemporaryDisableBlockingMinutes").val();
-
-    if ((minutes === null) || (minutes === "")) {
+    const minutes = $("#txtTemporaryDisableBlockingMinutes").val();
+    if (!minutes) {
         showAlert("warning", "Missing!", "Please enter a value in minutes to temporarily disable blocking.");
         $("#txtTemporaryDisableBlockingMinutes").trigger("focus");
         return;
     }
+    if (!confirm(`Are you sure to temporarily disable blocking for ${minutes} minute(s)?`)) return;
 
-    if (!confirm("Are you sure to temporarily disable blocking for " + minutes + " minute(s)?"))
-        return;
-
-    var btn = $("#btnTemporaryDisableBlockingNow");
-    btn.button("loading");
+    const btn = $("#btnTemporaryDisableBlockingNow").button("loading");
 
     HTTPRequest({
-        url: "api/settings/temporaryDisableBlocking?token=" + sessionData.token + "&minutes=" + minutes,
-        success: function (responseJSON) {
+        url: `api/settings/temporaryDisableBlocking?token=${sessionData.token}&minutes=${minutes}`,
+        success(responseJSON) {
             btn.button("reset");
-
             $("#chkEnableBlocking").prop("checked", false);
             $("#lblTemporaryDisableBlockingTill").text(moment(responseJSON.response.temporaryDisableBlockingTill).local().format("YYYY-MM-DD HH:mm:ss"));
             updateBlockingState();
-
-            showAlert("success", "Blocking Disabled!", "Blocking was successfully disabled temporarily for " + htmlEncode(minutes) + " minute(s).");
-
+            showAlert("success", "Blocking Disabled!", `Blocking was successfully disabled temporarily for ${htmlEncode(minutes)} minute(s).`);
             setTimeout(updateBlockingState, 500);
         },
-        error: function () {
-            btn.button("reset");
-        },
-        invalidToken: function () {
-            btn.button("reset");
-            showPageLogin();
-        }
+        error()  { btn.button("reset"); },
+        invalidToken() { btn.button("reset"); showPageLogin(); }
     });
 }
 
 function updateBlockingState() {
-    var enableBlocking = $("#chkEnableBlocking").prop("checked");
+    const on = $("#chkEnableBlocking").prop("checked");
+    ["#chkAllowTxtBlockingReport","#txtTemporaryDisableBlockingMinutes","#btnTemporaryDisableBlockingNow",
+        "#txtBlockingBypassList","#rdBlockingTypeAnyAddress","#rdBlockingTypeNxDomain",
+        "#rdBlockingTypeCustomAddress","#txtBlockListUrls","#optQuickBlockList","#txtBlockListUpdateIntervalHours"
+    ].forEach(sel => $(sel).prop("disabled", !on));
 
-    $("#chkAllowTxtBlockingReport").prop("disabled", !enableBlocking);
-    $("#txtTemporaryDisableBlockingMinutes").prop("disabled", !enableBlocking);
-    $("#btnTemporaryDisableBlockingNow").prop("disabled", !enableBlocking);
-    $("#txtBlockingBypassList").prop("disabled", !enableBlocking);
-    $("#rdBlockingTypeAnyAddress").prop("disabled", !enableBlocking);
-    $("#rdBlockingTypeNxDomain").prop("disabled", !enableBlocking);
-    $("#rdBlockingTypeCustomAddress").prop("disabled", !enableBlocking);
-    $("#txtCustomBlockingAddresses").prop("disabled", !enableBlocking || !$("#rdBlockingTypeCustomAddress").prop("checked"));
-    $("#txtBlockListUrls").prop("disabled", !enableBlocking);
-    $("#optQuickBlockList").prop("disabled", !enableBlocking);
-    $("#txtBlockListUpdateIntervalHours").prop("disabled", !enableBlocking);
-    $("#btnUpdateBlockListsNow").prop("disabled", !enableBlocking || ($("#txtBlockListUrls").val() == ""));
+    $("#txtCustomBlockingAddresses").prop("disabled", !on || !$("#rdBlockingTypeCustomAddress").prop("checked"));
+    $("#btnUpdateBlockListsNow").prop("disabled", !on || !$("#txtBlockListUrls").val());
 }
 
 function updateChart(chart, data) {
     chart.data = data;
     chart.update();
-    loadChartLegendSettings(chart); //Reload the chart legend
+    loadChartLegendSettings(chart);
 }
 
 function loadChartLegendSettings(chart) {
-    var labelFilters = localStorage.getItem("chart_" + chart.id + "_legend");
+    const raw = localStorage.getItem("chart_" + chart.id + "_legend");
+    if (!raw) return;
+    const filters = JSON.parse(raw);
+    const isDoughnutOrPie = ["doughnut","pie"].includes(chart.config.type);
 
-    if (labelFilters != null) {
-        labelFilters = JSON.parse(labelFilters);
-        if (chart.config.type == "doughnut" || chart.config.type == "pie") {
-            chart.data.labels.forEach((label, index) => {
-                let labelFilter = labelFilters.filter(function (f) {
-                    return f.title == this.toString();
-                }, label);
-                if (labelFilter.length > 0) {
-                    chart.getDatasetMeta(0).data[index].hidden = labelFilter[0].hidden;
-                }
-            });
-        }
-        else {
-            chart.data.datasets.forEach((data, index) => {
-                let labelFilter = labelFilters.filter(function (f) {
-                    return f.title == this.toString();
-                }, data.label);
-                if (labelFilter.length > 0) {
-                    chart.getDatasetMeta(index).hidden = labelFilter[0].hidden;
-                }
-            });
-        }
-
-        chart.update();
+    if (isDoughnutOrPie) {
+        chart.data.labels.forEach((label, i) => {
+            const f = filters.find(f => f.title === String(label));
+            if (f) chart.getDatasetMeta(0).data[i].hidden = f.hidden;
+        });
+    } else {
+        chart.data.datasets.forEach((ds, i) => {
+            const f = filters.find(f => f.title === String(ds.label));
+            if (f) chart.getDatasetMeta(i).hidden = f.hidden;
+        });
     }
+    chart.update();
 }
 
 function saveChartLegendSettings(chart) {
-    var labelFilters = [];
-
-    if (chart.config.type == "doughnut" || chart.config.type == "pie") {
-        chart.data.labels.forEach((label, index) => {
-            var hidden = chart.getDatasetMeta(0).data[index].hidden;
-            labelFilters.push(
-                {
-                    title: label,
-                    hidden: hidden
-                }
-            );
-        });
-    }
-    else {
-        chart.data.datasets.forEach((data, index) => {
-            var hidden = chart.getDatasetMeta(index).hidden;
-            labelFilters.push(
-                {
-                    title: data.label,
-                    hidden: hidden
-                }
-            );
-        });
-    }
-
-    localStorage.setItem("chart_" + chart.id + "_legend", JSON.stringify(labelFilters));
+    const isDoughnutOrPie = ["doughnut","pie"].includes(chart.config.type);
+    const filters = isDoughnutOrPie
+        ? chart.data.labels.map((label, i) => ({ title: label, hidden: chart.getDatasetMeta(0).data[i].hidden }))
+        : chart.data.datasets.map((ds, i) => ({ title: ds.label, hidden: chart.getDatasetMeta(i).hidden }));
+    localStorage.setItem("chart_" + chart.id + "_legend", JSON.stringify(filters));
 }
 
-var chartLegendOnClick = function (e, legendItem) {
-    var chartType = this.chart.config.type;
-
-    if (chartType == "doughnut") {
-        Chart.defaults.doughnut.legend.onClick.call(this, e, legendItem);
-    } else if (chartType == "pie") {
-        Chart.defaults.pie.legend.onClick.call(this, e, legendItem);
-    } else {
-        Chart.defaults.global.legend.onClick.call(this, e, legendItem);
-    }
-
+const chartLegendOnClick = function (e, legendItem) {
+    const type = this.chart.config.type;
+    if (type === "doughnut")  Chart.defaults.doughnut.legend.onClick.call(this, e, legendItem);
+    else if (type === "pie")  Chart.defaults.pie.legend.onClick.call(this, e, legendItem);
+    else                      Chart.defaults.global.legend.onClick.call(this, e, legendItem);
     saveChartLegendSettings(this.chart);
+};
+
+/**
+ * Factory for the three identical bar charts on the dashboard.
+ */
+function createBarChart(canvasId) {
+    const drawBarValues = {
+        onComplete() {
+            const { chart: ci } = this;
+            const ctx = ci.ctx;
+            ctx.font = "bold 11px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif";
+            ctx.textAlign = "center";
+            ctx.textBaseline = "bottom";
+            ctx.fillStyle = document.body.classList.contains("dark-mode") ? "#e0e0e0" : "#555";
+
+            this.data.datasets.forEach((dataset, i) => {
+                ci.controller.getDatasetMeta(i).data.forEach((bar, idx) => {
+                    const val = dataset.data[idx];
+                    if (val > 0) ctx.fillText(val.toLocaleString(), bar._model.x, bar._model.y - 4);
+                });
+            });
+        }
+    };
+
+    return new Chart(document.getElementById(canvasId).getContext("2d"), {
+        type: "bar",
+        data: { labels: [], datasets: [] },
+        options: {
+            layout: { padding: { left: 10, right: 30, top: 20, bottom: 10 } },
+            maintainAspectRatio: false,
+            legend: { display: false },
+            scales: {
+                xAxes: [{ gridLines: { display: false } }],
+                yAxes: [{ ticks: { beginAtZero: true, maxTicksLimit: 5 }, gridLines: { color: "rgba(128,128,128,0.15)" } }]
+            },
+            tooltips: { cornerRadius: 4, backgroundColor: "rgba(25,25,25,0.9)" },
+            animation: drawBarValues,
+            hover: { animationDuration: 0 }
+        }
+    });
+}
+
+function renderTopClientsRows(items, idPrefix) {
+    if (!items.length) return `<tr><td colspan="3" align="center">No Data</td></tr>`;
+    return items.map((c, i) => `
+        <tr${c.rateLimited ? " style=\"color:orange;\"" : ""}>
+            <td style="word-wrap:anywhere;">${htmlEncode(c.name)}${c.rateLimited ? " (rate limited)" : ""}<br>${htmlEncode(c.domain || ".")}</td>
+            <td>${c.hits.toLocaleString()}</td>
+            <td align="right">
+                <div class="dropdown">
+                    <a href="#" id="${idPrefix}${i}" class="dropdown-toggle" data-toggle="dropdown" aria-haspopup="true" aria-expanded="true">
+                        <span class="glyphicon glyphicon-option-vertical"></span>
+                    </a>
+                    <ul class="dropdown-menu dropdown-menu-right">
+                        <li><a href="#" onclick="showQueryLogs(null,'${c.name}');return false;">Show Query Logs</a></li>
+                    </ul>
+                </div>
+            </td>
+        </tr>`).join("");
+}
+
+function renderTopDomainsRows(items, idPrefix, blockFn) {
+    if (!items.length) return `<tr><td colspan="3" align="center">No Data</td></tr>`;
+    return items.map((d, i) => {
+        const display = htmlEncode(d.nameIdn ?? (d.name || "."));
+        return `
+        <tr>
+            <td style="word-wrap:anywhere;">${display}</td>
+            <td>${d.hits.toLocaleString()}</td>
+            <td align="right">
+                <div class="dropdown">
+                    <a href="#" id="${idPrefix}${i}" class="dropdown-toggle" data-toggle="dropdown" aria-haspopup="true" aria-expanded="true">
+                        <span class="glyphicon glyphicon-option-vertical"></span>
+                    </a>
+                    <ul class="dropdown-menu dropdown-menu-right">
+                        <li><a href="#" onclick="showQueryLogs('${d.name}',null);return false;">Show Query Logs</a></li>
+                        <li><a href="#" onclick="queryDnsServer('${d.name}',null);return false;">Query DNS Server</a></li>
+                        <li><a href="#" data-domain="${htmlEncode(d.name)}" onclick="${blockFn}(this,'${idPrefix}');return false;">${blockFn === "blockDomain" ? "Block" : "Allow"} Domain</a></li>
+                    </ul>
+                </div>
+            </td>
+        </tr>`;
+    }).join("");
 }
 
 function refreshDashboard(hideLoader) {
-    if (!$("#mainPanelTabPaneDashboard").hasClass("active"))
-        return;
+    if (!$("#mainPanelTabPaneDashboard").hasClass("active")) return;
+    hideLoader = hideLoader ?? false;
 
-    if (hideLoader == null)
-        hideLoader = false;
-
-    var divDashboardLoader = $("#divDashboardLoader");
-    var divDashboard = $("#divDashboard");
-
-    var type = $("input[name=rdStatType]:checked").val();
-    var custom = "";
+    const loader  = $("#divDashboardLoader");
+    const panel   = $("#divDashboard");
+    const type    = $("input[name=rdStatType]:checked").val();
+    let custom    = "";
 
     if (type === "custom") {
-        var txtStart = $("#dpCustomDayWiseStart").val();
-        if (txtStart === null || (txtStart === "")) {
-            showAlert("warning", "Missing!", "Please select a start date.");
-            $("#dpCustomDayWiseStart").trigger("focus");
-            return;
-        }
+        const txtStart = $("#dpCustomDayWiseStart").val();
+        const txtEnd   = $("#dpCustomDayWiseEnd").val();
+        if (!txtStart) { showAlert("warning","Missing!","Please select a start date."); $("#dpCustomDayWiseStart").trigger("focus"); return; }
+        if (!txtEnd)   { showAlert("warning","Missing!","Please select an end date.");   $("#dpCustomDayWiseEnd").trigger("focus");   return; }
 
-        var txtEnd = $("#dpCustomDayWiseEnd").val();
-        if (txtEnd === null || (txtEnd === "")) {
-            showAlert("warning", "Missing!", "Please select an end date.");
-            $("#dpCustomDayWiseEnd").trigger("focus");
-            return;
-        }
-
-        var start = moment(txtStart);
-        var end = moment(txtEnd);
-
-        if ((end.diff(start, "days") + 1) > 7) {
-            start = moment.utc(txtStart).toISOString();
-            end = moment.utc(txtEnd).toISOString();
-        }
-        else {
-            start = start.toISOString();
-            end = end.toISOString();
-        }
-
+        let start = moment(txtStart), end = moment(txtEnd);
+        if ((end.diff(start,"days")+1) > 7) { start = moment.utc(txtStart).toISOString(); end = moment.utc(txtEnd).toISOString(); }
+        else { start = start.toISOString(); end = end.toISOString(); }
         custom = "&start=" + encodeURIComponent(start) + "&end=" + encodeURIComponent(end);
     }
 
-    if (!hideLoader) {
-        divDashboard.hide();
-        divDashboardLoader.show();
-    }
+    if (!hideLoader) { panel.hide(); loader.show(); }
 
     HTTPRequest({
-        url: "api/dashboard/stats/get?token=" + sessionData.token + "&type=" + type + "&utc=true" + custom,
-        success: function (responseJSON) {
+        url: `api/dashboard/stats/get?token=${sessionData.token}&type=${type}&utc=true${custom}`,
+        success(responseJSON) {
+            const r   = responseJSON.response;
+            const st  = r.stats;
+            const tot = st.totalQueries;
 
-            //stats
-            $("#divDashboardStatsTotalQueries").text(responseJSON.response.stats.totalQueries.toLocaleString());
-            $("#divDashboardStatsTotalNoError").text(responseJSON.response.stats.totalNoError.toLocaleString());
-            $("#divDashboardStatsTotalServerFailure").text(responseJSON.response.stats.totalServerFailure.toLocaleString());
-            $("#divDashboardStatsTotalNxDomain").text(responseJSON.response.stats.totalNxDomain.toLocaleString());
-            $("#divDashboardStatsTotalRefused").text(responseJSON.response.stats.totalRefused.toLocaleString());
+            // stats counters
+            const statsMap = {
+                TotalQueries: tot, TotalNoError: st.totalNoError,
+                TotalServerFailure: st.totalServerFailure, TotalNxDomain: st.totalNxDomain,
+                TotalRefused: st.totalRefused, TotalAuthHit: st.totalAuthoritative,
+                TotalRecursions: st.totalRecursive, TotalCacheHit: st.totalCached,
+                TotalBlocked: st.totalBlocked, TotalDropped: st.totalDropped,
+                TotalClients: st.totalClients, Zones: st.zones,
+                CachedEntries: st.cachedEntries, AllowedZones: st.allowedZones,
+                BlockedZones: st.blockedZones, AllowListZones: st.allowListZones,
+                BlockListZones: st.blockListZones
+            };
+            for (const [k, v] of Object.entries(statsMap))
+                $(`#divDashboardStats${k}`).text(v.toLocaleString());
 
-            $("#divDashboardStatsTotalAuthHit").text(responseJSON.response.stats.totalAuthoritative.toLocaleString());
-            $("#divDashboardStatsTotalRecursions").text(responseJSON.response.stats.totalRecursive.toLocaleString());
-            $("#divDashboardStatsTotalCacheHit").text(responseJSON.response.stats.totalCached.toLocaleString());
-            $("#divDashboardStatsTotalBlocked").text(responseJSON.response.stats.totalBlocked.toLocaleString());
-            $("#divDashboardStatsTotalDropped").text(responseJSON.response.stats.totalDropped.toLocaleString());
-
-            $("#divDashboardStatsTotalClients").text(responseJSON.response.stats.totalClients.toLocaleString());
-
-            $("#divDashboardStatsZones").text(responseJSON.response.stats.zones.toLocaleString());
-            $("#divDashboardStatsCachedEntries").text(responseJSON.response.stats.cachedEntries.toLocaleString());
-            $("#divDashboardStatsAllowedZones").text(responseJSON.response.stats.allowedZones.toLocaleString());
-            $("#divDashboardStatsBlockedZones").text(responseJSON.response.stats.blockedZones.toLocaleString());
-            $("#divDashboardStatsAllowListZones").text(responseJSON.response.stats.allowListZones.toLocaleString());
-            $("#divDashboardStatsBlockListZones").text(responseJSON.response.stats.blockListZones.toLocaleString());
-
-            if (responseJSON.response.stats.totalQueries > 0) {
-                $("#divDashboardStatsTotalNoErrorPercentage").text((responseJSON.response.stats.totalNoError * 100 / responseJSON.response.stats.totalQueries).toFixed(2) + "%");
-                $("#divDashboardStatsTotalServerFailurePercentage").text((responseJSON.response.stats.totalServerFailure * 100 / responseJSON.response.stats.totalQueries).toFixed(2) + "%");
-                $("#divDashboardStatsTotalNxDomainPercentage").text((responseJSON.response.stats.totalNxDomain * 100 / responseJSON.response.stats.totalQueries).toFixed(2) + "%");
-                $("#divDashboardStatsTotalRefusedPercentage").text((responseJSON.response.stats.totalRefused * 100 / responseJSON.response.stats.totalQueries).toFixed(2) + "%");
-
-                $("#divDashboardStatsTotalAuthHitPercentage").text((responseJSON.response.stats.totalAuthoritative * 100 / responseJSON.response.stats.totalQueries).toFixed(2) + "%");
-                $("#divDashboardStatsTotalRecursionsPercentage").text((responseJSON.response.stats.totalRecursive * 100 / responseJSON.response.stats.totalQueries).toFixed(2) + "%");
-                $("#divDashboardStatsTotalCacheHitPercentage").text((responseJSON.response.stats.totalCached * 100 / responseJSON.response.stats.totalQueries).toFixed(2) + "%");
-                $("#divDashboardStatsTotalBlockedPercentage").text((responseJSON.response.stats.totalBlocked * 100 / responseJSON.response.stats.totalQueries).toFixed(2) + "%");
-                $("#divDashboardStatsTotalDroppedPercentage").text((responseJSON.response.stats.totalDropped * 100 / responseJSON.response.stats.totalQueries).toFixed(2) + "%");
-            }
-            else {
-                $("#divDashboardStatsTotalNoErrorPercentage").text("0%");
-                $("#divDashboardStatsTotalServerFailurePercentage").text("0%");
-                $("#divDashboardStatsTotalNxDomainPercentage").text("0%");
-                $("#divDashboardStatsTotalRefusedPercentage").text("0%");
-
-                $("#divDashboardStatsTotalAuthHitPercentage").text("0%");
-                $("#divDashboardStatsTotalRecursionsPercentage").text("0%");
-                $("#divDashboardStatsTotalCacheHitPercentage").text("0%");
-                $("#divDashboardStatsTotalBlockedPercentage").text("0%");
-                $("#divDashboardStatsTotalDroppedPercentage").text("0%");
+            const pctFields = ["TotalNoError","TotalServerFailure","TotalNxDomain","TotalRefused",
+                "TotalAuthHit","TotalRecursions","TotalCacheHit","TotalBlocked","TotalDropped"];
+            for (const f of pctFields) {
+                const raw = statsMap[f];
+                $(`#divDashboardStats${f}Percentage`).text(tot > 0 ? (raw * 100 / tot).toFixed(2) + "%" : "0%");
             }
 
-//main chart
+            // main line chart
+            const cd = r.mainChartData;
+            const fmt = cd.labelFormat;
+            cd.labels = cd.labels.map(l =>
+                ["MM/DD","DD/MM","MM/YYYY"].includes(fmt)
+                    ? moment(l).utc().format(fmt)
+                    : moment(l).local().format(fmt)
+            );
+            cd.datasets.forEach(ds => { ds.fill = true; ds.borderWidth = 2; });
 
-            //fix labels
-            switch (responseJSON.response.mainChartData.labelFormat) {
-                case "MM/DD":
-                case "DD/MM":
-                case "MM/YYYY":
-                    for (var i = 0; i < responseJSON.response.mainChartData.labels.length; i++) {
-                        responseJSON.response.mainChartData.labels[i] = moment(responseJSON.response.mainChartData.labels[i]).utc().format(responseJSON.response.mainChartData.labelFormat);
-                    }
-                    break;
+            const STEPS = [0,1,5,10,25,50,100,250,500,1000,2500,5000,10000,25000,50000,100000,250000,500000,1000000,2500000,5000000,10000000];
+            const allVals  = cd.datasets.flatMap(ds => ds.data);
+            const dataMax  = Math.max(...allVals);
+            const maxTick  = STEPS.find(s => s >= dataMax) ?? STEPS[STEPS.length-1];
 
-                default:
-                    for (var i = 0; i < responseJSON.response.mainChartData.labels.length; i++) {
-                        responseJSON.response.mainChartData.labels[i] = moment(responseJSON.response.mainChartData.labels[i]).local().format(responseJSON.response.mainChartData.labelFormat);
-                    }
-                    break;
-            }
-
-            responseJSON.response.mainChartData.datasets.forEach(function(dataset) {
-                dataset.fill = true;
-                dataset.borderWidth = 2;
-            });
-
-            var _steps = [0, 1, 5, 10, 25, 50, 100, 250, 500, 1000, 2500, 5000, 10000, 25000, 50000, 100000, 250000, 500000, 1000000, 2500000, 5000000, 10000000];
-
-            var _allRawVals = [];
-            responseJSON.response.mainChartData.datasets.forEach(function(ds) {
-                _allRawVals = _allRawVals.concat(ds.data);
-            });
-            var _dataMax = Math.max.apply(null, _allRawVals);
-
-            var _maxTick = _steps[_steps.length - 1];
-            for (var i = 0; i < _steps.length; i++) {
-                if (_steps[i] >= _dataMax) { _maxTick = _steps[i]; break; }
-            }
-
-            if (window.chartDashboardMain == null) {
-
+            if (!window.chartDashboardMain) {
                 document.getElementById("canvasDashboardMain").parentElement.style.height = "450px";
 
-                Chart.Tooltip.positioners.fixedCenter = function(elements, eventPosition) {
-                    var chartArea = this._chart.chartArea;
-                    var xPos = eventPosition ? eventPosition.x : elements[0]._model.x;
-                    return {
-                        x: xPos,
-                        y: chartArea.top + (chartArea.bottom - chartArea.top) / 2
-                    };
+                Chart.Tooltip.positioners.fixedCenter = function(elements, pos) {
+                    const ca = this._chart.chartArea;
+                    return { x: pos ? pos.x : elements[0]._model.x, y: ca.top + (ca.bottom - ca.top) / 2 };
                 };
 
-                var contextDashboardMain = document.getElementById("canvasDashboardMain").getContext('2d');
-
-                window.chartDashboardMain = new Chart(contextDashboardMain, {
-                    type: 'line',
-                    data: responseJSON.response.mainChartData,
-                    options: {
-                        maintainAspectRatio: false,
-                        elements: {
-                            line: {
-                                tension: 0.35,
+                window.chartDashboardMain = new Chart(
+                    document.getElementById("canvasDashboardMain").getContext("2d"), {
+                        type: "line",
+                        data: cd,
+                        options: {
+                            maintainAspectRatio: false,
+                            elements: { line: { tension: 0.35 }, point: { radius: 0, hitRadius: 15, hoverRadius: 5 } },
+                            scales: {
+                                xAxes: [{ gridLines: { display: false } }],
+                                yAxes: [{
+                                    ticks: {
+                                        min: 0, max: maxTick,
+                                        callback(v) {
+                                            if (!STEPS.includes(v)) return "";
+                                            if (v >= 1e6) return (v/1e6).toFixed(0) + "M";
+                                            if (v >= 1e3) return (v/1e3).toFixed(0) + "k";
+                                            return v.toLocaleString();
+                                        }
+                                    },
+                                    gridLines: { color: "rgba(128,128,128,0.15)" },
+                                    afterBuildTicks(scale) { scale.ticks = STEPS.filter(s => s <= maxTick); }
+                                }]
                             },
-                            point: {
-                                radius: 0,
-                                hitRadius: 15,
-                                hoverRadius: 5
-                            }
-                        },
-                        scales: {
-                            xAxes: [{
-                                gridLines: {
-                                    display: false
-                                }
-                            }],
-                            yAxes: [{
-                                ticks: {
-                                    min: 0,
-                                    max: _maxTick,
-                                    callback: function(value) {
-                                        if (_steps.indexOf(value) === -1) return '';
-                                        if (value >= 1000000) return (value / 1000000).toFixed(0) + 'M';
-                                        if (value >= 1000)    return (value / 1000).toFixed(0) + 'k';
-                                        return value.toLocaleString();
-                                    }
-                                },
-                                gridLines: {
-                                    color: "rgba(128, 128, 128, 0.15)"
-                                },
-                                afterBuildTicks: function(scale) {
-                                    scale.ticks = _steps.filter(function(s) { return s <= _maxTick; });
-                                }
-                            }]
-                        },
-                        tooltips: {
-                            mode: 'index',
-                            position: 'fixedCenter',
-                            yAlign: 'center',
-                            intersect: false,
-                            cornerRadius: 6,
-                            backgroundColor: 'rgba(25, 25, 25, 0.9)',
-                            titleFontSize: 14,
-                            bodySpacing: 6,
-                            xPadding: 12,
-                            yPadding: 12,
-                            callbacks: {
-                                label: function(item, data) {
-                                    var ds = data.datasets[item.datasetIndex];
-                                    return ds.label + ': ' + item.yLabel.toLocaleString();
-                                }
-                            }
-                        },
-                        hover: {
-                            mode: 'index',
-                            intersect: false
-                        },
-                        legend: {
-                            onClick: chartLegendOnClick,
-                            labels: {
-                                usePointStyle: true,
-                                padding: 20
-                            }
+                            tooltips: {
+                                mode: "index", position: "fixedCenter", yAlign: "center", intersect: false,
+                                cornerRadius: 6, backgroundColor: "rgba(25,25,25,0.9)",
+                                titleFontSize: 14, bodySpacing: 6, xPadding: 12, yPadding: 12,
+                                callbacks: { label: (item, data) => `${data.datasets[item.datasetIndex].label}: ${item.yLabel.toLocaleString()}` }
+                            },
+                            hover: { mode: "index", intersect: false },
+                            legend: { onClick: chartLegendOnClick, labels: { usePointStyle: true, padding: 20 } }
                         }
-                    }
-                });
-
-                loadChartLegendSettings(window.chartDashboardMain);
-            }
-            else {
-                window.chartDashboardMain.options.scales.yAxes[0].ticks.max = _maxTick;
-                updateChart(window.chartDashboardMain, responseJSON.response.mainChartData);
-            }
-
-            var drawBarValues = {
-                onComplete: function () {
-                    var chartInstance = this.chart;
-                    var ctx = chartInstance.ctx;
-                    ctx.font = "bold 11px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif";
-                    ctx.textAlign = 'center';
-                    ctx.textBaseline = 'bottom';
-                    
-                    ctx.fillStyle = document.body.classList.contains('dark-mode') ? '#e0e0e0' : '#555';
-
-                    this.data.datasets.forEach(function (dataset, i) {
-                        var meta = chartInstance.controller.getDatasetMeta(i);
-                        meta.data.forEach(function (bar, index) {
-                            var data = dataset.data[index];
-                            if (data > 0) {
-                                ctx.fillText(data.toLocaleString(), bar._model.x, bar._model.y - 4);
-                            }
-                        });
                     });
-                }
-            };
-
-            //query response chart
-            if (window.chartDashboardPie == null) {
-                var contextDashboardPie = document.getElementById("canvasDashboardPie").getContext('2d');
-
-                window.chartDashboardPie = new Chart(contextDashboardPie, {
-                    type: 'bar',
-                    data: responseJSON.response.queryResponseChartData,
-                    options: {
-                        layout: {
-                            padding: { left: 10, right: 30, top: 20, bottom: 10 }
-                        },
-                        maintainAspectRatio: false,
-                        legend: { display: false },
-                        scales: {
-                            xAxes: [{ gridLines: { display: false } }],
-                            yAxes: [{
-                                ticks: { beginAtZero: true, maxTicksLimit: 5 },
-                                gridLines: { color: "rgba(128, 128, 128, 0.15)" }
-                            }]
-                        },
-                        tooltips: { cornerRadius: 4, backgroundColor: 'rgba(25, 25, 25, 0.9)' },
-                        animation: drawBarValues,
-                        hover: { animationDuration: 0 }
-                    }
-                });
-            }
-            else {
-                updateChart(window.chartDashboardPie, responseJSON.response.queryResponseChartData);
+                loadChartLegendSettings(window.chartDashboardMain);
+            } else {
+                window.chartDashboardMain.options.scales.yAxes[0].ticks.max = maxTick;
+                updateChart(window.chartDashboardMain, cd);
             }
 
-            //query type chart
-            if (window.chartDashboardPie2 == null) {
-                var contextDashboardPie2 = document.getElementById("canvasDashboardPie2").getContext('2d');
+            // bar charts
+            if (!window.chartDashboardPie)  window.chartDashboardPie  = createBarChart("canvasDashboardPie");
+            if (!window.chartDashboardPie2) window.chartDashboardPie2 = createBarChart("canvasDashboardPie2");
+            if (!window.chartDashboardPie3) window.chartDashboardPie3 = createBarChart("canvasDashboardPie3");
 
-                window.chartDashboardPie2 = new Chart(contextDashboardPie2, {
-                    type: 'bar',
-                    data: responseJSON.response.queryTypeChartData,
-                    options: {
-                        layout: {
-                            padding: { left: 10, right: 30, top: 20, bottom: 10 }
-                        },
-                        maintainAspectRatio: false,
-                        legend: { display: false },
-                        scales: {
-                            xAxes: [{ gridLines: { display: false } }],
-                            yAxes: [{
-                                ticks: { beginAtZero: true, maxTicksLimit: 5 },
-                                gridLines: { color: "rgba(128, 128, 128, 0.15)" }
-                            }]
-                        },
-                        tooltips: { cornerRadius: 4, backgroundColor: 'rgba(25, 25, 25, 0.9)' },
-                        animation: drawBarValues,
-                        hover: { animationDuration: 0 }
-                    }
-                });
-            }
-            else {
-                updateChart(window.chartDashboardPie2, responseJSON.response.queryTypeChartData);
-            }
+            updateChart(window.chartDashboardPie,  r.queryResponseChartData);
+            updateChart(window.chartDashboardPie2, r.queryTypeChartData);
+            updateChart(window.chartDashboardPie3, r.protocolTypeChartData);
 
-            //protocol type chart
-            if (window.chartDashboardPie3 == null) {
-                var contextDashboardPie3 = document.getElementById("canvasDashboardPie3").getContext('2d');
+            // tables
+            $("#tableTopClients").html(renderTopClientsRows(r.topClients, "btnDashboardTopClientsRowOption"));
+            $("#tableTopDomains").html(renderTopDomainsRows(r.topDomains, "btnDashboardTopDomainsRowOption", "blockDomain"));
+            $("#tableTopBlockedDomains").html(renderTopDomainsRows(r.topBlockedDomains, "btnDashboardTopBlockedDomainsRowOption", "allowDomain"));
 
-                window.chartDashboardPie3 = new Chart(contextDashboardPie3, {
-                    type: 'bar',
-                    data: responseJSON.response.protocolTypeChartData,
-                    options: {
-                        layout: {
-                            padding: { left: 10, right: 30, top: 20, bottom: 10 }
-                        },
-                        maintainAspectRatio: false,
-                        legend: { display: false },
-                        scales: {
-                            xAxes: [{ gridLines: { display: false } }],
-                            yAxes: [{
-                                ticks: { beginAtZero: true, maxTicksLimit: 5 },
-                                gridLines: { color: "rgba(128, 128, 128, 0.15)" }
-                            }]
-                        },
-                        tooltips: { cornerRadius: 4, backgroundColor: 'rgba(25, 25, 25, 0.9)' },
-                        animation: drawBarValues,
-                        hover: { animationDuration: 0 }
-                    }
-                });
-            }
-            else {
-                updateChart(window.chartDashboardPie3, responseJSON.response.protocolTypeChartData);
-            }
-
-            //top clients
-            {
-                var tableHtmlRows;
-                var topClients = responseJSON.response.topClients;
-
-                if (topClients.length < 1) {
-                    tableHtmlRows = "<tr><td colspan=\"3\" align=\"center\">No Data</td></tr>";
-                }
-                else {
-                    tableHtmlRows = "";
-
-                    for (var i = 0; i < topClients.length; i++) {
-                        tableHtmlRows += "<tr" + (topClients[i].rateLimited ? " style=\"color: orange;\"" : "") + "><td style=\"word-wrap: anywhere;\">" + htmlEncode(topClients[i].name) + (topClients[i].rateLimited ? " (rate limited)" : "") + "<br />" + htmlEncode(topClients[i].domain == "" ? "." : topClients[i].domain) + "</td><td>" + topClients[i].hits.toLocaleString();
-                        tableHtmlRows += "</td><td align=\"right\"><div class=\"dropdown\"><a href=\"#\" id=\"btnDashboardTopClientsRowOption" + i + "\" class=\"dropdown-toggle\" data-toggle=\"dropdown\" aria-haspopup=\"true\" aria-expanded=\"true\"><span class=\"glyphicon glyphicon-option-vertical\" aria-hidden=\"true\"></span></a><ul class=\"dropdown-menu dropdown-menu-right\">";
-                        tableHtmlRows += "<li><a href=\"#\" data-id=\"" + i + "\" onclick=\"showQueryLogs(null, '" + topClients[i].name + "'); return false;\">Show Query Logs</a></li>";
-                        tableHtmlRows += "</ul></div></td></tr>";
-                    }
-                }
-
-                $("#tableTopClients").html(tableHtmlRows);
-            }
-
-            //top domains
-            {
-                var tableHtmlRows;
-                var topDomains = responseJSON.response.topDomains;
-
-                if (topDomains.length < 1) {
-                    tableHtmlRows = "<tr><td colspan=\"3\" align=\"center\">No Data</td></tr>";
-                }
-                else {
-                    tableHtmlRows = "";
-
-                    for (var i = 0; i < topDomains.length; i++) {
-                        if (topDomains[i].nameIdn == null)
-                            tableHtmlRows += "<tr><td style=\"word-wrap: anywhere;\">" + htmlEncode(topDomains[i].name == "" ? "." : topDomains[i].name) + "</td><td>" + topDomains[i].hits.toLocaleString();
-                        else
-                            tableHtmlRows += "<tr><td style=\"word-wrap: anywhere;\">" + htmlEncode(topDomains[i].nameIdn) + "</td><td>" + topDomains[i].hits.toLocaleString();
-
-                        tableHtmlRows += "</td><td align=\"right\"><div class=\"dropdown\"><a href=\"#\" id=\"btnDashboardTopDomainsRowOption" + i + "\" class=\"dropdown-toggle\" data-toggle=\"dropdown\" aria-haspopup=\"true\" aria-expanded=\"true\"><span class=\"glyphicon glyphicon-option-vertical\" aria-hidden=\"true\"></span></a><ul class=\"dropdown-menu dropdown-menu-right\">";
-                        tableHtmlRows += "<li><a href=\"#\" data-id=\"" + i + "\" onclick=\"showQueryLogs('" + topDomains[i].name + "', null); return false;\">Show Query Logs</a></li>";
-                        tableHtmlRows += "<li><a href=\"#\" data-id=\"" + i + "\" onclick=\"queryDnsServer('" + topDomains[i].name + "', null); return false;\">Query DNS Server</a></li>";
-                        tableHtmlRows += "<li><a href=\"#\" data-id=\"" + i + "\" data-domain=\"" + htmlEncode(topDomains[i].name) + "\" onclick=\"blockDomain(this, 'btnDashboardTopDomainsRowOption'); return false;\">Block Domain</a></li>";
-                        tableHtmlRows += "</ul></div></td></tr>";
-                    }
-                }
-
-                $("#tableTopDomains").html(tableHtmlRows);
-            }
-
-            //top blocked domains
-            {
-                var tableHtmlRows;
-                var topBlockedDomains = responseJSON.response.topBlockedDomains;
-
-                if (topBlockedDomains.length < 1) {
-                    tableHtmlRows = "<tr><td colspan=\"3\" align=\"center\">No Data</td></tr>";
-                }
-                else {
-                    tableHtmlRows = "";
-
-                    for (var i = 0; i < topBlockedDomains.length; i++) {
-                        if (topBlockedDomains[i].nameIdn == null)
-                            tableHtmlRows += "<tr><td style=\"word-wrap: anywhere;\">" + htmlEncode(topBlockedDomains[i].name == "" ? "." : topBlockedDomains[i].name) + "</td><td>" + topBlockedDomains[i].hits.toLocaleString();
-                        else
-                            tableHtmlRows += "<tr><td style=\"word-wrap: anywhere;\">" + htmlEncode(topBlockedDomains[i].nameIdn) + "</td><td>" + topBlockedDomains[i].hits.toLocaleString();
-
-                        tableHtmlRows += "</td><td align=\"right\"><div class=\"dropdown\"><a href=\"#\" id=\"btnDashboardTopBlockedDomainsRowOption" + i + "\" class=\"dropdown-toggle\" data-toggle=\"dropdown\" aria-haspopup=\"true\" aria-expanded=\"true\"><span class=\"glyphicon glyphicon-option-vertical\" aria-hidden=\"true\"></span></a><ul class=\"dropdown-menu dropdown-menu-right\">";
-                        tableHtmlRows += "<li><a href=\"#\" data-id=\"" + i + "\" onclick=\"showQueryLogs('" + topBlockedDomains[i].name + "', null); return false;\">Show Query Logs</a></li>";
-                        tableHtmlRows += "<li><a href=\"#\" data-id=\"" + i + "\" onclick=\"queryDnsServer('" + topBlockedDomains[i].name + "', null); return false;\">Query DNS Server</a></li>";
-                        tableHtmlRows += "<li><a href=\"#\" data-id=\"" + i + "\" data-domain=\"" + htmlEncode(topBlockedDomains[i].name) + "\" onclick=\"allowDomain(this, 'btnDashboardTopBlockedDomainsRowOption'); return false;\">Allow Domain</a></li>";
-                        tableHtmlRows += "</ul></div></td></tr>";
-                    }
-                }
-
-                $("#tableTopBlockedDomains").html(tableHtmlRows);
-            }
-
-            if (!hideLoader) {
-                divDashboardLoader.hide();
-                divDashboard.show();
-            }
+            if (!hideLoader) { loader.hide(); panel.show(); }
         },
-        invalidToken: function () {
-            showPageLogin();
-        },
-        objLoaderPlaceholder: divDashboardLoader,
+        invalidToken: showPageLogin,
+        objLoaderPlaceholder: loader,
         dontHideAlert: hideLoader
     });
 }
 
 function showTopStats(statsType, limit) {
-    var divTopStatsAlert = $("#divTopStatsAlert");
-    var divTopStatsLoader = $("#divTopStatsLoader");
+    const loaderEl = $("#divTopStatsLoader");
+    $("#tableTopStatsClients, #tableTopStatsDomains, #tableTopStatsBlockedDomains").hide();
+    loaderEl.show();
 
-    $("#tableTopStatsClients").hide();
-    $("#tableTopStatsDomains").hide();
-    $("#tableTopStatsBlockedDomains").hide();
-    divTopStatsLoader.show();
-
-    switch (statsType) {
-        case "TopClients":
-            $("#lblTopStatsTitle").text("Top " + limit + " Clients");
-            break;
-
-        case "TopDomains":
-            $("#lblTopStatsTitle").text("Top " + limit + " Domains");
-            break;
-
-        case "TopBlockedDomains":
-            $("#lblTopStatsTitle").text("Top " + limit + " Blocked Domains");
-            break;
-    }
-
+    const titles = { TopClients: "Clients", TopDomains: "Domains", TopBlockedDomains: "Blocked Domains" };
+    $("#lblTopStatsTitle").text(`Top ${limit} ${titles[statsType] ?? ""}`);
     $("#modalTopStats").modal("show");
 
-    var type = $("input[name=rdStatType]:checked").val();
-    var custom = "";
+    const type = $("input[name=rdStatType]:checked").val();
+    let custom = "";
 
     if (type === "custom") {
-        var txtStart = $("#dpCustomDayWiseStart").val();
-        if (txtStart === null || (txtStart === "")) {
-            showAlert("warning", "Missing!", "Please select a start date.");
-            $("#dpCustomDayWiseStart").trigger("focus");
-            return;
-        }
-
-        var txtEnd = $("#dpCustomDayWiseEnd").val();
-        if (txtEnd === null || (txtEnd === "")) {
-            showAlert("warning", "Missing!", "Please select an end date.");
-            $("#dpCustomDayWiseEnd").trigger("focus");
-            return;
-        }
-
-        var start = moment(txtStart);
-        var end = moment(txtEnd);
-
-        if ((end.diff(start, "days") + 1) > 7) {
-            start = moment.utc(txtStart).toISOString();
-            end = moment.utc(txtEnd).toISOString();
-        }
-        else {
-            start = start.toISOString();
-            end = end.toISOString();
-        }
-
+        const s = $("#dpCustomDayWiseStart").val();
+        const e = $("#dpCustomDayWiseEnd").val();
+        if (!s) { showAlert("warning","Missing!","Please select a start date."); $("#dpCustomDayWiseStart").trigger("focus"); return; }
+        if (!e) { showAlert("warning","Missing!","Please select an end date.");   $("#dpCustomDayWiseEnd").trigger("focus");   return; }
+        let start = moment(s), end = moment(e);
+        if ((end.diff(start,"days")+1) > 7) { start = moment.utc(s).toISOString(); end = moment.utc(e).toISOString(); }
+        else { start = start.toISOString(); end = end.toISOString(); }
         custom = "&start=" + encodeURIComponent(start) + "&end=" + encodeURIComponent(end);
     }
 
     HTTPRequest({
-        url: "api/dashboard/stats/getTop?token=" + sessionData.token + "&type=" + type + custom + "&statsType=" + statsType + "&limit=" + limit,
-        success: function (responseJSON) {
-            divTopStatsLoader.hide();
+        url: `api/dashboard/stats/getTop?token=${sessionData.token}&type=${type}${custom}&statsType=${statsType}&limit=${limit}`,
+        success(responseJSON) {
+            loaderEl.hide();
+            const r = responseJSON.response;
 
-            if (responseJSON.response.topClients != null) {
-                var tableHtmlRows;
-                var topClients = responseJSON.response.topClients;
-
-                if (topClients.length < 1) {
-                    tableHtmlRows = "<tr><td colspan=\"3\" align=\"center\">No Data</td></tr>";
-                }
-                else {
-                    tableHtmlRows = "";
-
-                    for (var i = 0; i < topClients.length; i++) {
-                        tableHtmlRows += "<tr" + (topClients[i].rateLimited ? " style=\"color: orange;\"" : "") + "><td style=\"word-wrap: anywhere;\">" + htmlEncode(topClients[i].name) + (topClients[i].rateLimited ? " (rate limited)" : "") + "<br />" + htmlEncode(topClients[i].domain == "" ? "." : topClients[i].domain) + "</td><td>" + topClients[i].hits.toLocaleString();
-                        tableHtmlRows += "</td><td align=\"right\"><div class=\"dropdown\"><a href=\"#\" id=\"btnDashboardTopClientsRowOption" + i + "\" class=\"dropdown-toggle\" data-toggle=\"dropdown\" aria-haspopup=\"true\" aria-expanded=\"true\"><span class=\"glyphicon glyphicon-option-vertical\" aria-hidden=\"true\"></span></a><ul class=\"dropdown-menu dropdown-menu-right\">";
-                        tableHtmlRows += "<li><a href=\"#\" data-id=\"" + i + "\" onclick=\"showQueryLogs(null, '" + topClients[i].name + "'); return false;\">Show Query Logs</a></li>";
-                        tableHtmlRows += "</ul></div></td></tr>";
-                    }
-                }
-
-                $("#tbodyTopStatsClients").html(tableHtmlRows);
-
-                if (topClients.length > 0)
-                    $("#tfootTopStatsClients").html("Total Clients: " + topClients.length);
-                else
-                    $("#tfootTopStatsClients").html("");
-
+            if (r.topClients) {
+                $("#tbodyTopStatsClients").html(renderTopClientsRows(r.topClients, "btnDashboardTopClientsRowOption"));
+                $("#tfootTopStatsClients").html(r.topClients.length ? `Total Clients: ${r.topClients.length}` : "");
                 $("#tableTopStatsClients").show();
-            }
-            else if (responseJSON.response.topDomains != null) {
-                var tableHtmlRows;
-                var topDomains = responseJSON.response.topDomains;
-
-                if (topDomains.length < 1) {
-                    tableHtmlRows = "<tr><td colspan=\"3\" align=\"center\">No Data</td></tr>";
-                }
-                else {
-                    tableHtmlRows = "";
-
-                    for (var i = 0; i < topDomains.length; i++) {
-                        if (topDomains[i].nameIdn == null)
-                            tableHtmlRows += "<tr><td style=\"word-wrap: anywhere;\">" + htmlEncode(topDomains[i].name == "" ? "." : topDomains[i].name) + "</td><td>" + topDomains[i].hits.toLocaleString();
-                        else
-                            tableHtmlRows += "<tr><td style=\"word-wrap: anywhere;\">" + htmlEncode(topDomains[i].nameIdn) + "</td><td>" + topDomains[i].hits.toLocaleString();
-
-                        tableHtmlRows += "</td><td align=\"right\"><div class=\"dropdown\"><a href=\"#\" id=\"btnDashboardTopStatsDomainsRowOption" + i + "\" class=\"dropdown-toggle\" data-toggle=\"dropdown\" aria-haspopup=\"true\" aria-expanded=\"true\"><span class=\"glyphicon glyphicon-option-vertical\" aria-hidden=\"true\"></span></a><ul class=\"dropdown-menu dropdown-menu-right\">";
-                        tableHtmlRows += "<li><a href=\"#\" data-id=\"" + i + "\" onclick=\"showQueryLogs('" + topDomains[i].name + "', null); return false;\">Show Query Logs</a></li>";
-                        tableHtmlRows += "<li><a href=\"#\" data-id=\"" + i + "\" onclick=\"queryDnsServer('" + topDomains[i].name + "', null); return false;\">Query DNS Server</a></li>";
-                        tableHtmlRows += "<li><a href=\"#\" data-id=\"" + i + "\" data-domain=\"" + htmlEncode(topDomains[i].name) + "\" onclick=\"blockDomain(this, 'btnDashboardTopStatsDomainsRowOption', 'divTopStatsAlert'); return false;\">Block Domain</a></li>";
-                        tableHtmlRows += "</ul></div></td></tr>";
-                    }
-                }
-
-                $("#tbodyTopStatsDomains").html(tableHtmlRows);
-
-                if (topDomains.length > 0)
-                    $("#tfootTopStatsDomains").html("Total Domains: " + topDomains.length);
-                else
-                    $("#tfootTopStatsDomains").html("");
-
+            } else if (r.topDomains) {
+                $("#tbodyTopStatsDomains").html(renderTopDomainsRows(r.topDomains, "btnDashboardTopStatsDomainsRowOption", "blockDomain", "divTopStatsAlert"));
+                $("#tfootTopStatsDomains").html(r.topDomains.length ? `Total Domains: ${r.topDomains.length}` : "");
                 $("#tableTopStatsDomains").show();
-            }
-            else if (responseJSON.response.topBlockedDomains != null) {
-                var tableHtmlRows;
-                var topBlockedDomains = responseJSON.response.topBlockedDomains;
-
-                if (topBlockedDomains.length < 1) {
-                    tableHtmlRows = "<tr><td colspan=\"3\" align=\"center\">No Data</td></tr>";
-                }
-                else {
-                    tableHtmlRows = "";
-
-                    for (var i = 0; i < topBlockedDomains.length; i++) {
-                        if (topBlockedDomains[i].nameIdn == null)
-                            tableHtmlRows += "<tr><td style=\"word-wrap: anywhere;\">" + htmlEncode(topBlockedDomains[i].name == "" ? "." : topBlockedDomains[i].name) + "</td><td>" + topBlockedDomains[i].hits.toLocaleString();
-                        else
-                            tableHtmlRows += "<tr><td style=\"word-wrap: anywhere;\">" + htmlEncode(topBlockedDomains[i].nameIdn) + "</td><td>" + topBlockedDomains[i].hits.toLocaleString();
-
-                        tableHtmlRows += "</td><td align=\"right\"><div class=\"dropdown\"><a href=\"#\" id=\"btnDashboardTopStatsBlockedDomainsRowOption" + i + "\" class=\"dropdown-toggle\" data-toggle=\"dropdown\" aria-haspopup=\"true\" aria-expanded=\"true\"><span class=\"glyphicon glyphicon-option-vertical\" aria-hidden=\"true\"></span></a><ul class=\"dropdown-menu dropdown-menu-right\">";
-                        tableHtmlRows += "<li><a href=\"#\" data-id=\"" + i + "\" onclick=\"showQueryLogs('" + topBlockedDomains[i].name + "', null); return false;\">Show Query Logs</a></li>";
-                        tableHtmlRows += "<li><a href=\"#\" data-id=\"" + i + "\" onclick=\"queryDnsServer('" + topBlockedDomains[i].name + "', null); return false;\">Query DNS Server</a></li>";
-                        tableHtmlRows += "<li><a href=\"#\" data-id=\"" + i + "\" data-domain=\"" + htmlEncode(topBlockedDomains[i].name) + "\" onclick=\"allowDomain(this, 'btnDashboardTopStatsBlockedDomainsRowOption', 'divTopStatsAlert'); return false;\">Allow Domain</a></li>";
-                        tableHtmlRows += "</ul></div></td></tr>";
-                    }
-                }
-
-                $("#tbodyTopStatsBlockedDomains").html(tableHtmlRows);
-
-                if (topBlockedDomains.length > 0)
-                    $("#tfootTopStatsBlockedDomains").html("Total Domains: " + topBlockedDomains.length);
-                else
-                    $("#tfootTopStatsBlockedDomains").html("");
-
+            } else if (r.topBlockedDomains) {
+                $("#tbodyTopStatsBlockedDomains").html(renderTopDomainsRows(r.topBlockedDomains, "btnDashboardTopStatsBlockedDomainsRowOption", "allowDomain", "divTopStatsAlert"));
+                $("#tfootTopStatsBlockedDomains").html(r.topBlockedDomains.length ? `Total Domains: ${r.topBlockedDomains.length}` : "");
                 $("#tableTopStatsBlockedDomains").show();
             }
 
             $("#divTopStatsData").animate({ scrollTop: 0 }, "fast");
         },
-        invalidToken: function () {
-            showPageLogin();
-        },
-        objLoaderPlaceholder: divTopStatsLoader,
-        objAlertPlaceholder: divTopStatsAlert
+        invalidToken: showPageLogin,
+        objLoaderPlaceholder: loaderEl,
+        objAlertPlaceholder: $("#divTopStatsAlert")
     });
 }
 
 function resetBackupSettingsModal() {
     $("#divBackupSettingsAlert").html("");
-
-    $("#chkBackupAuthConfig").prop("checked", true);
-    $("#chkBackupWebServiceConfig").prop("checked", true);
-    $("#chkBackupDnsConfig").prop("checked", true);
-    $("#chkBackupLogConfig").prop("checked", true);
-    $("#chkBackupZones").prop("checked", true);
-    $("#chkBackupAllowedZones").prop("checked", true);
-    $("#chkBackupBlockedZones").prop("checked", true);
-    $("#chkBackupBlockLists").prop("checked", true);
-    $("#chkBackupApps").prop("checked", true);
-    $("#chkBackupStats").prop("checked", true);
+    ["#chkBackupAuthConfig","#chkBackupWebServiceConfig","#chkBackupDnsConfig","#chkBackupLogConfig",
+        "#chkBackupZones","#chkBackupAllowedZones","#chkBackupBlockedZones","#chkBackupBlockLists",
+        "#chkBackupApps","#chkBackupStats"
+    ].forEach(sel => $(sel).prop("checked", true));
     $("#chkBackupLogs").prop("checked", false);
 }
 
 function backupSettings() {
-    var divBackupSettingsAlert = $("#divBackupSettingsAlert");
+    const divAlert = $("#divBackupSettingsAlert");
+    const keys = ["AuthConfig","WebServiceConfig","DnsConfig","LogConfig","Zones","AllowedZones","BlockedZones","BlockLists","Apps","Stats","Logs"];
+    const vals = Object.fromEntries(keys.map(k => [k.charAt(0).toLowerCase() + k.slice(1), $(`#chkBackup${k}`).prop("checked")]));
 
-    var authConfig = $("#chkBackupAuthConfig").prop("checked");
-    var webServiceSettings = $("#chkBackupWebServiceConfig").prop("checked");
-    var dnsSettings = $("#chkBackupDnsConfig").prop("checked");
-    var logSettings = $("#chkBackupLogConfig").prop("checked");
-    var zones = $("#chkBackupZones").prop("checked");
-    var allowedZones = $("#chkBackupAllowedZones").prop("checked");
-    var blockedZones = $("#chkBackupBlockedZones").prop("checked");
-    var blockLists = $("#chkBackupBlockLists").prop("checked");
-    var apps = $("#chkBackupApps").prop("checked");
-    var stats = $("#chkBackupStats").prop("checked");
-    var logs = $("#chkBackupLogs").prop("checked");
-
-    if (!authConfig && !webServiceSettings && !dnsSettings && !logSettings && !zones && !allowedZones && !blockedZones && !blockLists && !apps && !stats && !logs) {
-        showAlert("warning", "Missing!", "Please select at least one item to backup.", divBackupSettingsAlert);
+    if (!Object.values(vals).some(Boolean)) {
+        showAlert("warning", "Missing!", "Please select at least one item to backup.", divAlert);
         return;
     }
 
-    window.open("api/settings/backup?token=" + sessionData.token + "&authConfig=" + authConfig + "&webServiceSettings=" + webServiceSettings + "&dnsSettings=" + dnsSettings + "&logSettings=" + logSettings + "&zones=" + zones + "&allowedZones=" + allowedZones + "&blockedZones=" + blockedZones + "&blockLists=" + blockLists + "&apps=" + apps + "&stats=" + stats + "&logs=" + logs + "&ts=" + (new Date().getTime()), "_blank");
-
+    const qs = Object.entries(vals).map(([k,v]) => `${k}=${v}`).join("&");
+    window.open(`api/settings/backup?token=${sessionData.token}&${qs}&ts=${Date.now()}`, "_blank");
     $("#modalBackupSettings").modal("hide");
     showAlert("success", "Backed Up!", "Settings were backed up successfully.");
 }
 
 function resetRestoreSettingsModal() {
     $("#divRestoreSettingsAlert").html("");
-
     $("#fileBackupZip").val("");
-
-    $("#chkRestoreAuthConfig").prop("checked", true);
-    $("#chkRestoreWebServiceConfig").prop("checked", true);
-    $("#chkRestoreDnsConfig").prop("checked", true);
-    $("#chkRestoreLogConfig").prop("checked", true);
-    $("#chkRestoreZones").prop("checked", true);
-    $("#chkRestoreAllowedZones").prop("checked", true);
-    $("#chkRestoreBlockedZones").prop("checked", true);
-    $("#chkRestoreBlockLists").prop("checked", true);
-    $("#chkRestoreApps").prop("checked", true);
-    $("#chkRestoreStats").prop("checked", true);
+    ["#chkRestoreAuthConfig","#chkRestoreWebServiceConfig","#chkRestoreDnsConfig","#chkRestoreLogConfig",
+        "#chkRestoreZones","#chkRestoreAllowedZones","#chkRestoreBlockedZones","#chkRestoreBlockLists",
+        "#chkRestoreApps","#chkRestoreStats","#chkDeleteExistingFiles"
+    ].forEach(sel => $(sel).prop("checked", true));
     $("#chkRestoreLogs").prop("checked", false);
-    $("#chkDeleteExistingFiles").prop("checked", true);
 }
 
 function restoreSettings() {
-    var divRestoreSettingsAlert = $("#divRestoreSettingsAlert");
+    const divAlert = $("#divRestoreSettingsAlert");
+    const fileInput = $("#fileBackupZip");
 
-    var fileBackupZip = $("#fileBackupZip");
-
-    if (fileBackupZip[0].files.length === 0) {
-        showAlert("warning", "Missing!", "Please select a backup zip file to restore.", divRestoreSettingsAlert);
-        fileBackupZip.trigger("focus");
+    if (!fileInput[0].files.length) {
+        showAlert("warning", "Missing!", "Please select a backup zip file to restore.", divAlert);
+        fileInput.trigger("focus");
         return;
     }
 
-    var authConfig = $("#chkRestoreAuthConfig").prop("checked");
-    var webServiceSettings = $("#chkRestoreWebServiceConfig").prop("checked");
-    var dnsSettings = $("#chkRestoreDnsConfig").prop("checked");
-    var logSettings = $("#chkRestoreLogConfig").prop("checked");
-    var zones = $("#chkRestoreZones").prop("checked");
-    var allowedZones = $("#chkRestoreAllowedZones").prop("checked");
-    var blockedZones = $("#chkRestoreBlockedZones").prop("checked");
-    var blockLists = $("#chkRestoreBlockLists").prop("checked");
-    var apps = $("#chkRestoreApps").prop("checked");
-    var stats = $("#chkRestoreStats").prop("checked");
-    var logs = $("#chkRestoreLogs").prop("checked");
+    const keys = ["AuthConfig","WebServiceConfig","DnsConfig","LogConfig","Zones","AllowedZones","BlockedZones","BlockLists","Apps","Stats","Logs"];
+    const vals = Object.fromEntries(keys.map(k => [k.charAt(0).toLowerCase() + k.slice(1), $(`#chkRestore${k}`).prop("checked")]));
 
-    var deleteExistingFiles = $("#chkDeleteExistingFiles").prop("checked");
-
-    if (!authConfig && !webServiceSettings && !dnsSettings && !logSettings && !zones && !allowedZones && !blockedZones && !blockLists && !apps && !stats && !logs) {
-        showAlert("warning", "Missing!", "Please select at least one item to restore.", divRestoreSettingsAlert);
+    if (!Object.values(vals).some(Boolean)) {
+        showAlert("warning", "Missing!", "Please select at least one item to restore.", divAlert);
         return;
     }
 
-    var formData = new FormData();
-    formData.append("fileBackupZip", $("#fileBackupZip")[0].files[0]);
+    const qs = Object.entries(vals).map(([k,v]) => `${k}=${v}`).join("&");
+    const deleteExistingFiles = $("#chkDeleteExistingFiles").prop("checked");
 
-    var btn = $("#btnRestoreSettings");
-    btn.button("loading");
+    const formData = new FormData();
+    formData.append("fileBackupZip", fileInput[0].files[0]);
+
+    const btn = $("#btnRestoreSettings").button("loading");
 
     HTTPRequest({
-        url: "api/settings/restore?token=" + sessionData.token + "&authConfig=" + authConfig + "&webServiceSettings=" + webServiceSettings + "&dnsSettings=" + dnsSettings + "&logSettings=" + logSettings + "&zones=" + zones + "&allowedZones=" + allowedZones + "&blockedZones=" + blockedZones + "&blockLists=" + blockLists + "&apps=" + apps + "&stats=" + stats + "&logs=" + logs + "&deleteExistingFiles=" + deleteExistingFiles,
+        url: `api/settings/restore?token=${sessionData.token}&${qs}&deleteExistingFiles=${deleteExistingFiles}`,
         method: "POST",
         data: formData,
         contentType: false,
         processData: false,
-        success: function (responseJSON) {
+        success(responseJSON) {
             updateDnsSettingsDataAndGui(responseJSON);
             loadDnsSettings(responseJSON);
-
             $("#modalRestoreSettings").modal("hide");
             btn.button("reset");
-
             showAlert("success", "Restored!", "Settings were restored successfully.");
-
-            if (sessionData.info.dnsServerDomain == responseJSON.server)
+            if (sessionData.info.dnsServerDomain === responseJSON.server)
                 checkForWebConsoleRedirection(responseJSON);
         },
-        error: function () {
-            btn.button("reset");
-        },
-        invalidToken: function () {
-            btn.button("reset");
-            showPageLogin();
-        },
-        objAlertPlaceholder: divRestoreSettingsAlert
+        error()  { btn.button("reset"); },
+        invalidToken() { btn.button("reset"); showPageLogin(); },
+        objAlertPlaceholder: divAlert
     });
 }
 
 function applyTheme() {
-    const currentTheme = localStorage.getItem("theme");
-
-    if (currentTheme === "dark")
-        document.body.classList.add("dark-mode");
-    else
-        document.body.classList.remove("dark-mode");
+    document.body.classList.toggle("dark-mode", localStorage.getItem("theme") === "dark");
 }
 
 function toggleTheme() {
     document.body.classList.toggle("dark-mode");
-
-    let theme = "light";
-
-    if (document.body.classList.contains("dark-mode"))
-        theme = "dark";
-
-    localStorage.setItem("theme", theme);
-
-    if (window.chartDashboardMain) {
-        window.chartDashboardMain.update();
-        window.chartDashboardPie.update();
-        window.chartDashboardPie2.update();
-        window.chartDashboardPie3.update();
-    }
+    localStorage.setItem("theme", document.body.classList.contains("dark-mode") ? "dark" : "light");
+    [window.chartDashboardMain, window.chartDashboardPie, window.chartDashboardPie2, window.chartDashboardPie3]
+        .forEach(c => c?.update());
 }
