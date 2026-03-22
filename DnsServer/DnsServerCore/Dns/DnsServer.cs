@@ -1692,21 +1692,12 @@ namespace DnsServerCore.Dns
                     string domain = question.Name;
                     string recordType = question.Type.ToString();
 
-                    var action = SecurityShield.EvaluateRequest(
-                        clientIp,
-                        Zenitium.Dns.Security.ZenitiumFortressPreProcessor.TransportProtocol.Udp,
-                        domain,
-                        recordType);
+                    var action = SecurityShield.EvaluateRequest(clientIp, domain, recordType);
 
                     if (action == Zenitium.Dns.Security.ZenitiumFortressPreProcessor.PreProcessorAction.SilentDrop)
                     {
                         _log.Write(remoteEP, protocol, $"[Zenitium Shield] Action: SilentDrop triggered for domain {domain} ({recordType}).");
                         return;
-                    }
-                    else if (action == Zenitium.Dns.Security.ZenitiumFortressPreProcessor.PreProcessorAction.TruncateToTcp)
-                    {
-                        _log.Write(remoteEP, protocol, $"[Zenitium Shield] Action: TruncateToTcp triggered for domain {domain} ({recordType}).");
-                        sendTruncationResponse = true;
                     }
                 }
                 
@@ -2001,11 +1992,7 @@ namespace DnsServerCore.Dns
                     string domain = question.Name;
                     string recordType = question.Type.ToString();
 
-                    var action = SecurityShield.EvaluateRequest(
-                        clientIp,
-                        Zenitium.Dns.Security.ZenitiumFortressPreProcessor.TransportProtocol.Tcp,
-                        domain,
-                        recordType);
+                    var action = SecurityShield.EvaluateRequest(clientIp, domain, recordType);
 
                     if (action == Zenitium.Dns.Security.ZenitiumFortressPreProcessor.PreProcessorAction.SilentDrop)
                     {
@@ -2185,11 +2172,8 @@ private async Task AcceptQuicConnectionAsync(QuicListener quicListener)
                 if (request.Question.Count > 0)
                 {
                     var q = request.Question[0];
-                    var action = SecurityShield.EvaluateRequest(
-                        remoteEP.Address,
-                        Zenitium.Dns.Security.ZenitiumFortressPreProcessor.TransportProtocol.Tcp,
-                        q.Name,
-                        q.Type.ToString());
+                    var action = SecurityShield.EvaluateRequest(remoteEP.Address, q.Name, q.Type.ToString());
+
 
                     if (action == Zenitium.Dns.Security.ZenitiumFortressPreProcessor.PreProcessorAction.SilentDrop)
                     {
@@ -2349,11 +2333,8 @@ private async Task AcceptQuicConnectionAsync(QuicListener quicListener)
                 if (dnsRequest != null && dnsRequest.Question.Count > 0)
                 {
                     var q = dnsRequest.Question[0];
-                    var action = SecurityShield.EvaluateRequest(
-                        remoteEP.Address,
-                        Zenitium.Dns.Security.ZenitiumFortressPreProcessor.TransportProtocol.Tcp,
-                        q.Name,
-                        q.Type.ToString());
+                    var action = SecurityShield.EvaluateRequest(remoteEP.Address, q.Name, q.Type.ToString());
+
 
                     if (action == Zenitium.Dns.Security.ZenitiumFortressPreProcessor.PreProcessorAction.SilentDrop)
                     {
