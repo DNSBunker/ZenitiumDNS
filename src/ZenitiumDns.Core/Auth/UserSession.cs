@@ -1,0 +1,209 @@
+﻿/*
+Technitium DNS Server
+Copyright (C) 2026  Shreyas Zare (shreyas@technitium.com)
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+*/
+
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Net;
+using System.Security.Cryptography;
+using ZenitiumLibrary.IO;
+using ZenitiumLibrary.Net;
+
+namespace ZenitiumDns.Core.Auth
+{
+    enum UserSessionType : byte
+    {
+        Unknown = 0,
+        Standard = 1,
+        ApiToken = 2,
+        SingleUse = 4
+    }
+
+    class UserSession : IComparable<UserSession>
+    {
+        #region variables
+
+        readonly string _token;
+        UserSessionType _type;
+        readonly string _tokenName;
+        User _user;
+        DateTime _lastSeen;
+        IPAddress _lastSeenRemoteAddress;
+        string _lastSeenUserAgent;
+
+        #endregion
+
+        #region constructor
+
+        public UserSession(UserSessionType type, string tokenName, User user, IPAddress remoteAddress, string lastSeenUserAgent)
+        {
+            if ((tokenName is not null) && (tokenName.Length > 255))
+                throw new ArgumentOutOfRangeException(nameof(tokenName), "Token name length cannot exceed 255 characters.");
+
+            if (remoteAddress.IsIPv4MappedToIPv6)
+                remoteAddress = remoteAddress.MapToIPv4();
+
+            Span<byte> tokenBytes = stackalloc byte[32];
+            RandomNumberGenerator.Fill(tokenBytes);
+            _token = Convert.ToHexString(tokenBytes).ToLowerInvariant();
+
+            _type = type;
+            _tokenName = tokenName;
+            _user = user;
+            _lastSeen = DateTime.UtcNow;
+            _lastSeenRemoteAddress = remoteAddress;
+            _lastSeenUserAgent = lastSeenUserAgent;
+
+            if ((_lastSeenUserAgent is not null) && (_lastSeenUserAgent.Length > 255))
+                _lastSeenUserAgent = _lastSeenUserAgent.Substring(0, 255);
+        }
+
+        public UserSession(string token, User user)
+        {
+            if (token is null)
+                throw new ArgumentNullException(nameof(token));
+
+            if (token.Length != 64)
+                throw new ArgumentException("Token length must be 64 bytes");
+
+            _token = token.ToLowerInvariant();
+            _type = UserSessionType.ApiToken;
+            _user = user;
+        }
+
+        public UserSession(BinaryReader bR, IReadOnlyDictionary<string, User> users)
+        {
+            switch (bR.ReadByte())
+            {
+                case 1:
+                    _token = bR.BaseStream.ReadShortString();
+                    _type = (UserSessionType)bR.ReadByte();
+
+                    _tokenName = bR.BaseStream.ReadShortString();
+                    if (_tokenName.Length == 0)
+                        _tokenName = null;
+
+                    users.TryGetValue(bR.BaseStream.ReadShortString().ToLowerInvariant(), out _user);
+
+                    _lastSeen = bR.BaseStream.ReadDateTime();
+                    _lastSeenRemoteAddress = IPAddressExtensions.ReadFrom(bR);
+
+                    _lastSeenUserAgent = bR.BaseStream.ReadShortString();
+                    if (_lastSeenUserAgent.Length == 0)
+                        _lastSeenUserAgent = null;
+
+                    break;
+
+                default:
+                    throw new InvalidDataException("Invalid data or version not supported.");
+            }
+        }
+
+        #endregion
+
+        #region public
+
+        public void UpdateLastSeen(IPAddress remoteAddress, string lastSeenUserAgent)
+        {
+            if (remoteAddress.IsIPv4MappedToIPv6)
+                remoteAddress = remoteAddress.MapToIPv4();
+
+            _lastSeen = DateTime.UtcNow;
+            _lastSeenRemoteAddress = remoteAddress;
+            _lastSeenUserAgent = lastSeenUserAgent;
+
+            if ((_lastSeenUserAgent is not null) && (_lastSeenUserAgent.Length > 255))
+                _lastSeenUserAgent = _lastSeenUserAgent.Substring(0, 255);
+        }
+
+        public bool HasExpired()
+        {
+            if (_user is null)
+                return true;
+
+            switch (_type)
+            {
+                case UserSessionType.Standard:
+                    if (_user.SessionTimeoutSeconds == 0)
+                        return false;
+
+                    return _lastSeen.AddSeconds(_user.SessionTimeoutSeconds) < DateTime.UtcNow;
+
+                case UserSessionType.ApiToken:
+                    return false;
+
+                default:
+                    return true;
+            }
+        }
+
+        public void WriteTo(BinaryWriter bW)
+        {
+            bW.Write((byte)1);
+            bW.BaseStream.WriteShortString(_token);
+            bW.Write((byte)_type);
+
+            if (_tokenName is null)
+                bW.Write((byte)0);
+            else
+                bW.BaseStream.WriteShortString(_tokenName);
+
+            bW.BaseStream.WriteShortString(_user.Username);
+            bW.BaseStream.WriteDateTime(_lastSeen);
+            _lastSeenRemoteAddress.WriteTo(bW);
+
+            if (_lastSeenUserAgent is null)
+                bW.Write((byte)0);
+            else
+                bW.BaseStream.WriteShortString(_lastSeenUserAgent);
+        }
+
+        public int CompareTo(UserSession other)
+        {
+            return other._lastSeen.CompareTo(_lastSeen);
+        }
+
+        #endregion
+
+        #region properties
+
+        public string Token
+        { get { return _token; } }
+
+        public UserSessionType Type
+        { get { return _type; } }
+
+        public string TokenName
+        { get { return _tokenName; } }
+
+        public User User
+        { get { return _user; } }
+
+        public DateTime LastSeen
+        { get { return _lastSeen; } }
+
+        public IPAddress LastSeenRemoteAddress
+        { get { return _lastSeenRemoteAddress; } }
+
+        public string LastSeenUserAgent
+        { get { return _lastSeenUserAgent; } }
+
+        #endregion
+    }
+}

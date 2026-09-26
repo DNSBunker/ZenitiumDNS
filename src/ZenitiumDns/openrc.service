@@ -1,0 +1,19 @@
+#!/sbin/openrc-run
+
+description="ZenitiumDNS"
+
+directory=/opt/zenitiumdns
+
+command="/usr/bin/dotnet"
+command_args="/opt/zenitiumdns/ZenitiumDns.dll /etc/zenitiumdns"
+command_user=zenitiumdns:zenitiumdns
+
+capabilities="^cap_net_bind_service"
+
+supervisor="supervise-daemon"
+respawn_delay=10
+respawn_max=0
+
+depend() {
+    need net
+}

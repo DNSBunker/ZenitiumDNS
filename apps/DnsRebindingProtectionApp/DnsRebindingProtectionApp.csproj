@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<Version>5.0</Version>
+		<AssemblyName>DnsRebindingProtectionApp</AssemblyName>
+		<RootNamespace>DnsRebindingProtection</RootNamespace>
+		<Description>Protects from DNS rebinding attacks using configured private domains and networks.\n\nWarning! The app will remove private IP addresses from response for domain names not hosted locally.</Description>
+		<GeneratePackageOnBuild>false</GeneratePackageOnBuild>
+		<OutputType>Library</OutputType>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="..\..\src\ZenitiumDns.ApplicationCommon\ZenitiumDns.ApplicationCommon.csproj">
+			<Private>false</Private>
+		</ProjectReference>
+	</ItemGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="..\..\src\ZenitiumLibrary\ZenitiumLibrary.csproj">
+			<Private>false</Private>
+		</ProjectReference>
+		<ProjectReference Include="..\..\src\ZenitiumLibrary.Net\ZenitiumLibrary.Net.csproj">
+			<Private>false</Private>
+		</ProjectReference>
+	</ItemGroup>
+
+	<ItemGroup>
+		<None Update="dnsApp.config">
+			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+		</None>
+		<None Update="README.md">
+			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+		</None>
+	</ItemGroup>
+
+</Project>

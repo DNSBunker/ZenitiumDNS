@@ -1,5 +1,70 @@
 # ZenitiumDNS Änderungsprotokoll
 
+## ZenitiumDNS 15.5.1
+Veröffentlicht: 26. September 2026
+
+### Abgleich mit Technitium DNS Server 15.5.1
+- Alle Korrekturen aus Technitium DNS Server 15.5.1 vom 26. September 2026 sind übernommen, soweit sie Teile betreffen, die es in ZenitiumDNS noch gibt:
+  - Der Resolver hat kein festes Limit für Hash-Operationen pro Anfrage mehr. Erreicht eine Auflösung ein anderes Resolver-Limit, nennen Fehlermeldung und Extended DNS Error (privater Code „ResolverLimitReached“) den Grund.
+  - RRSIG-Signaturen, deren Beginn nach ihrem Ablauf liegt, gelten als ungültig.
+  - Blockierte Antworten setzen das RA-Flag abhängig von „Blockierungsbericht ausgeben“, auch in der Advanced Blocking App (Version 11.2.1).
+  - Lokale Blocklisten (`file://`) werden direkt aus der Quelldatei gelesen statt kopiert. Fehlt die Datei, wird das protokolliert.
+  - Die Cache-Wartung stößt die Garbage Collection nur noch nach größeren Bereinigungen an. Server-GC ist fest eingestellt.
+  - Pfadvergleiche beim Log-Ordner und in der App-Verwaltung sind korrigiert.
+  - `api/user/session/delete` prüft die Länge des Teil-Tokens.
+  - XSS in der Liste der Logdateien ist behoben.
+  - `install.sh` ändert `/etc/resolv.conf` nur noch bei der Erstinstallation und setzt `umask 0022`.
+
+### Anfragefilter für den öffentlichen Betrieb
+- Neuer Einstellungsbereich „Anfragefilter“ mit Regeln nach dem Vorbild von dnsdist. Alle Regeln sind standardmäßig aktiv und greifen vor jeder weiteren Verarbeitung:
+  - nicht lesbare Anfragen und Anfragen unter 12 Byte,
+  - Anfragen über 1232 Byte (einstellbar),
+  - Opcode ungleich QUERY,
+  - Klasse ungleich IN,
+  - Typ ANY,
+  - AXFR und IXFR,
+  - Anfragen ohne RD-Flag,
+  - EDNS-Version größer 0.
+- Über UDP werden Treffer stillschweigend verworfen, damit der Server nicht als Reflektor dient. Über TCP, DNS-over-TLS, DNS-over-HTTPS und DNS-over-QUIC antwortet er mit `REFUSED` und dem Extended DNS Error „Prohibited“. Wahlweise wird auch über UDP nur abgewiesen. Anfragen von Loopback-Adressen sind ausgenommen.
+- Trefferzähler je Regel stehen in den Einstellungen, in `api/dashboard/metrics/json` und als Prometheus-Metrik `request_filter_matches_total{rule}`.
+
+### DNSSEC
+- Validierung des Post-Quantum-Algorithmus ML-DSA-44 (Algorithmus 18, draft-westerbaan-dnssec-mldsa) über BouncyCastle.
+- Schutz vor Downgrades: Kündigt der DS-Datensatz einer Zone einen Post-Quantum-Algorithmus an, akzeptiert der Resolver für diese Zone nur noch Post-Quantum-Schlüssel. Die Einstellung „Post-Quantum-Downgrade-Schutz“ ist standardmäßig aktiv.
+- Der DNS-Client der Weboberfläche erklärt, warum eine DNSSEC-Prüfung gegen diesen Server scheitert, wenn dessen DNSSEC-Validierung ausgeschaltet ist. Bisher erschien nur „Attack detected! RRSIGs missing“.
+- Das Umschalten der DNSSEC-Validierung leert immer den Cache.
+
+### Apps
+- Die mitgelieferten Apps werden beim ersten Start installiert, bleiben aber deaktiviert, bis sie in der Weboberfläche aktiviert werden. Bei Paket-Updates werden sie aktualisiert, ihre Konfiguration bleibt erhalten. Vom Benutzer deinstallierte Apps werden nicht erneut installiert.
+- Jede App lässt sich aktivieren und deaktivieren, auch über `api/apps/enable` und `api/apps/disable`. Deaktivierte Apps greifen nicht in die Verarbeitung ein, ihre Konfiguration bleibt bearbeitbar.
+- Neue Umgebungsvariable `DNS_SERVER_BUNDLED_APPS_PATH` für den Ordner mit den mitgelieferten Apps.
+
+### Standardwerte für neue Installationen
+- Cache: höchstens 100.000 Einträge statt 10.000.
+- Blockierantworten: TTL 300 statt 30 Sekunden.
+- Netzwerk: Listen-Backlog 1024 statt 100, TCP-Empfangs-Timeout 5 statt 10 Sekunden, IPv6 für ausgehende Anfragen aktiviert.
+- Statistik- und Logdateien werden 30 statt 365 Tage aufbewahrt.
+- Die Rekursion bleibt auf private Netze beschränkt, bis sie bewusst für alle freigegeben wird.
+- Bestehende Konfigurationen bleiben unverändert.
+
+### Performance
+- Statistikdaten laufen über eine lockfreie Warteschlange mit eigenem Verarbeitungs-Thread.
+- Eindeutige Clients werden per HyperLogLog mit festem Speicherbedarf gezählt. `clients_total` ist in den Prometheus-Metriken jetzt ein Gauge.
+- UDP-Empfangs-Threads wecken weitere Threads erst bei anhaltendem Rückstau, Sendepuffer werden wiederverwendet.
+- Antworttypen werden ohne Boxing markiert, die Ratenbegrenzung überspringt die Prüfung, solange kein Client ein Limit überschreitet.
+- Server-GC mit nebenläufiger Garbage Collection.
+
+### Sicherheit
+- DNS-over-HTTPS per POST: Anfragen über 65.535 Byte werden mit Status 413 abgewiesen, der Inhalt wird begrenzt gelesen. Abgebrochene Verbindungen erzeugen keine Fehlerprotokolle mehr.
+- DNS-Nachrichten mit unplausiblen Eintragszahlen werden vor dem Parsen verworfen.
+- Die Weboberfläche maskiert Werte in Inline-Handlern für JavaScript, etwa im Cache-Browser, bei Weiterleitungszonen und in den Protokollen.
+
+### Betrieb und Quellcode
+- Docker-Unterstützung entfernt: Dockerfile, Compose-Datei und die Umgebungsvariablen zur Erstkonfiguration, einschließlich SSO, LDAP und `DNS_SERVER_ADMIN_PASSWORD`. `DNS_SERVER_ADMIN_PASSWORD_FILE` bleibt erhalten.
+- Der Quellcode enthält keine Kommentare mehr, nur die Lizenzköpfe bleiben erhalten.
+- Die DNS-Einstellungen werden im Format Version 8 gespeichert, das ältere Builds nicht lesen können.
+- Quellcode und Releases: https://github.com/DNSBunker/ZenitiumDNS-DE
+
 ## ZenitiumDNS 15.5
 Veröffentlicht: 26. September 2026
 

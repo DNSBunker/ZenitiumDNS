@@ -13,11 +13,13 @@ Um die Namensauflösung kümmert sich kaum jemand, denn sie läuft automatisch i
 Der Funktionsumfang ist auf den Betrieb als Resolver zugeschnitten. Autoritative Zonen, Zonentransfers, DHCP-Server, Clustering und die Windows-Komponenten des Originals sind entfernt. Für interne Domains gibt es Weiterleitungszonen (Conditional Forwarder), in denen sich einzelne Einträge lokal überschreiben lassen.
 
 # Herkunft
-ZenitiumDNS ist ein Fork von [Technitium DNS Server](https://github.com/TechnitiumSoftware/DnsServer) und [TechnitiumLibrary](https://github.com/TechnitiumSoftware/TechnitiumLibrary) von Shreyas Zare auf Basis von Version 15.5. Beide Projekte stehen unter der GNU General Public License v3.0, ebenso dieser Fork. Welche Änderungen der Fork enthält, steht in [NOTICE.md](NOTICE.md). Alle Unterschiede zum Original-Build mit Messwerten sind in [CHANGELOG-ZenitiumDNS.md](CHANGELOG-ZenitiumDNS.md) aufgeführt.
+ZenitiumDNS ist ein Fork von [Technitium DNS Server](https://github.com/TechnitiumSoftware/DnsServer) und [TechnitiumLibrary](https://github.com/TechnitiumSoftware/TechnitiumLibrary) von Shreyas Zare auf Basis von Version 15.5.1. Beide Projekte stehen unter der GNU General Public License v3.0, ebenso dieser Fork. Welche Änderungen der Fork enthält, steht in [NOTICE.md](NOTICE.md). Alle Unterschiede zum Original-Build mit Messwerten sind in [CHANGELOG-ZenitiumDNS.md](CHANGELOG-ZenitiumDNS.md) aufgeführt.
 
 # Was ZenitiumDNS gegenüber dem Original bietet
 - Auf öffentliche Resolver zugeschnitten: Autoritative Zonen (Primary, Secondary, Stub, Catalog), DNSSEC-Signierung, Zonentransfers, NOTIFY, dynamische Updates, TSIG, DHCP-Server, Clustering, Windows-Dienst, Systemtray und Windows-Installer sind entfernt. Das verkleinert Angriffsfläche und Weboberfläche.
-- Eigenständiges Debian-13-Paket mit eingebauter .NET-Laufzeit, gehärtetem systemd-Dienst und zufälligem Admin-Passwort bei der Erstinstallation.
+- Anfragefilter nach dem Vorbild von dnsdist, standardmäßig aktiv: Anfragen, die auf einem öffentlichen Resolver nichts verloren haben (ANY, AXFR/IXFR, fremde Opcodes und Klassen, ohne RD-Flag, übergroß oder fehlerhaft), werden über UDP verworfen und über TCP, DoT, DoH und DoQ abgewiesen.
+- DNSSEC-Validierung für den Post-Quantum-Algorithmus ML-DSA-44 mit Schutz vor Downgrades auf klassische Algorithmen.
+- Eigenständiges Debian-13-Paket mit eingebauter .NET-Laufzeit, gehärtetem systemd-Dienst, zufälligem Admin-Passwort bei der Erstinstallation und vorinstallierten, standardmäßig deaktivierten Resolver-Apps.
 - Deutschsprachige Weboberfläche mit eigenem Design: Seitenleiste, Messwertleiste mit Verläufen, Einstellungen in thematischen Bereichen, Hell-, Dunkel- und Bernstein-Modus, auch auf dem Smartphone bedienbar.
 - Antwortzeit-Statistik: Median, 95./99. Perzentil und Durchschnitt getrennt nach Cache und rekursiver Auflösung, als Live-Kennzahl, Minutenverlauf und Prometheus-Metrik.
 - Automatischer IPv6-Rückfall: Ist IPv6 gestört, pausiert der Resolver ausgehende IPv6-Anfragen und nutzt IPv4, bis IPv6 wieder funktioniert.
@@ -40,7 +42,7 @@ ZenitiumDNS ist ein Fork von [Technitium DNS Server](https://github.com/Techniti
 - Öffentliche Resolver wie Cloudflare, Google, Quad9 oder AdGuard lassen sich über [DNS-over-TLS](https://www.rfc-editor.org/rfc/rfc7858.html), [DNS-over-HTTPS](https://www.rfc-editor.org/rfc/rfc8484.html) oder [DNS-over-QUIC](https://www.ietf.org/rfc/rfc9250.html) als Forwarder nutzen.
 - Latenzbasierte Auswahl der Nameserver mit paralleler Abfrage. Antwortzeit und Fehlerrate werden getrennt für IPv4 und IPv6 geführt.
 - Automatischer IPv6-Rückfall bei gestörter IPv6-Anbindung mit Hintergrundprüfung und manueller Prüfung in der Weboberfläche.
-- DNSSEC-Validierung mit RSA, ECDSA und EdDSA für rekursiven Resolver, Forwarder und Weiterleitungszonen, mit NSEC und NSEC3.
+- DNSSEC-Validierung mit RSA, ECDSA, EdDSA und ML-DSA-44 für rekursiven Resolver, Forwarder und Weiterleitungszonen, mit NSEC und NSEC3.
 - QNAME-Minimierung ([RFC 9156](https://www.rfc-editor.org/rfc/rfc9156.html)).
 - Zufällige Groß-/Kleinschreibung des QNAME bei UDP ([draft-vixie-dnsext-dns0x20-00](https://datatracker.ietf.org/doc/html/draft-vixie-dnsext-dns0x20-00)). Abweichende Antworten gelten als Spoofing-Versuch und werden sofort über TCP wiederholt.
 - EDNS(0) ([RFC 6891](https://datatracker.ietf.org/doc/html/rfc6891)), EDNS Client Subnet ([RFC 7871](https://datatracker.ietf.org/doc/html/rfc7871)) und Extended DNS Errors ([RFC 8914](https://datatracker.ietf.org/doc/html/rfc8914)).
@@ -60,6 +62,7 @@ ZenitiumDNS ist ein Fork von [Technitium DNS Server](https://github.com/Techniti
 - Erkennung von CNAME-Cloaking: Domains, die per CNAME auf blockierte Domains verweisen, werden ebenfalls blockiert.
 - Blocklisten mit regulären Ausdrücken und unterschiedlichen Listen je Client-IP-Adresse oder Subnetz über die Advanced Blocking App.
 - Schutz vor DNS-Rebinding-Angriffen mit der DNS Rebinding Protection App.
+- Anfragefilter für ungewöhnliche Anfragen mit Trefferzählern je Regel.
 - Zugriffssteuerung für die Rekursion per Netzwerk-ACL.
 - Ratenbegrenzung pro Client-Subnetz (Anfragen pro Minute) mit Ausnahmeliste.
 
@@ -78,7 +81,7 @@ ZenitiumDNS ist ein Fork von [Technitium DNS Server](https://github.com/Techniti
 - Eingebaute HTTP-API, über die andere Programme den DNS-Server steuern und konfigurieren.
 - Mehrbenutzerbetrieb mit Rollen und nicht ablaufenden API-Tokens, Zwei-Faktor-Authentifizierung (2FA) per TOTP, Single Sign-On mit OpenID Connect und Anmeldung über LDAP.
 - Eingebauter DNS-Client zum Testen von Auflösungen.
-- Läuft unter Linux (Debian-Paket, Docker) und überall, wo .NET 10 verfügbar ist.
+- Läuft unter Linux (Debian-Paket) und überall, wo .NET 10 verfügbar ist.
 - Quelloffene, plattformübergreifende Umsetzung mit .NET 10.
 
 # Aufbau des Repositorys
@@ -93,6 +96,12 @@ ZenitiumDNS ist ein Fork von [Technitium DNS Server](https://github.com/Techniti
 | `docs` | Build-Anleitung, API-Dokumentation und Übersicht der Umgebungsvariablen. |
 
 # Schnellstart
+Fertige Debian-13-Pakete für amd64 und arm64 gibt es unter [Releases](https://github.com/DNSBunker/ZenitiumDNS-DE/releases):
+
+```
+sudo apt install ./zenitiumdns_15.5.1-1_amd64.deb
+```
+
 Server mit dem [.NET 10 SDK](https://dotnet.microsoft.com/download) bauen und starten:
 
 ```
@@ -107,20 +116,14 @@ setup/debian/build-deb.sh
 sudo apt install ./setup/debian/dist/zenitiumdns_*.deb
 ```
 
-Oder das Docker-Image bauen und starten:
-
-```
-docker compose up -d --build
-```
-
 Anschließend im Browser `http://<IP-Adresse-des-Servers>:5380/` öffnen, um die Weboberfläche aufzurufen.
 
 # Dokumentation
+- [Quellcode und Releases](https://github.com/DNSBunker/ZenitiumDNS-DE)
 - [Build-Anleitung](docs/BUILD.md)
 - [Debian-Paket](setup/debian/README.Debian.md)
 - [HTTP-API-Dokumentation (Englisch)](docs/APIDOCS.md)
 - [Umgebungsvariablen](docs/EnvironmentVariables.md)
-- [Umgebungsvariablen für Docker](docs/DockerEnvironmentVariables.md)
 - [Unterstützte RFCs](docs/SupportedRFCs.md)
 - [Änderungsprotokoll](CHANGELOG.md)
 - [Unterschiede zum Original-Build](CHANGELOG-ZenitiumDNS.md)

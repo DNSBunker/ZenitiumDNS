@@ -1,0 +1,67 @@
+#!/bin/sh
+set -e
+
+dnsConfig="/etc/zenitiumdns"
+dnsLog="/var/log/zenitiumdns"
+dnsState="/var/lib/zenitiumdns"
+serviceUser="zenitiumdns"
+resolvedDropIn="/etc/systemd/resolved.conf.d/zenitiumdns.conf"
+
+restoreResolved()
+{
+    if [ -f "$dnsState/resolv.conf.relinked" ]
+    then
+        if [ "$(readlink /etc/resolv.conf 2>/dev/null || true)" = "../run/systemd/resolve/resolv.conf" ]
+        then
+            ln -sf ../run/systemd/resolve/stub-resolv.conf /etc/resolv.conf 2>/dev/null || true
+        fi
+
+        rm -f "$dnsState/resolv.conf.relinked"
+    fi
+
+    if [ -f "$resolvedDropIn" ]
+    then
+        rm -f "$resolvedDropIn"
+        rmdir --ignore-fail-on-non-empty /etc/systemd/resolved.conf.d 2>/dev/null || true
+
+        if [ -d /run/systemd/system ] && systemctl is-active --quiet systemd-resolved.service
+        then
+            systemctl restart systemd-resolved.service || true
+        fi
+    fi
+}
+
+case "$1" in
+    remove)
+        restoreResolved
+        rm -f "$dnsState/configured"
+
+        if [ -d /run/systemd/system ]
+        then
+            systemctl daemon-reload || true
+        fi
+        ;;
+
+    purge)
+        restoreResolved
+
+        rm -rf "$dnsConfig" "$dnsLog" "$dnsState"
+
+        if getent passwd "$serviceUser" >/dev/null
+        then
+            userdel "$serviceUser" >/dev/null 2>&1 || true
+        fi
+
+        if getent group "$serviceUser" >/dev/null
+        then
+            groupdel "$serviceUser" >/dev/null 2>&1 || true
+        fi
+
+        if [ -d /run/systemd/system ]
+        then
+            systemctl daemon-reload || true
+        fi
+        ;;
+esac
+
+exit 0

@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<Version>14.4</Version>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<PackageReference Include="BouncyCastle.Cryptography" Version="2.7.0" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="..\ZenitiumLibrary.IO\ZenitiumLibrary.IO.csproj" />
+		<ProjectReference Include="..\ZenitiumLibrary\ZenitiumLibrary.csproj" />
+	</ItemGroup>
+
+</Project>

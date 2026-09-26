@@ -1,0 +1,25 @@
+<Solution>
+  <Folder Name="/apps/">
+    <Project Path="apps/AdvancedBlockingApp/AdvancedBlockingApp.csproj" />
+    <Project Path="apps/AdvancedForwardingApp/AdvancedForwardingApp.csproj" />
+    <Project Path="apps/Dns64App/Dns64App.csproj" />
+    <Project Path="apps/DnsRebindingProtectionApp/DnsRebindingProtectionApp.csproj" />
+    <Project Path="apps/DropRequestsApp/DropRequestsApp.csproj" />
+    <Project Path="apps/LogExporterApp/LogExporterApp.csproj" />
+    <Project Path="apps/NxDomainApp/NxDomainApp.csproj" />
+    <Project Path="apps/QueryLogsMySqlApp/QueryLogsMySqlApp.csproj" />
+    <Project Path="apps/QueryLogsPostgreSqlApp/QueryLogsPostgreSqlApp.csproj" />
+    <Project Path="apps/QueryLogsSqliteApp/QueryLogsSqliteApp.csproj" />
+    <Project Path="apps/QueryLogsSqlServerApp/QueryLogsSqlServerApp.csproj" />
+  </Folder>
+  <Folder Name="/src/">
+    <Project Path="src/ZenitiumDns.ApplicationCommon/ZenitiumDns.ApplicationCommon.csproj" />
+    <Project Path="src/ZenitiumDns.Core/ZenitiumDns.Core.csproj" />
+    <Project Path="src/ZenitiumDns/ZenitiumDns.csproj" />
+    <Project Path="src/ZenitiumLibrary.ByteTree/ZenitiumLibrary.ByteTree.csproj" />
+    <Project Path="src/ZenitiumLibrary.IO/ZenitiumLibrary.IO.csproj" />
+    <Project Path="src/ZenitiumLibrary.Net/ZenitiumLibrary.Net.csproj" />
+    <Project Path="src/ZenitiumLibrary.Security.OTP/ZenitiumLibrary.Security.OTP.csproj" />
+    <Project Path="src/ZenitiumLibrary/ZenitiumLibrary.csproj" />
+  </Folder>
+</Solution>

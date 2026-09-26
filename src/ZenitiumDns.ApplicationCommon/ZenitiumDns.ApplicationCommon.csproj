@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<Version>10.2</Version>
+		<Nullable>enable</Nullable>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="..\ZenitiumLibrary.Net\ZenitiumLibrary.Net.csproj">
+			<Private>false</Private>
+		</ProjectReference>
+	</ItemGroup>
+
+</Project>

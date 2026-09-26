@@ -1,0 +1,139 @@
+#!/bin/sh
+set -e
+
+dnsConfig="/etc/zenitiumdns"
+dnsLog="/var/log/zenitiumdns"
+dnsState="/var/lib/zenitiumdns"
+serviceName="zenitiumdns"
+serviceUser="zenitiumdns"
+resolvedDropIn="/etc/systemd/resolved.conf.d/zenitiumdns.conf"
+
+createUser()
+{
+    if getent passwd "$serviceUser" >/dev/null
+    then
+        return
+    fi
+
+    if command -v systemd-sysusers >/dev/null 2>&1 && [ -f /usr/lib/sysusers.d/zenitiumdns.conf ]
+    then
+        systemd-sysusers zenitiumdns.conf
+    else
+        useradd --system --user-group --no-create-home --home-dir /nonexistent --shell /usr/sbin/nologin "$serviceUser"
+    fi
+}
+
+createAdminPassword()
+{
+    if [ -f "$dnsConfig/auth.config" ] || [ -f "$dnsConfig/admin.password" ]
+    then
+        return
+    fi
+
+    password="$(head -c 18 /dev/urandom | base64 | tr -d '/+=\n')"
+    (umask 0077 && printf '%s\n' "$password" > "$dnsConfig/admin.password")
+    chown root:"$serviceUser" "$dnsConfig/admin.password"
+    chmod 0640 "$dnsConfig/admin.password"
+}
+
+freeResolvedStubListener()
+{
+    if [ ! -d /run/systemd/system ] || ! systemctl is-active --quiet systemd-resolved.service
+    then
+        return
+    fi
+
+    if [ ! -f "$resolvedDropIn" ]
+    then
+        mkdir -p /etc/systemd/resolved.conf.d
+        printf '[Resolve]\nDNSStubListener=no\n' > "$resolvedDropIn"
+        systemctl restart systemd-resolved.service || true
+    fi
+
+    case "$(readlink /etc/resolv.conf 2>/dev/null || true)" in
+        *run/systemd/resolve/stub-resolv.conf)
+            if ln -sf ../run/systemd/resolve/resolv.conf /etc/resolv.conf 2>/dev/null
+            then
+                touch "$dnsState/resolv.conf.relinked"
+            fi
+            ;;
+    esac
+}
+
+warnPortInUse()
+{
+    if ! command -v ss >/dev/null 2>&1
+    then
+        return
+    fi
+
+    users="$(ss -Hlnup 'sport = :53' 2>/dev/null | grep -v '"ZenitiumDns"' || true)"
+    if [ -n "$users" ]
+    then
+        echo "Warnung: Port 53 wird bereits von einem anderen Prozess verwendet. ZenitiumDNS kann erst DNS-Anfragen beantworten, wenn dieser beendet ist:"
+        echo "$users"
+    fi
+}
+
+printInstallInfo()
+{
+    echo ""
+    echo "ZenitiumDNS wurde erfolgreich installiert."
+    echo "Weboberfläche: http://$(hostname -f 2>/dev/null || hostname):5380/"
+
+    if [ -f "$dnsConfig/admin.password" ]
+    then
+        echo "Benutzer: admin"
+        echo "Passwort: $(cat "$dnsConfig/admin.password")"
+        echo "Das Passwort steht auch in $dnsConfig/admin.password. Ändere es nach der ersten Anmeldung und lösche die Datei."
+    fi
+
+    echo ""
+}
+
+case "$1" in
+    configure)
+        createUser
+
+        mkdir -p "$dnsConfig" "$dnsLog" "$dnsState"
+        chown -R "$serviceUser:$serviceUser" "$dnsLog"
+        chown "$serviceUser:$serviceUser" "$dnsConfig"
+        find "$dnsConfig" -mindepth 1 ! -name admin.password -exec chown "$serviceUser:$serviceUser" {} +
+        chmod 0750 "$dnsConfig" "$dnsLog"
+
+        createAdminPassword
+
+        if [ -f "$dnsState/configured" ]
+        then
+            freshInstall="no"
+        else
+            freshInstall="yes"
+            freeResolvedStubListener
+        fi
+
+        if [ -d /run/systemd/system ]
+        then
+            systemctl daemon-reload
+
+            if [ "$freshInstall" = "yes" ]
+            then
+                systemctl enable "$serviceName.service" >/dev/null 2>&1 || true
+            fi
+
+            if systemctl is-enabled --quiet "$serviceName.service"
+            then
+                warnPortInUse
+                systemctl restart "$serviceName.service" || true
+            fi
+        fi
+
+        touch "$dnsState/configured"
+
+        if [ "$freshInstall" = "yes" ]
+        then
+            printInstallInfo
+        fi
+        ;;
+esac
+
+exit 0

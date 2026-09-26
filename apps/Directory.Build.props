@@ -1,0 +1,15 @@
+<Project>
+
+	<Import Project="$([MSBuild]::GetPathOfFileAbove('Directory.Build.props', '$(MSBuildThisFileDirectory)../'))" />
+
+	<PropertyGroup>
+		<DisableTransitiveProjectReferences>true</DisableTransitiveProjectReferences>
+	</PropertyGroup>
+
+	<ItemDefinitionGroup>
+		<ProjectReference>
+			<ExcludeAssets>all</ExcludeAssets>
+		</ProjectReference>
+	</ItemDefinitionGroup>
+
+</Project>

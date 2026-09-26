@@ -1,0 +1,94 @@
+﻿
+html, body {
+    height: 100% !important;
+}
+
+body {
+    margin: 0px !important;
+    line-height: 1.42857143 !important;
+}
+
+a {
+    color: #6699ff;
+}
+
+    a:hover {
+        color: #6699ff;
+    }
+
+#content {
+    min-height: 100%;
+}
+
+.container {
+    margin-left: auto;
+    margin-right: auto;
+    padding: 55px 15px 60px 15px;
+    word-wrap: break-word;
+}
+
+    .container .pageLogin {
+        display: none;
+        margin: auto;
+        width: 500px;
+        padding: 150px 0 0 0;
+    }
+
+    .container .page {
+        display: none;
+    }
+
+.features {
+    margin: 80px auto 40px auto;
+    font-family: Arial;
+}
+
+    .features .pull-left {
+        width: 50%;
+    }
+
+    .features .pull-right {
+        width: 50%;
+    }
+
+    .features h3 {
+        font-size: 22px;
+        text-align: center;
+    }
+
+    .features p {
+        color: rgb(119, 119, 119);
+        text-align: center;
+    }
+
+    .features li {
+        color: rgb(119, 119, 119);
+    }
+
+.shadow-screenshot {
+    box-shadow: 2px 3px 15px 1px #888888;
+}
+
+.auto-resize-img {
+    max-width: 100%;
+    height: auto;
+    display: block;
+    margin-right: auto;
+    margin-left: auto;
+}
+
+@media (min-width: 992px) {
+    #header .title, .container, #footer .content {
+        width: 970px;
+    }
+}
+
+@media (min-width: 1200px) {
+    #header .title, .container, #footer .content {
+        width: 1170px;
+    }
+
+    .stats-panel .stats-item {
+        padding: 6px !important;
+    }
+}

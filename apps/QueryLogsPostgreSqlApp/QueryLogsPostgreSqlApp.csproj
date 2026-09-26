@@ -1,0 +1,42 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+		<Version>1.3</Version>
+		<AssemblyName>QueryLogsPostgreSqlApp</AssemblyName>
+		<RootNamespace>QueryLogsPostgreSql</RootNamespace>
+		<Description>Logs all incoming DNS requests and their responses in a PostgreSQL database that can be queried from the DNS Server web console.\n\nNote! You will need to create a user, a database, and grant all privileges on the database to the user so that the app will be able to access it. To do that run the following commands with the required database name and username on your postgresql root prompt:\nCREATE USER "user" password 'password';\nCREATE DATABASE "DatabaseName" OWNER "user";\nGRANT ALL PRIVILEGES ON DATABASE "DatabaseName" TO "user";\n\nOnce the database is configured, edit the app's config to update the database name, connection string, and set enableLogging to true. The app will automatically create the required database table for you and start logging queries once you save the config.</Description>
+		<GeneratePackageOnBuild>false</GeneratePackageOnBuild>
+		<OutputType>Library</OutputType>
+		<Nullable>enable</Nullable>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<PackageReference Include="Npgsql" Version="10.0.3" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="..\..\src\ZenitiumDns.ApplicationCommon\ZenitiumDns.ApplicationCommon.csproj">
+			<Private>false</Private>
+		</ProjectReference>
+	</ItemGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="..\..\src\ZenitiumLibrary.Net\ZenitiumLibrary.Net.csproj">
+			<Private>false</Private>
+		</ProjectReference>
+		<ProjectReference Include="..\..\src\ZenitiumLibrary\ZenitiumLibrary.csproj">
+			<Private>false</Private>
+		</ProjectReference>
+	</ItemGroup>
+
+	<ItemGroup>
+		<None Update="dnsApp.config">
+			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+		</None>
+		<None Update="README.md">
+			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+		</None>
+	</ItemGroup>
+
+</Project>

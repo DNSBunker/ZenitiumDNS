@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <title>ZenitiumDNS</title>
+
+    <link href="/css/main.css" rel="stylesheet" />
+    <link href="/css/bootstrap.min.css" rel="stylesheet" />
+
+    <script src="/js/jquery.min.js"></script>
+    <script src="/js/main.js"></script>
+</head>
+<body>
+    <div id="content">
+        <div class="container">
+            <div class="features" style="text-align: center; margin-top: 60px;">
+                <a href="/">
+                    <img src="/img/logo.png" alt="ZenitiumDNS Logo" />
+                </a>
+                <h1>ZenitiumDNS</h1>
+                <p style="max-width: 800px; margin-right: auto; margin-left: auto;">This server supports encrypted DNS protocol (DNS-over-HTTPS) that you can use with your web browser like Mozilla Firefox.</p>
+
+                <h3 style="margin-top: 40px;">The Encrypted DNS Service URL</h3>
+                <p>
+                    Use the following URL to configure your clients for consuming the DNS-over-HTTPS service.
+                </p>
+                <p style="font-size: 16px; font-weight: bold;">
+                    <a id="lnkDoH" href=""></a>
+                </p>
+
+                <h3 style="margin-top: 40px;">Mozilla Firefox Configuration</h3>
+                <p style="max-width: 800px; margin-right: auto; margin-left: auto;">
+                    To configure Firefox, go to <b>Settings &gt; Privacy &amp; Security</b> and scroll down to find <b>DNS over HTTPS</b> section. Click on the <b>Max Protection</b> option, select <b>Custom</b> option in the <b>Choose provider</b> drop down box, and enter the encrypted DNS service URL given above.
+                </p>
+                <img class="auto-resize-img shadow-screenshot" style="margin-top: 20px; margin-bottom: 20px;" src="img/firefox-doh.png" alt="Mozilla Firefox Custom DNS-over-HTTPS Option" />
+                <p style="max-width: 800px; margin-right: auto; margin-left: auto;">
+                    Note! This will work only for Firefox and all other applications on your computer will keep using the default DNS server configured in your network settings.
+                </p>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

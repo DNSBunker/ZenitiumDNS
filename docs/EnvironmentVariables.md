@@ -1,0 +1,14 @@
+# Umgebungsvariablen von ZenitiumDNS
+
+ZenitiumDNS unterstützt die folgenden Umgebungsvariablen. Ihre Werte werden bei jedem Start direkt aus der Umgebung gelesen.
+
+Hinweis: Änderungen an diesen Variablen werden erst nach einem Neustart des DNS-Servers wirksam. Beim Debian-Paket lassen sie sich in der Datei `/etc/default/zenitiumdns` setzen.
+
+| Umgebungsvariable                                 | Typ     | Beschreibung                                                                                                                             |
+| ------------------------------------------------- | ------- | -----------------------------------------------------------------------------------------------------------------------------------------|
+| DNS_SERVER_WEB_SERVICE_WWW_FOLDER_PATH            | String  | Pfad zu dem Ordner, der als www-Stammordner des Webdienstes verwendet wird. Ist die Variable nicht gesetzt oder existiert der Ordner nicht, wird der Standardordner verwendet. |
+| DNS_SERVER_AUTH_STATIC_SESSIONS                   | String  | Vordefinierte statische API-Sitzungen, die über die API nicht sichtbar sind. Der Wert ist eine kommagetrennte Liste von Einträgen im Format `<benutzername>:<token>`. Jedes Token muss eindeutig sein und aus genau 64 Hexadezimalzeichen bestehen. Beispiel: `admin:bc847a5fdf2d67267a1d607e053a150e63c4e4837ea9272169a2c739556ccf35,user:dbee4e3fd45f5e4d766718533bc264aab0970e5a4ba13cbccca5fe5d3c9cec36`. |
+| DNS_SERVER_UPDATE_CHECK_URL                       | String  | URL eines JSON-Dokuments, mit dem die Weboberfläche nach Updates sucht. Das JSON-Objekt muss die Eigenschaft `updateVersion` enthalten und kann `updateTitle`, `updateMessage`, `downloadLink`, `instructionsLink` und `changeLogLink` enthalten. Ist die Variable nicht gesetzt, ist die Update-Prüfung deaktiviert. |
+| DNS_SERVER_APP_STORE_URL                          | String  | URL eines JSON-Arrays mit den im App-Store verfügbaren DNS-Apps. Jeder Eintrag muss `name`, `description` und ein Array `versions` enthalten, dessen Elemente die Eigenschaften `version`, `serverVersion`, `url` und `size` haben. Ist die Variable nicht gesetzt, sind App-Store und automatische App-Updates deaktiviert. |
+| DNS_SERVER_ADMIN_PASSWORD_FILE                    | String  | Pfad zu einer Datei mit dem Passwort des Benutzers `admin` im Klartext. Wird nur beim allerersten Start ausgewertet, wenn noch keine Benutzerkonfiguration existiert. Das Debian-Paket nutzt diese Variable für das zufällige Erstpasswort. |
+| DNS_SERVER_BUNDLED_APPS_PATH                      | String  | Ordner mit mitgelieferten DNS-Apps als ZIP-Dateien. Standard ist `/usr/share/zenitiumdns/apps`. Beim Start werden noch nicht installierte Apps deaktiviert installiert und bereits installierte aktualisiert, wenn sich ihre ZIP-Datei geändert hat. Vom Benutzer deinstallierte Apps werden nicht erneut installiert. |

@@ -1,0 +1,3176 @@
+﻿/*
+Technitium DNS Server
+Copyright (C) 2026  Shreyas Zare (shreyas@technitium.com)
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+*/
+
+using ZenitiumDns.Core.Auth;
+using ZenitiumDns.Core.Dns;
+using ZenitiumDns.Core.Dns.ResourceRecords;
+using ZenitiumDns.Core.Dns.ZoneManagers;
+using ZenitiumDns.Core.Dns.Zones;
+using Microsoft.AspNetCore.Http;
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Net;
+using System.Text;
+using System.Text.Json;
+using System.Threading.Tasks;
+using ZenitiumLibrary;
+using ZenitiumLibrary.Net;
+using ZenitiumLibrary.Net.Dns;
+using ZenitiumLibrary.Net.Dns.ResourceRecords;
+
+namespace ZenitiumDns.Core
+{
+    public partial class DnsWebService
+    {
+        class WebServiceZonesApi
+        {
+            #region variables
+
+            static readonly char[] _newLineSeparator = new char[] { '\r', '\n' };
+
+            readonly DnsWebService _dnsWebService;
+
+            #endregion
+
+            #region constructor
+
+            public WebServiceZonesApi(DnsWebService dnsWebService)
+            {
+                _dnsWebService = dnsWebService;
+            }
+
+            #endregion
+
+            #region static
+
+            public static void WriteRecordsAsJson(List<DnsResourceRecord> records, Utf8JsonWriter jsonWriter, bool authoritativeZoneRecords)
+            {
+                if (records is null)
+                {
+                    jsonWriter.WritePropertyName("records");
+                    jsonWriter.WriteStartArray();
+                    jsonWriter.WriteEndArray();
+
+                    return;
+                }
+
+                records.Sort();
+
+                Dictionary<string, Dictionary<DnsResourceRecordType, List<DnsResourceRecord>>> groupedByDomainRecords = DnsResourceRecord.GroupRecords(records);
+
+                jsonWriter.WritePropertyName("records");
+                jsonWriter.WriteStartArray();
+
+                foreach (KeyValuePair<string, Dictionary<DnsResourceRecordType, List<DnsResourceRecord>>> groupedByTypeRecords in groupedByDomainRecords)
+                {
+                    foreach (KeyValuePair<DnsResourceRecordType, List<DnsResourceRecord>> groupedRecords in groupedByTypeRecords.Value)
+                    {
+                        foreach (DnsResourceRecord record in groupedRecords.Value)
+                            WriteRecordAsJson(record, jsonWriter, authoritativeZoneRecords);
+                    }
+                }
+
+                jsonWriter.WriteEndArray();
+            }
+
+            #endregion
+
+            #region private
+
+            private static void WriteNameServerMetadata(Utf8JsonWriter jsonWriter, NameServerMetadata metadata)
+            {
+                jsonWriter.WriteNumber("totalQueries", metadata.TotalQueries);
+                jsonWriter.WriteString("answerRate", Math.Round(metadata.GetAnswerRate(), 2) + "%");
+                jsonWriter.WriteString("recentAnswerRate", Math.Round(metadata.RecentAnswerRate * 100, 2) + "%");
+                jsonWriter.WriteString("smoothedRoundTripTime", Math.Round(metadata.SRTT, 2) + " ms");
+                jsonWriter.WriteString("smoothedPenaltyRoundTripTime", Math.Round(metadata.SPRTT, 2) + " ms");
+                jsonWriter.WriteString("netRoundTripTime", Math.Round(metadata.GetNetRTT(), 2) + " ms");
+                jsonWriter.WriteBoolean("isMisconfigured", metadata.IsMisconfigured);
+            }
+
+            private static void WriteRecordAsJson(DnsResourceRecord record, Utf8JsonWriter jsonWriter, bool authoritativeZoneRecords)
+            {
+                jsonWriter.WriteStartObject();
+
+                jsonWriter.WriteString("name", record.Name);
+
+                if (DnsClient.TryConvertDomainNameToUnicode(record.Name, out string idn))
+                    jsonWriter.WriteString("nameIdn", idn);
+
+                jsonWriter.WriteString("type", record.Type.ToString());
+
+                if (authoritativeZoneRecords)
+                {
+                    GenericRecordInfo authRecordInfo = record.GetAuthGenericRecordInfo();
+
+                    jsonWriter.WriteNumber("ttl", record.TTL);
+                    jsonWriter.WriteString("ttlString", ZoneFile.GetTtlString(record.TTL));
+                    jsonWriter.WriteBoolean("disabled", authRecordInfo.Disabled);
+
+                    string comments = authRecordInfo.Comments;
+                    if (!string.IsNullOrEmpty(comments))
+                        jsonWriter.WriteString("comments", comments);
+                }
+                else
+                {
+                    if (record.IsStale)
+                        jsonWriter.WriteString("ttl", "0 (0s)");
+                    else
+                        jsonWriter.WriteString("ttl", record.TTL + " (" + ZoneFile.GetTtlString(record.TTL) + ")");
+                }
+
+                jsonWriter.WritePropertyName("rData");
+                jsonWriter.WriteStartObject();
+
+                switch (record.Type)
+                {
+                    case DnsResourceRecordType.A:
+                        {
+                            if (record.RDATA is DnsARecordData rdata)
+                            {
+                                jsonWriter.WriteString("ipAddress", rdata.Address.ToString());
+                            }
+                            else
+                            {
+                                jsonWriter.WriteString("dataType", record.RDATA.GetType().Name);
+                                jsonWriter.WriteString("data", record.RDATA.ToString());
+                            }
+                        }
+                        break;
+
+                    case DnsResourceRecordType.NS:
+                        {
+                            if (record.RDATA is DnsNSRecordData rdata)
+                            {
+                                jsonWriter.WriteString("nameServer", rdata.NameServer.Length == 0 ? "." : rdata.NameServer);
+
+                                if (DnsClient.TryConvertDomainNameToUnicode(rdata.NameServer, out string nameServerIdn))
+                                    jsonWriter.WriteString("nameServerIdn", nameServerIdn);
+                            }
+                            else
+                            {
+                                jsonWriter.WriteString("dataType", record.RDATA.GetType().Name);
+                                jsonWriter.WriteString("data", record.RDATA.ToString());
+                            }
+                        }
+                        break;
+
+                    case DnsResourceRecordType.CNAME:
+                        {
+                            if (record.RDATA is DnsCNAMERecordData rdata)
+                            {
+                                jsonWriter.WriteString("cname", rdata.Domain.Length == 0 ? "." : rdata.Domain);
+
+                                if (DnsClient.TryConvertDomainNameToUnicode(rdata.Domain, out string cnameIdn))
+                                    jsonWriter.WriteString("cnameIdn", cnameIdn);
+                            }
+                            else
+                            {
+                                jsonWriter.WriteString("dataType", record.RDATA.GetType().Name);
+                                jsonWriter.WriteString("data", record.RDATA.ToString());
+                            }
+                        }
+                        break;
+
+                    case DnsResourceRecordType.SOA:
+                        {
+                            if (record.RDATA is DnsSOARecordData rdata)
+                            {
+                                jsonWriter.WriteString("primaryNameServer", rdata.PrimaryNameServer);
+
+                                if (DnsClient.TryConvertDomainNameToUnicode(rdata.PrimaryNameServer, out string primaryNameServerIdn))
+                                    jsonWriter.WriteString("primaryNameServerIdn", primaryNameServerIdn);
+
+                                jsonWriter.WriteString("responsiblePerson", rdata.ResponsiblePerson);
+                                jsonWriter.WriteNumber("serial", rdata.Serial);
+
+                                if (authoritativeZoneRecords)
+                                {
+                                    jsonWriter.WriteNumber("refresh", rdata.Refresh);
+                                    jsonWriter.WriteNumber("retry", rdata.Retry);
+                                    jsonWriter.WriteNumber("expire", rdata.Expire);
+                                    jsonWriter.WriteNumber("minimum", rdata.Minimum);
+
+                                    jsonWriter.WriteString("refreshString", ZoneFile.GetTtlString(rdata.Refresh));
+                                    jsonWriter.WriteString("retryString", ZoneFile.GetTtlString(rdata.Retry));
+                                    jsonWriter.WriteString("expireString", ZoneFile.GetTtlString(rdata.Expire));
+                                    jsonWriter.WriteString("minimumString", ZoneFile.GetTtlString(rdata.Minimum));
+                                }
+                                else
+                                {
+                                    jsonWriter.WriteString("refresh", rdata.Refresh + " (" + ZoneFile.GetTtlString(rdata.Refresh) + ")");
+                                    jsonWriter.WriteString("retry", rdata.Retry + " (" + ZoneFile.GetTtlString(rdata.Retry) + ")");
+                                    jsonWriter.WriteString("expire", rdata.Expire + " (" + ZoneFile.GetTtlString(rdata.Expire) + ")");
+                                    jsonWriter.WriteString("minimum", rdata.Minimum + " (" + ZoneFile.GetTtlString(rdata.Minimum) + ")");
+                                }
+                            }
+                            else
+                            {
+                                jsonWriter.WriteString("dataType", record.RDATA.GetType().Name);
+                                jsonWriter.WriteString("data", record.RDATA.ToString());
+                            }
+                        }
+                        break;
+
+                    case DnsResourceRecordType.PTR:
+                        {
+                            if (record.RDATA is DnsPTRRecordData rdata)
+                            {
+                                jsonWriter.WriteString("ptrName", rdata.Domain.Length == 0 ? "." : rdata.Domain);
+
+                                if (DnsClient.TryConvertDomainNameToUnicode(rdata.Domain, out string ptrNameIdn))
+                                    jsonWriter.WriteString("ptrNameIdn", ptrNameIdn);
+                            }
+                            else
+                            {
+                                jsonWriter.WriteString("dataType", record.RDATA.GetType().Name);
+                                jsonWriter.WriteString("data", record.RDATA.ToString());
+                            }
+                        }
+                        break;
+
+                    case DnsResourceRecordType.MX:
+                        {
+                            if (record.RDATA is DnsMXRecordData rdata)
+                            {
+                                jsonWriter.WriteNumber("preference", rdata.Preference);
+                                jsonWriter.WriteString("exchange", rdata.Exchange.Length == 0 ? "." : rdata.Exchange);
+
+                                if (DnsClient.TryConvertDomainNameToUnicode(rdata.Exchange, out string exchangeIdn))
+                                    jsonWriter.WriteString("exchangeIdn", exchangeIdn);
+                            }
+                            else
+                            {
+                                jsonWriter.WriteString("dataType", record.RDATA.GetType().Name);
+                                jsonWriter.WriteString("data", record.RDATA.ToString());
+                            }
+                        }
+                        break;
+
+                    case DnsResourceRecordType.TXT:
+                        {
+                            if (record.RDATA is DnsTXTRecordData rdata)
+                            {
+                                jsonWriter.WriteString("text", rdata.GetText());
+
+                                bool splitText = false;
+
+                                if (rdata.CharacterStrings.Count > 1)
+                                {
+                                    for (int i = 0; i < rdata.CharacterStrings.Count - 1; i++)
+                                    {
+                                        if (rdata.CharacterStrings[i].Count != 255)
+                                        {
+                                            splitText = true;
+                                            break;
+                                        }
+                                    }
+                                }
+
+                                jsonWriter.WriteBoolean("splitText", splitText);
+
+                                jsonWriter.WriteStartArray("characterStrings");
+
+                                foreach (ArraySegment<byte> characterString in rdata.CharacterStrings)
+                                    jsonWriter.WriteStringValue(Encoding.UTF8.GetString(characterString));
+
+                                jsonWriter.WriteEndArray();
+
+                                jsonWriter.WriteStartArray("characterStringsBase64");
+
+                                foreach (ArraySegment<byte> characterString in rdata.CharacterStrings)
+                                    jsonWriter.WriteStringValue(Convert.ToBase64String(characterString));
+
+                                jsonWriter.WriteEndArray();
+                            }
+                            else
+                            {
+                                jsonWriter.WriteString("dataType", record.RDATA.GetType().Name);
+                                jsonWriter.WriteString("data", record.RDATA.ToString());
+                            }
+                        }
+                        break;
+
+                    case DnsResourceRecordType.RP:
+                        {
+                            if (record.RDATA is DnsRPRecordData rdata)
+                            {
+                                jsonWriter.WriteString("mailbox", rdata.Mailbox);
+                                jsonWriter.WriteString("txtDomain", rdata.TxtDomain);
+
+                                if (DnsClient.TryConvertDomainNameToUnicode(rdata.Mailbox, out string txtDomainIdn))
+                                    jsonWriter.WriteString("txtDomainIdn", txtDomainIdn);
+                            }
+                            else
+                            {
+                                jsonWriter.WriteString("dataType", record.RDATA.GetType().Name);
+                                jsonWriter.WriteString("data", record.RDATA.ToString());
+                            }
+                        }
+                        break;
+
+                    case DnsResourceRecordType.AAAA:
+                        {
+                            if (record.RDATA is DnsAAAARecordData rdata)
+                            {
+                                jsonWriter.WriteString("ipAddress", rdata.Address.ToString());
+                            }
+                            else
+                            {
+                                jsonWriter.WriteString("dataType", record.RDATA.GetType().Name);
+                                jsonWriter.WriteString("data", record.RDATA.ToString());
+                            }
+                        }
+                        break;
+
+                    case DnsResourceRecordType.SRV:
+                        {
+                            if (record.RDATA is DnsSRVRecordData rdata)
+                            {
+                                jsonWriter.WriteNumber("priority", rdata.Priority);
+                                jsonWriter.WriteNumber("weight", rdata.Weight);
+                                jsonWriter.WriteNumber("port", rdata.Port);
+                                jsonWriter.WriteString("target", rdata.Target.Length == 0 ? "." : rdata.Target);
+
+                                if (DnsClient.TryConvertDomainNameToUnicode(rdata.Target, out string targetIdn))
+                                    jsonWriter.WriteString("targetIdn", targetIdn);
+                            }
+                            else
+                            {
+                                jsonWriter.WriteString("dataType", record.RDATA.GetType().Name);
+                                jsonWriter.WriteString("data", record.RDATA.ToString());
+                            }
+                        }
+                        break;
+
+                    case DnsResourceRecordType.NAPTR:
+                        {
+                            if (record.RDATA is DnsNAPTRRecordData rdata)
+                            {
+                                jsonWriter.WriteNumber("order", rdata.Order);
+                                jsonWriter.WriteNumber("preference", rdata.Preference);
+                                jsonWriter.WriteString("flags", rdata.Flags);
+                                jsonWriter.WriteString("services", rdata.Services);
+                                jsonWriter.WriteString("regexp", rdata.Regexp);
+                                jsonWriter.WriteString("replacement", rdata.Replacement.Length == 0 ? "." : rdata.Replacement);
+
+                                if (DnsClient.TryConvertDomainNameToUnicode(rdata.Replacement, out string replacementIdn))
+                                    jsonWriter.WriteString("replacementIdn", replacementIdn);
+                            }
+                            else
+                            {
+                                jsonWriter.WriteString("dataType", record.RDATA.GetType().Name);
+                                jsonWriter.WriteString("data", record.RDATA.ToString());
+                            }
+                        }
+                        break;
+
+                    case DnsResourceRecordType.DNAME:
+                        {
+                            if (record.RDATA is DnsDNAMERecordData rdata)
+                            {
+                                jsonWriter.WriteString("dname", rdata.Domain.Length == 0 ? "." : rdata.Domain);
+
+                                if (DnsClient.TryConvertDomainNameToUnicode(rdata.Domain, out string dnameIdn))
+                                    jsonWriter.WriteString("dnameIdn", dnameIdn);
+                            }
+                            else
+                            {
+                                jsonWriter.WriteString("dataType", record.RDATA.GetType().Name);
+                                jsonWriter.WriteString("data", record.RDATA.ToString());
+                            }
+                        }
+                        break;
+
+                    case DnsResourceRecordType.APL:
+                        {
+                            if (record.RDATA is DnsAPLRecordData rdata)
+                            {
+                                jsonWriter.WriteStartArray("addressPrefixes");
+
+                                foreach (DnsAPLRecordData.APItem apItem in rdata.APItems)
+                                {
+                                    jsonWriter.WriteStartObject();
+
+                                    jsonWriter.WriteString("addressFamily", apItem.AddressFamily.ToString());
+                                    jsonWriter.WriteNumber("prefix", apItem.Prefix);
+                                    jsonWriter.WriteBoolean("negation", apItem.Negation);
+                                    jsonWriter.WriteString("afdPart", apItem.NetworkAddress.Address.ToString());
+
+                                    jsonWriter.WriteEndObject();
+                                }
+
+                                jsonWriter.WriteEndArray();
+                            }
+                            else
+                            {
+                                jsonWriter.WriteString("dataType", record.RDATA.GetType().Name);
+                                jsonWriter.WriteString("data", record.RDATA.ToString());
+                            }
+                        }
+                        break;
+
+                    case DnsResourceRecordType.DS:
+                        {
+                            if (record.RDATA is DnsDSRecordData rdata)
+                            {
+                                jsonWriter.WriteNumber("keyTag", rdata.KeyTag);
+                                jsonWriter.WriteString("algorithm", rdata.Algorithm.ToString());
+                                jsonWriter.WriteNumber("algorithmNumber", (byte)rdata.Algorithm);
+                                jsonWriter.WriteString("digestType", rdata.DigestType.ToString());
+                                jsonWriter.WriteNumber("digestTypeNumber", (byte)rdata.DigestType);
+                                jsonWriter.WriteString("digest", Convert.ToHexString(rdata.Digest));
+                            }
+                            else
+                            {
+                                jsonWriter.WriteString("dataType", record.RDATA.GetType().Name);
+                                jsonWriter.WriteString("data", record.RDATA.ToString());
+                            }
+                        }
+                        break;
+
+                    case DnsResourceRecordType.SSHFP:
+                        {
+                            if (record.RDATA is DnsSSHFPRecordData rdata)
+                            {
+                                jsonWriter.WriteString("algorithm", rdata.Algorithm.ToString());
+                                jsonWriter.WriteString("fingerprintType", rdata.FingerprintType.ToString());
+                                jsonWriter.WriteString("fingerprint", Convert.ToHexString(rdata.Fingerprint));
+                            }
+                            else
+                            {
+                                jsonWriter.WriteString("dataType", record.RDATA.GetType().Name);
+                                jsonWriter.WriteString("data", record.RDATA.ToString());
+                            }
+                        }
+                        break;
+
+                    case DnsResourceRecordType.RRSIG:
+                        {
+                            if (record.RDATA is DnsRRSIGRecordData rdata)
+                            {
+                                jsonWriter.WriteString("typeCovered", rdata.TypeCovered.ToString());
+                                jsonWriter.WriteString("algorithm", rdata.Algorithm.ToString());
+                                jsonWriter.WriteNumber("algorithmNumber", (byte)rdata.Algorithm);
+                                jsonWriter.WriteNumber("labels", rdata.Labels);
+                                jsonWriter.WriteNumber("originalTtl", rdata.OriginalTtl);
+                                jsonWriter.WriteString("signatureExpiration", DateTime.UnixEpoch.AddSeconds(rdata.SignatureExpiration));
+                                jsonWriter.WriteString("signatureInception", DateTime.UnixEpoch.AddSeconds(rdata.SignatureInception));
+                                jsonWriter.WriteNumber("keyTag", rdata.KeyTag);
+                                jsonWriter.WriteString("signersName", rdata.SignersName.Length == 0 ? "." : rdata.SignersName);
+                                jsonWriter.WriteString("signature", Convert.ToBase64String(rdata.Signature));
+                            }
+                            else
+                            {
+                                jsonWriter.WriteString("dataType", record.RDATA.GetType().Name);
+                                jsonWriter.WriteString("data", record.RDATA.ToString());
+                            }
+                        }
+                        break;
+
+                    case DnsResourceRecordType.NSEC:
+                        {
+                            if (record.RDATA is DnsNSECRecordData rdata)
+                            {
+                                jsonWriter.WriteString("nextDomainName", rdata.NextDomainName);
+
+                                jsonWriter.WritePropertyName("types");
+                                jsonWriter.WriteStartArray();
+
+                                foreach (DnsResourceRecordType type in rdata.Types)
+                                    jsonWriter.WriteStringValue(type.ToString());
+
+                                jsonWriter.WriteEndArray();
+                            }
+                            else
+                            {
+                                jsonWriter.WriteString("dataType", record.RDATA.GetType().Name);
+                                jsonWriter.WriteString("data", record.RDATA.ToString());
+                            }
+                        }
+                        break;
+
+                    case DnsResourceRecordType.DNSKEY:
+                        {
+                            if (record.RDATA is DnsDNSKEYRecordData rdata)
+                            {
+                                jsonWriter.WriteString("flags", rdata.Flags.ToString());
+                                jsonWriter.WriteNumber("protocol", rdata.Protocol);
+                                jsonWriter.WriteString("algorithm", rdata.Algorithm.ToString());
+                                jsonWriter.WriteNumber("algorithmNumber", (byte)rdata.Algorithm);
+                                jsonWriter.WriteString("publicKey", rdata.PublicKey.ToString());
+                                jsonWriter.WriteNumber("computedKeyTag", rdata.ComputedKeyTag);
+
+                                if (authoritativeZoneRecords)
+                                {
+                                    if (rdata.Flags.HasFlag(DnsDnsKeyFlag.SecureEntryPoint))
+                                    {
+                                        jsonWriter.WritePropertyName("computedDigests");
+                                        jsonWriter.WriteStartArray();
+
+                                        {
+                                            jsonWriter.WriteStartObject();
+
+                                            jsonWriter.WriteString("digestType", "SHA256");
+                                            jsonWriter.WriteString("digest", Convert.ToHexString(rdata.CreateDS(record.Name, DnssecDigestType.SHA256).Digest));
+
+                                            jsonWriter.WriteEndObject();
+                                        }
+
+                                        {
+                                            jsonWriter.WriteStartObject();
+
+                                            jsonWriter.WriteString("digestType", "SHA384");
+                                            jsonWriter.WriteString("digest", Convert.ToHexString(rdata.CreateDS(record.Name, DnssecDigestType.SHA384).Digest));
+
+                                            jsonWriter.WriteEndObject();
+                                        }
+
+                                        jsonWriter.WriteEndArray();
+                                    }
+                                }
+                            }
+                            else
+                            {
+                                jsonWriter.WriteString("dataType", record.RDATA.GetType().Name);
+                                jsonWriter.WriteString("data", record.RDATA.ToString());
+                            }
+                        }
+                        break;
+
+                    case DnsResourceRecordType.NSEC3:
+                        {
+                            if (record.RDATA is DnsNSEC3RecordData rdata)
+                            {
+                                jsonWriter.WriteString("hashAlgorithm", rdata.HashAlgorithm.ToString());
+                                jsonWriter.WriteString("flags", rdata.Flags.ToString());
+                                jsonWriter.WriteNumber("iterations", rdata.Iterations);
+                                jsonWriter.WriteString("salt", Convert.ToHexString(rdata.Salt));
+                                jsonWriter.WriteString("nextHashedOwnerName", rdata.NextHashedOwnerName);
+
+                                jsonWriter.WritePropertyName("types");
+                                jsonWriter.WriteStartArray();
+
+                                foreach (DnsResourceRecordType type in rdata.Types)
+                                    jsonWriter.WriteStringValue(type.ToString());
+
+                                jsonWriter.WriteEndArray();
+                            }
+                            else
+                            {
+                                jsonWriter.WriteString("dataType", record.RDATA.GetType().Name);
+                                jsonWriter.WriteString("data", record.RDATA.ToString());
+                            }
+                        }
+                        break;
+
+                    case DnsResourceRecordType.NSEC3PARAM:
+                        {
+                            if (record.RDATA is DnsNSEC3PARAMRecordData rdata)
+                            {
+                                jsonWriter.WriteString("hashAlgorithm", rdata.HashAlgorithm.ToString());
+                                jsonWriter.WriteString("flags", rdata.Flags.ToString());
+                                jsonWriter.WriteNumber("iterations", rdata.Iterations);
+                                jsonWriter.WriteString("salt", Convert.ToHexString(rdata.Salt));
+                            }
+                            else
+                            {
+                                jsonWriter.WriteString("dataType", record.RDATA.GetType().Name);
+                                jsonWriter.WriteString("data", record.RDATA.ToString());
+                            }
+                        }
+                        break;
+
+                    case DnsResourceRecordType.TLSA:
+                        {
+                            if (record.RDATA is DnsTLSARecordData rdata)
+                            {
+                                jsonWriter.WriteString("certificateUsage", rdata.CertificateUsage.ToString().Replace('_', '-'));
+                                jsonWriter.WriteString("selector", rdata.Selector.ToString());
+                                jsonWriter.WriteString("matchingType", rdata.MatchingType.ToString().Replace('_', '-'));
+                                jsonWriter.WriteString("certificateAssociationData", Convert.ToHexString(rdata.CertificateAssociationData));
+                            }
+                            else
+                            {
+                                jsonWriter.WriteString("dataType", record.RDATA.GetType().Name);
+                                jsonWriter.WriteString("data", record.RDATA.ToString());
+                            }
+                        }
+                        break;
+
+                    case DnsResourceRecordType.ZONEMD:
+                        {
+                            if (record.RDATA is DnsZONEMDRecordData rdata)
+                            {
+                                jsonWriter.WriteNumber("serial", rdata.Serial);
+                                jsonWriter.WriteString("scheme", rdata.Scheme.ToString());
+                                jsonWriter.WriteString("hashAlgorithm", rdata.HashAlgorithm.ToString());
+                                jsonWriter.WriteString("digest", Convert.ToHexString(rdata.Digest));
+                            }
+                            else
+                            {
+                                jsonWriter.WriteString("dataType", record.RDATA.GetType().Name);
+                                jsonWriter.WriteString("data", record.RDATA.ToString());
+                            }
+                        }
+                        break;
+
+                    case DnsResourceRecordType.SVCB:
+                    case DnsResourceRecordType.HTTPS:
+                        {
+                            if (record.RDATA is DnsSVCBRecordData rdata)
+                            {
+                                jsonWriter.WriteNumber("svcPriority", rdata.SvcPriority);
+                                jsonWriter.WriteString("svcTargetName", rdata.TargetName);
+
+                                jsonWriter.WritePropertyName("svcParams");
+                                jsonWriter.WriteStartObject();
+
+                                foreach (KeyValuePair<DnsSvcParamKey, DnsSvcParamValue> svcParam in rdata.SvcParams)
+                                    jsonWriter.WriteString(svcParam.Key.ToString().ToLowerInvariant().Replace('_', '-'), svcParam.Value.ToString());
+
+                                jsonWriter.WriteEndObject();
+
+                                if (authoritativeZoneRecords)
+                                {
+                                    SVCBRecordInfo rrInfo = record.GetAuthSVCBRecordInfo();
+
+                                    jsonWriter.WriteBoolean("autoIpv4Hint", rrInfo.AutoIpv4Hint);
+                                    jsonWriter.WriteBoolean("autoIpv6Hint", rrInfo.AutoIpv6Hint);
+                                }
+                            }
+                            else
+                            {
+                                jsonWriter.WriteString("dataType", record.RDATA.GetType().Name);
+                                jsonWriter.WriteString("data", record.RDATA.ToString());
+                            }
+                        }
+                        break;
+
+                    case DnsResourceRecordType.URI:
+                        {
+                            if (record.RDATA is DnsURIRecordData rdata)
+                            {
+                                jsonWriter.WriteNumber("priority", rdata.Priority);
+                                jsonWriter.WriteNumber("weight", rdata.Weight);
+                                jsonWriter.WriteString("uri", rdata.Uri.AbsoluteUri);
+                            }
+                            else
+                            {
+                                jsonWriter.WriteString("dataType", record.RDATA.GetType().Name);
+                                jsonWriter.WriteString("data", record.RDATA.ToString());
+                            }
+                        }
+                        break;
+
+                    case DnsResourceRecordType.CAA:
+                        {
+                            if (record.RDATA is DnsCAARecordData rdata)
+                            {
+                                jsonWriter.WriteNumber("flags", rdata.Flags);
+                                jsonWriter.WriteString("tag", rdata.Tag);
+                                jsonWriter.WriteString("value", rdata.Value);
+                            }
+                            else
+                            {
+                                jsonWriter.WriteString("dataType", record.RDATA.GetType().Name);
+                                jsonWriter.WriteString("data", record.RDATA.ToString());
+                            }
+                        }
+                        break;
+
+                    case DnsResourceRecordType.ANAME:
+                        {
+                            if (record.RDATA is DnsANAMERecordData rdata)
+                            {
+                                jsonWriter.WriteString("aname", rdata.Domain.Length == 0 ? "." : rdata.Domain);
+
+                                if (DnsClient.TryConvertDomainNameToUnicode(rdata.Domain, out string anameIdn))
+                                    jsonWriter.WriteString("anameIdn", anameIdn);
+                            }
+                            else
+                            {
+                                jsonWriter.WriteString("dataType", record.RDATA.GetType().Name);
+                                jsonWriter.WriteString("data", record.RDATA.ToString());
+                            }
+                        }
+                        break;
+
+                    case DnsResourceRecordType.FWD:
+                        {
+                            if (record.RDATA is DnsForwarderRecordData rdata)
+                            {
+                                jsonWriter.WriteString("protocol", rdata.Protocol.ToString());
+                                jsonWriter.WriteString("forwarder", rdata.Forwarder);
+                                jsonWriter.WriteNumber("priority", rdata.Priority);
+                                jsonWriter.WriteBoolean("dnssecValidation", rdata.DnssecValidation);
+                                jsonWriter.WriteString("proxyType", rdata.ProxyType.ToString());
+
+                                switch (rdata.ProxyType)
+                                {
+                                    case DnsForwarderRecordProxyType.Http:
+                                    case DnsForwarderRecordProxyType.Socks5:
+                                        jsonWriter.WriteString("proxyAddress", rdata.ProxyAddress);
+                                        jsonWriter.WriteNumber("proxyPort", rdata.ProxyPort);
+                                        jsonWriter.WriteString("proxyUsername", rdata.ProxyUsername);
+                                        jsonWriter.WriteString("proxyPassword", rdata.ProxyPassword);
+                                        break;
+                                }
+                            }
+                        }
+                        break;
+
+                    case DnsResourceRecordType.APP:
+                        {
+                            if (record.RDATA is DnsApplicationRecordData rdata)
+                            {
+                                jsonWriter.WriteString("appName", rdata.AppName);
+                                jsonWriter.WriteString("classPath", rdata.ClassPath);
+                                jsonWriter.WriteString("data", rdata.Data);
+                            }
+                        }
+                        break;
+
+                    case DnsResourceRecordType.ALIAS:
+                        {
+                            if (record.RDATA is DnsALIASRecordData rdata)
+                            {
+                                jsonWriter.WriteString("type", rdata.Type.ToString());
+                                jsonWriter.WriteString("alias", rdata.Domain.Length == 0 ? "." : rdata.Domain);
+
+                                if (DnsClient.TryConvertDomainNameToUnicode(rdata.Domain, out string aliasIdn))
+                                    jsonWriter.WriteString("aliasIdn", aliasIdn);
+                            }
+                            else
+                            {
+                                jsonWriter.WriteString("dataType", record.RDATA.GetType().Name);
+                                jsonWriter.WriteString("data", record.RDATA.ToString());
+                            }
+                        }
+                        break;
+
+                    default:
+                        {
+                            if (record.RDATA is DnsUnknownRecordData rdata)
+                            {
+                                jsonWriter.WriteString("value", BitConverter.ToString(rdata.DATA).Replace('-', ':'));
+                            }
+                            else
+                            {
+                                jsonWriter.WriteString("dataType", record.RDATA.GetType().Name);
+                                jsonWriter.WriteString("data", record.RDATA.ToString());
+                            }
+                        }
+                        break;
+                }
+
+                jsonWriter.WriteEndObject();
+
+                jsonWriter.WriteString("dnssecStatus", record.DnssecStatus.ToString());
+
+                if (authoritativeZoneRecords)
+                {
+                    GenericRecordInfo authRecordInfo = record.GetAuthGenericRecordInfo();
+
+                    if (authRecordInfo is NSRecordInfo nsRecordInfo)
+                    {
+                        IReadOnlyList<DnsResourceRecord> glueRecords = nsRecordInfo.GlueRecords;
+                        if (glueRecords is not null)
+                        {
+                            jsonWriter.WritePropertyName("glueRecords");
+                            jsonWriter.WriteStartArray();
+
+                            foreach (DnsResourceRecord glueRecord in glueRecords)
+                                jsonWriter.WriteStringValue(glueRecord.RDATA.ToString());
+
+                            jsonWriter.WriteEndArray();
+                        }
+                    }
+
+                    jsonWriter.WriteString("lastUsedOn", authRecordInfo.LastUsedOn);
+                    jsonWriter.WriteString("lastModified", authRecordInfo.LastModified);
+                    jsonWriter.WriteNumber("expiryTtl", authRecordInfo.ExpiryTtl);
+                    jsonWriter.WriteString("expiryTtlString", ZoneFile.GetTtlString(authRecordInfo.ExpiryTtl));
+                }
+                else
+                {
+                    CacheRecordInfo cacheRecordInfo = record.GetCacheRecordInfo();
+
+                    IReadOnlyList<DnsResourceRecord> glueRecords = cacheRecordInfo.GlueRecords;
+                    if (glueRecords is not null)
+                    {
+                        jsonWriter.WritePropertyName("glueRecords");
+                        jsonWriter.WriteStartArray();
+
+                        foreach (DnsResourceRecord glueRecord in glueRecords)
+                            jsonWriter.WriteStringValue(glueRecord.RDATA.ToString());
+
+                        jsonWriter.WriteEndArray();
+                    }
+
+                    IReadOnlyList<DnsResourceRecord> rrsigRecords = cacheRecordInfo.RRSIGRecords;
+                    IReadOnlyList<DnsResourceRecord> nsecRecords = cacheRecordInfo.NSECRecords;
+
+                    if ((rrsigRecords is not null) || (nsecRecords is not null))
+                    {
+                        jsonWriter.WritePropertyName("dnssecRecords");
+                        jsonWriter.WriteStartArray();
+
+                        if (rrsigRecords is not null)
+                        {
+                            foreach (DnsResourceRecord rrsigRecord in rrsigRecords)
+                                jsonWriter.WriteStringValue(rrsigRecord.ToString());
+                        }
+
+                        if (nsecRecords is not null)
+                        {
+                            foreach (DnsResourceRecord nsecRecord in nsecRecords)
+                                jsonWriter.WriteStringValue(nsecRecord.ToString());
+                        }
+
+                        jsonWriter.WriteEndArray();
+                    }
+
+                    NetworkAddress eDnsClientSubnet = cacheRecordInfo.EDnsClientSubnet;
+                    if (eDnsClientSubnet is not null)
+                        jsonWriter.WriteString("eDnsClientSubnet", eDnsClientSubnet.ToString());
+
+                    if (record.RDATA is DnsNSRecordData nsRData)
+                    {
+                        NameServerMetadata metadata = nsRData.Metadata;
+
+                        jsonWriter.WriteStartObject("nameServerMetadata");
+
+                        WriteNameServerMetadata(jsonWriter, metadata);
+
+                        NameServerMetadata ipv6Metadata = metadata.IPv6Metadata;
+                        if (ipv6Metadata is not null)
+                        {
+                            jsonWriter.WriteStartObject("ipv6");
+                            WriteNameServerMetadata(jsonWriter, ipv6Metadata);
+                            jsonWriter.WriteEndObject();
+                        }
+
+                        jsonWriter.WriteEndObject();
+                    }
+
+                    DnsDatagramMetadata responseMetadata = cacheRecordInfo.ResponseMetadata;
+                    if (responseMetadata is not null)
+                    {
+                        jsonWriter.WritePropertyName("responseMetadata");
+                        jsonWriter.WriteStartObject();
+
+                        jsonWriter.WriteString("nameServer", responseMetadata.NameServer?.ToString());
+                        jsonWriter.WriteString("protocol", (responseMetadata.NameServer is null ? DnsTransportProtocol.Udp : responseMetadata.NameServer.Protocol).ToString());
+                        jsonWriter.WriteString("datagramSize", responseMetadata.DatagramSize + " bytes");
+                        jsonWriter.WriteString("roundTripTime", Math.Round(responseMetadata.RoundTripTime, 2) + " ms");
+
+                        jsonWriter.WriteEndObject();
+                    }
+
+                    jsonWriter.WriteString("lastUsedOn", cacheRecordInfo.LastUsedOn);
+                }
+
+                jsonWriter.WriteEndObject();
+            }
+
+            private static void WriteZoneInfoAsJson(AuthZoneInfo zoneInfo, Utf8JsonWriter jsonWriter)
+            {
+                jsonWriter.WriteStartObject();
+
+                jsonWriter.WriteString("name", zoneInfo.Name);
+
+                if (DnsClient.TryConvertDomainNameToUnicode(zoneInfo.Name, out string nameIdn))
+                    jsonWriter.WriteString("nameIdn", nameIdn);
+
+                jsonWriter.WriteString("type", zoneInfo.Type.ToString());
+                jsonWriter.WriteString("lastModified", zoneInfo.LastModified);
+                jsonWriter.WriteBoolean("disabled", zoneInfo.Disabled);
+                jsonWriter.WriteEndObject();
+            }
+
+            private static string[] DecodeCharacterStrings(string text)
+            {
+                string[] characterStrings = text.Split(_newLineSeparator, StringSplitOptions.RemoveEmptyEntries);
+
+                for (int i = 0; i < characterStrings.Length; i++)
+                    characterStrings[i] = Unescape(characterStrings[i]);
+
+                return characterStrings;
+            }
+
+            private static string Unescape(string text)
+            {
+                StringBuilder sb = new StringBuilder(text.Length);
+
+                for (int i = 0, j; i < text.Length; i++)
+                {
+                    char c = text[i];
+                    if (c == '\\')
+                    {
+                        j = i + 1;
+
+                        if (j == text.Length)
+                        {
+                            sb.Append(c);
+                            break;
+                        }
+
+                        char next = text[j];
+                        switch (next)
+                        {
+                            case 'n':
+                                sb.Append('\n');
+                                break;
+
+                            case 'r':
+                                sb.Append('\r');
+                                break;
+
+                            case 't':
+                                sb.Append('\t');
+                                break;
+
+                            case '\\':
+                                sb.Append('\\');
+                                break;
+
+                            default:
+                                sb.Append(c).Append(next);
+                                break;
+                        }
+
+                        i++;
+                    }
+                    else
+                    {
+                        sb.Append(c);
+                    }
+                }
+
+                return sb.ToString();
+            }
+
+            private static string GetSvcbTargetName(DnsResourceRecord svcbRecord)
+            {
+                DnsSVCBRecordData rData = svcbRecord.RDATA as DnsSVCBRecordData;
+
+                if (rData.TargetName.Length > 0)
+                    return rData.TargetName;
+
+                if (rData.SvcPriority == 0)
+                    return null;
+
+                return svcbRecord.Name;
+            }
+
+            private void ResolveSvcbAutoHints(string zoneName, DnsResourceRecord svcbRecord, bool resolveIpv4Hint, bool resolveIpv6Hint, Dictionary<DnsSvcParamKey, DnsSvcParamValue> svcParams, IReadOnlyCollection<DnsResourceRecord> importRecords = null)
+            {
+                string targetName = GetSvcbTargetName(svcbRecord);
+                if (targetName is not null)
+                    ResolveSvcbAutoHints(zoneName, targetName, resolveIpv4Hint, resolveIpv6Hint, svcParams, importRecords);
+            }
+
+            private void ResolveSvcbAutoHints(string zoneName, string targetName, bool resolveIpv4Hint, bool resolveIpv6Hint, Dictionary<DnsSvcParamKey, DnsSvcParamValue> svcParams, IReadOnlyCollection<DnsResourceRecord> importRecords = null)
+            {
+                if (resolveIpv4Hint)
+                {
+                    List<IPAddress> ipv4Hint = new List<IPAddress>();
+
+                    IReadOnlyList<DnsResourceRecord> records = _dnsWebService._dnsServer.AuthZoneManager.GetRecords(zoneName, targetName, DnsResourceRecordType.A);
+
+                    foreach (DnsResourceRecord record in records)
+                    {
+                        if (record.GetAuthGenericRecordInfo().Disabled)
+                            continue;
+
+                        ipv4Hint.Add((record.RDATA as DnsARecordData).Address);
+                    }
+
+                    if (importRecords is not null)
+                    {
+                        foreach (DnsResourceRecord record in importRecords)
+                        {
+                            if (record.Type != DnsResourceRecordType.A)
+                                continue;
+
+                            if (record.Name.Equals(targetName, StringComparison.OrdinalIgnoreCase))
+                            {
+                                IPAddress address = (record.RDATA as DnsARecordData).Address;
+
+                                if (!ipv4Hint.Contains(address))
+                                    ipv4Hint.Add(address);
+                            }
+                        }
+                    }
+
+                    if (ipv4Hint.Count > 0)
+                        svcParams[DnsSvcParamKey.IPv4Hint] = new DnsSvcIPv4HintParamValue(ipv4Hint);
+                    else
+                        svcParams.Remove(DnsSvcParamKey.IPv4Hint);
+                }
+
+                if (resolveIpv6Hint)
+                {
+                    List<IPAddress> ipv6Hint = new List<IPAddress>();
+
+                    IReadOnlyList<DnsResourceRecord> records = _dnsWebService._dnsServer.AuthZoneManager.GetRecords(zoneName, targetName, DnsResourceRecordType.AAAA);
+
+                    foreach (DnsResourceRecord record in records)
+                    {
+                        if (record.GetAuthGenericRecordInfo().Disabled)
+                            continue;
+
+                        ipv6Hint.Add((record.RDATA as DnsAAAARecordData).Address);
+                    }
+
+                    if (importRecords is not null)
+                    {
+                        foreach (DnsResourceRecord record in importRecords)
+                        {
+                            if (record.Type != DnsResourceRecordType.AAAA)
+                                continue;
+
+                            if (record.Name.Equals(targetName, StringComparison.OrdinalIgnoreCase))
+                            {
+                                IPAddress address = (record.RDATA as DnsAAAARecordData).Address;
+
+                                if (!ipv6Hint.Contains(address))
+                                    ipv6Hint.Add(address);
+                            }
+                        }
+                    }
+
+                    if (ipv6Hint.Count > 0)
+                        svcParams[DnsSvcParamKey.IPv6Hint] = new DnsSvcIPv6HintParamValue(ipv6Hint);
+                    else
+                        svcParams.Remove(DnsSvcParamKey.IPv6Hint);
+                }
+            }
+
+            private void UpdateSvcbAutoHints(string zoneName, string targetName, bool resolveIpv4Hint, bool resolveIpv6Hint)
+            {
+                List<DnsResourceRecord> allSvcbRecords = new List<DnsResourceRecord>();
+                _dnsWebService._dnsServer.AuthZoneManager.ListAllZoneRecords(zoneName, [DnsResourceRecordType.SVCB, DnsResourceRecordType.HTTPS], allSvcbRecords);
+
+                foreach (DnsResourceRecord record in allSvcbRecords)
+                {
+                    SVCBRecordInfo info = record.GetAuthSVCBRecordInfo();
+                    if ((info.AutoIpv4Hint && resolveIpv4Hint) || (info.AutoIpv6Hint && resolveIpv6Hint))
+                    {
+                        string scvbTargetName = GetSvcbTargetName(record);
+                        if (targetName.Equals(scvbTargetName, StringComparison.OrdinalIgnoreCase))
+                        {
+                            DnsSVCBRecordData oldRData = record.RDATA as DnsSVCBRecordData;
+
+                            Dictionary<DnsSvcParamKey, DnsSvcParamValue> newSvcParams = new Dictionary<DnsSvcParamKey, DnsSvcParamValue>(oldRData.SvcParams);
+                            ResolveSvcbAutoHints(zoneName, targetName, resolveIpv4Hint, resolveIpv6Hint, newSvcParams);
+
+                            DnsSVCBRecordData newRData = new DnsSVCBRecordData(oldRData.SvcPriority, oldRData.TargetName, newSvcParams);
+                            DnsResourceRecord newRecord = new DnsResourceRecord(record.Name, record.Type, record.Class, record.TTL, newRData) { Tag = record.Tag };
+
+                            _dnsWebService._dnsServer.AuthZoneManager.UpdateRecord(zoneName, record, newRecord);
+                        }
+                    }
+                }
+            }
+
+            private async Task<List<DnsResourceRecord>> ReadRecordsToImportFromAsync(string zoneName, TextReader zoneFile)
+            {
+                List<DnsResourceRecord> records = await ZoneFile.ReadZoneFileFromAsync(zoneFile, zoneName, _dnsWebService._dnsServer.AuthZoneManager.DefaultRecordTtl);
+                List<DnsResourceRecord> newRecords = new List<DnsResourceRecord>(records.Count);
+                DateTime utcNow = DateTime.UtcNow;
+
+                foreach (DnsResourceRecord record in records)
+                {
+                    if (record.Class != DnsClass.IN)
+                        throw new DnsWebServiceException("Cannot import records: only IN class is supported by the DNS server.");
+
+                    if (!AuthZoneManager.DomainBelongsToZone(zoneName, record.Name))
+                    {
+                        switch (record.Type)
+                        {
+                            case DnsResourceRecordType.A:
+                            case DnsResourceRecordType.AAAA:
+                                continue;
+
+                            default:
+                                throw new DnsServerException("Cannot import records: the domain name '" + record.Name + "' does not belong to the zone '" + zoneName + "'.");
+                        }
+                    }
+
+                    bool disabled = false;
+                    string comments = null;
+
+                    if (record.Tag is string tagValue)
+                    {
+                        if (tagValue.TrimStart().StartsWith('{'))
+                        {
+                            try
+                            {
+                                using JsonDocument jsonDocument = JsonDocument.Parse(tagValue);
+                                JsonElement json = jsonDocument.RootElement;
+
+                                if (json.TryGetProperty("disabled", out JsonElement jsonDisabled))
+                                    disabled = jsonDisabled.ValueKind == JsonValueKind.True;
+
+                                if (json.TryGetProperty("comments", out JsonElement jsonComments) && (jsonComments.ValueKind == JsonValueKind.String))
+                                    comments = jsonComments.GetString();
+                            }
+                            catch
+                            {
+                                comments = tagValue.Replace("\\r", "").Replace("\\n", "\n");
+                            }
+                        }
+                        else
+                        {
+                            comments = tagValue.Replace("\\r", "").Replace("\\n", "\n");
+                        }
+                    }
+
+                    switch (record.Type)
+                    {
+                        case DnsResourceRecordType.SOA:
+                        case DnsResourceRecordType.DNSKEY:
+                        case DnsResourceRecordType.RRSIG:
+                        case DnsResourceRecordType.NSEC:
+                        case DnsResourceRecordType.NSEC3:
+                        case DnsResourceRecordType.NSEC3PARAM:
+                            continue;
+
+                        case DnsResourceRecordType.NS:
+                            {
+                                if (record.Tag is string)
+                                {
+                                    NSRecordInfo rrInfo = new NSRecordInfo();
+
+                                    rrInfo.LastModified = utcNow;
+                                    rrInfo.Disabled = disabled;
+                                    rrInfo.Comments = comments;
+
+                                    record.Tag = rrInfo;
+                                }
+
+                                record.SyncGlueRecords(records);
+
+                                newRecords.Add(record);
+                            }
+                            break;
+
+                        case DnsResourceRecordType.SVCB:
+                        case DnsResourceRecordType.HTTPS:
+                            {
+                                if (record.Tag is string)
+                                {
+                                    SVCBRecordInfo rrInfo = new SVCBRecordInfo();
+
+                                    rrInfo.LastModified = utcNow;
+                                    rrInfo.Disabled = disabled;
+                                    rrInfo.Comments = comments;
+
+                                    record.Tag = rrInfo;
+                                }
+
+                                if (record.RDATA is DnsSVCBRecordData rdata && (rdata.AutoIpv4Hint || rdata.AutoIpv6Hint))
+                                {
+                                    if (rdata.AutoIpv4Hint)
+                                        record.GetAuthSVCBRecordInfo().AutoIpv4Hint = true;
+
+                                    if (rdata.AutoIpv6Hint)
+                                        record.GetAuthSVCBRecordInfo().AutoIpv6Hint = true;
+
+                                    Dictionary<DnsSvcParamKey, DnsSvcParamValue> svcParams = new Dictionary<DnsSvcParamKey, DnsSvcParamValue>(rdata.SvcParams);
+                                    DnsResourceRecord newRecord = new DnsResourceRecord(record.Name, record.Type, record.Class, record.TTL, new DnsSVCBRecordData(rdata.SvcPriority, rdata.TargetName, svcParams)) { Tag = record.Tag };
+
+                                    ResolveSvcbAutoHints(zoneName, record, rdata.AutoIpv4Hint, rdata.AutoIpv6Hint, svcParams, records);
+
+                                    newRecords.Add(newRecord);
+                                    break;
+                                }
+
+                                newRecords.Add(record);
+                            }
+                            break;
+
+                        default:
+                            {
+                                if (record.Tag is string)
+                                {
+                                    GenericRecordInfo rrInfo = new GenericRecordInfo();
+
+                                    rrInfo.LastModified = utcNow;
+                                    rrInfo.Disabled = disabled;
+                                    rrInfo.Comments = comments;
+
+                                    record.Tag = rrInfo;
+                                }
+
+                                newRecords.Add(record);
+                            }
+                            break;
+                    }
+                }
+
+                return newRecords;
+            }
+
+            #endregion
+
+            #region public
+
+            public void ListZones(HttpContext context)
+            {
+                User sessionUser = _dnsWebService.GetSessionUser(context);
+
+                if (!_dnsWebService._authManager.IsPermitted(PermissionSection.Zones, sessionUser, PermissionFlag.View))
+                    throw new DnsWebServiceException("Access was denied.");
+
+                HttpRequest request = context.Request;
+
+                string filterName = request.GetQueryOrForm("filterName", null);
+                AuthZoneType filterType = request.GetQueryOrFormEnum("filterType", AuthZoneType.Unknown);
+
+                System.Text.RegularExpressions.Regex filterRegex = null;
+
+                if (filterName is not null)
+                {
+                    string pattern = filterName.Trim().Replace(".", "\\.").Replace("*", ".*").Replace("?", ".{1}");
+
+                    if (filterName.Contains('*'))
+                    {
+                        if (!filterName.StartsWith('*'))
+                            pattern = "^" + pattern;
+
+                        if (!filterName.EndsWith('*'))
+                            pattern += "$";
+                    }
+
+                    filterRegex = new System.Text.RegularExpressions.Regex(pattern, System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Singleline | System.Text.RegularExpressions.RegexOptions.Compiled);
+                }
+
+                Utf8JsonWriter jsonWriter = context.GetCurrentJsonWriter();
+
+                IReadOnlyList<AuthZoneInfo> zoneInfoList = _dnsWebService._dnsServer.AuthZoneManager.GetZones(delegate (AuthZoneInfo zoneInfo)
+                {
+                    if (!_dnsWebService._authManager.IsPermitted(PermissionSection.Zones, zoneInfo.Name, sessionUser, PermissionFlag.View))
+                        return false;
+
+                    if ((filterType != AuthZoneType.Unknown) && (filterType != zoneInfo.Type))
+                        return false;
+
+                    if (filterRegex is not null)
+                    {
+                        if (!filterRegex.IsMatch(zoneInfo.Name) && (!DnsClient.TryConvertDomainNameToUnicode(zoneInfo.Name, out string nameIdn) || !filterRegex.IsMatch(nameIdn)))
+                            return false;
+                    }
+
+                    return true;
+                });
+
+                if (request.TryGetQueryOrForm("pageNumber", int.Parse, out int pageNumber))
+                {
+                    int zonesPerPage = request.GetQueryOrForm("zonesPerPage", int.Parse, 10);
+                    int totalPages;
+                    int totalZones = zoneInfoList.Count;
+
+                    if (totalZones > 0)
+                    {
+                        if (pageNumber == 0)
+                            pageNumber = 1;
+
+                        totalPages = (totalZones / zonesPerPage) + (totalZones % zonesPerPage > 0 ? 1 : 0);
+
+                        if ((pageNumber > totalPages) || (pageNumber < 0))
+                            pageNumber = totalPages;
+
+                        int start = (pageNumber - 1) * zonesPerPage;
+                        int end = Math.Min(start + zonesPerPage, totalZones);
+
+                        List<AuthZoneInfo> zoneInfoPageList = new List<AuthZoneInfo>(end - start);
+
+                        for (int i = start; i < end; i++)
+                            zoneInfoPageList.Add(zoneInfoList[i]);
+
+                        zoneInfoList = zoneInfoPageList;
+                    }
+                    else
+                    {
+                        pageNumber = 0;
+                        totalPages = 0;
+                    }
+
+                    jsonWriter.WriteNumber("pageNumber", pageNumber);
+                    jsonWriter.WriteNumber("totalPages", totalPages);
+                    jsonWriter.WriteNumber("totalZones", totalZones);
+                }
+
+                jsonWriter.WritePropertyName("zones");
+                jsonWriter.WriteStartArray();
+
+                foreach (AuthZoneInfo zoneInfo in zoneInfoList)
+                    WriteZoneInfoAsJson(zoneInfo, jsonWriter);
+
+                jsonWriter.WriteEndArray();
+            }
+
+            public async Task CreateZoneAsync(HttpContext context)
+            {
+                User sessionUser = _dnsWebService.GetSessionUser(context);
+
+                if (!_dnsWebService._authManager.IsPermitted(PermissionSection.Zones, sessionUser, PermissionFlag.Modify))
+                    throw new DnsWebServiceException("Access was denied.");
+
+                HttpRequest request = context.Request;
+
+                string zoneName = request.GetQueryOrFormAlt("zone", "domain");
+
+                if (IPAddress.TryParse(zoneName, out IPAddress ipAddress))
+                {
+                    zoneName = ipAddress.GetReverseDomain().ToLowerInvariant();
+                }
+                else
+                {
+                    if (zoneName.Contains('/'))
+                    {
+                        string[] parts = zoneName.Split('/');
+                        if ((parts.Length == 2) && IPAddress.TryParse(parts[0], out ipAddress) && int.TryParse(parts[1], out int subnetMaskWidth))
+                            zoneName = Zone.GetReverseZone(ipAddress, subnetMaskWidth);
+                    }
+                    else
+                    {
+                        zoneName = zoneName.Trim('.');
+                    }
+
+                    if (DnsClient.IsDomainNameUnicode(zoneName))
+                        zoneName = DnsClient.ConvertDomainNameToAscii(zoneName);
+                }
+
+                AuthZoneType type = request.GetQueryOrFormEnum("type", AuthZoneType.Forwarder);
+                if (type != AuthZoneType.Forwarder)
+                    throw new NotSupportedException("Zone type not supported: only Conditional Forwarder zones can be created.");
+
+                List<DnsResourceRecord> importRecords = null;
+
+                if (request.HasFormContentType && (request.Form.Files.Count > 0))
+                {
+                    using (TextReader zoneFile = new StreamReader(request.Form.Files[0].OpenReadStream()))
+                    {
+                        importRecords = await ReadRecordsToImportFromAsync(zoneName, zoneFile);
+                    }
+                }
+
+                AuthZoneInfo zoneInfo;
+
+                if (request.GetQueryOrForm("initializeForwarder", bool.Parse, true))
+                {
+                    DnsTransportProtocol forwarderProtocol = request.GetQueryOrFormEnum("protocol", DnsTransportProtocol.Udp);
+                    string forwarder = request.GetQueryOrForm("forwarder");
+                    bool dnssecValidation = request.GetQueryOrForm("dnssecValidation", bool.Parse, false);
+                    DnsForwarderRecordProxyType proxyType = request.GetQueryOrFormEnum("proxyType", DnsForwarderRecordProxyType.DefaultProxy);
+
+                    string proxyAddress = null;
+                    ushort proxyPort = 0;
+                    string proxyUsername = null;
+                    string proxyPassword = null;
+
+                    switch (proxyType)
+                    {
+                        case DnsForwarderRecordProxyType.Http:
+                        case DnsForwarderRecordProxyType.Socks5:
+                            proxyAddress = request.GetQueryOrForm("proxyAddress");
+                            proxyPort = request.GetQueryOrForm("proxyPort", ushort.Parse);
+                            proxyUsername = request.QueryOrForm("proxyUsername");
+                            proxyPassword = request.QueryOrForm("proxyPassword");
+                            break;
+                    }
+
+                    if (forwarderProtocol == DnsTransportProtocol.Quic)
+                        DnsServer.ValidateQuicSupport();
+
+                    zoneInfo = _dnsWebService._dnsServer.AuthZoneManager.CreateForwarderZone(zoneName, forwarderProtocol, forwarder, dnssecValidation, proxyType, proxyAddress, proxyPort, proxyUsername, proxyPassword, null);
+                }
+                else
+                {
+                    zoneInfo = _dnsWebService._dnsServer.AuthZoneManager.CreateForwarderZone(zoneName);
+                }
+
+                if (zoneInfo is null)
+                    throw new DnsWebServiceException("Zone already exists: " + zoneName);
+
+                _dnsWebService._authManager.SetPermission(PermissionSection.Zones, zoneInfo.Name, sessionUser, PermissionFlag.ViewModifyDelete);
+                _dnsWebService._authManager.SetPermission(PermissionSection.Zones, zoneInfo.Name, _dnsWebService._authManager.GetGroup(Group.ADMINISTRATORS), PermissionFlag.ViewModifyDelete);
+                _dnsWebService._authManager.SetPermission(PermissionSection.Zones, zoneInfo.Name, _dnsWebService._authManager.GetGroup(Group.DNS_ADMINISTRATORS), PermissionFlag.ViewModifyDelete);
+                _dnsWebService._authManager.SaveConfigFile();
+
+                _dnsWebService._log.Write(_dnsWebService.GetRemoteEndPoint(context), "[" + sessionUser.Username + "] Forwarder zone was created: " + zoneInfo.DisplayName);
+
+                _dnsWebService._dnsServer.CacheZoneManager.DeleteZone(zoneInfo.Name);
+
+                if (importRecords is not null)
+                {
+                    _dnsWebService._dnsServer.AuthZoneManager.DeleteRecords(zoneInfo.Name, zoneInfo.Name, DnsResourceRecordType.FWD);
+                    _dnsWebService._dnsServer.AuthZoneManager.ImportRecords(zoneInfo.Name, importRecords, false, false);
+                }
+
+                Utf8JsonWriter jsonWriter = context.GetCurrentJsonWriter();
+                jsonWriter.WriteString("domain", string.IsNullOrEmpty(zoneInfo.Name) ? "." : zoneInfo.Name);
+            }
+
+            public async Task ImportZoneAsync(HttpContext context)
+            {
+                User sessionUser = _dnsWebService.GetSessionUser(context);
+
+                if (!_dnsWebService._authManager.IsPermitted(PermissionSection.Zones, sessionUser, PermissionFlag.Modify))
+                    throw new DnsWebServiceException("Access was denied.");
+
+                HttpRequest request = context.Request;
+
+                string zoneName = request.GetQueryOrForm("zone").Trim('.');
+                if (DnsClient.IsDomainNameUnicode(zoneName))
+                    zoneName = DnsClient.ConvertDomainNameToAscii(zoneName);
+
+                AuthZoneInfo zoneInfo = _dnsWebService._dnsServer.AuthZoneManager.GetAuthZoneInfo(zoneName);
+                if (zoneInfo is null)
+                    throw new DnsWebServiceException("No such zone was found: " + zoneName);
+
+                if (!_dnsWebService._authManager.IsPermitted(PermissionSection.Zones, zoneInfo.Name, sessionUser, PermissionFlag.Modify))
+                    throw new DnsWebServiceException("Access was denied.");
+
+                bool overwriteRecords = request.GetQueryOrForm("overwrite", bool.Parse, true);
+                bool overwriteZone = request.GetQueryOrForm("overwriteZone", bool.Parse, false);
+
+                TextReader textReader;
+
+                switch (request.ContentType?.ToLowerInvariant())
+                {
+                    case "application/x-www-form-urlencoded":
+                        string zoneRecords = request.GetQueryOrForm("records");
+                        textReader = new StringReader(zoneRecords);
+                        break;
+
+                    case "text/plain":
+                        textReader = new StreamReader(request.Body);
+                        break;
+
+                    default:
+                        if (!request.HasFormContentType || (request.Form.Files.Count == 0))
+                            throw new DnsWebServiceException("The zone file to import is missing.");
+
+                        textReader = new StreamReader(request.Form.Files[0].OpenReadStream());
+                        break;
+                }
+
+                List<DnsResourceRecord> records;
+
+                using (TextReader zoneFile = textReader)
+                {
+                    records = await ReadRecordsToImportFromAsync(zoneInfo.Name, zoneFile);
+                }
+
+                _dnsWebService._dnsServer.AuthZoneManager.ImportRecords(zoneInfo.Name, records, overwriteRecords, overwriteZone);
+
+                _dnsWebService._log.Write(_dnsWebService.GetRemoteEndPoint(context), "[" + sessionUser.Username + "] Total " + records.Count + " record(s) were imported successfully into " + zoneInfo.TypeName + " zone: " + zoneInfo.DisplayName);
+            }
+
+            public async Task ExportZoneAsync(HttpContext context)
+            {
+                User sessionUser = _dnsWebService.GetSessionUser(context);
+
+                if (!_dnsWebService._authManager.IsPermitted(PermissionSection.Zones, sessionUser, PermissionFlag.View))
+                    throw new DnsWebServiceException("Access was denied.");
+
+                HttpRequest request = context.Request;
+
+                string zoneName = request.GetQueryOrForm("zone").Trim('.');
+                if (DnsClient.IsDomainNameUnicode(zoneName))
+                    zoneName = DnsClient.ConvertDomainNameToAscii(zoneName);
+
+                AuthZoneInfo zoneInfo = _dnsWebService._dnsServer.AuthZoneManager.GetAuthZoneInfo(zoneName);
+                if (zoneInfo is null)
+                    throw new DnsWebServiceException("No such zone was found: " + zoneName);
+
+                if (!_dnsWebService._authManager.IsPermitted(PermissionSection.Zones, zoneInfo.Name, sessionUser, PermissionFlag.View))
+                    throw new DnsWebServiceException("Access was denied.");
+
+                List<DnsResourceRecord> records = new List<DnsResourceRecord>();
+
+                _dnsWebService._dnsServer.AuthZoneManager.ListAllZoneRecords(zoneInfo.Name, records);
+
+                foreach (DnsResourceRecord record in records)
+                {
+                    switch (record.Type)
+                    {
+                        case DnsResourceRecordType.SVCB:
+                        case DnsResourceRecordType.HTTPS:
+                            SVCBRecordInfo info = record.GetAuthSVCBRecordInfo();
+
+                            if (info.AutoIpv4Hint)
+                                (record.RDATA as DnsSVCBRecordData).AutoIpv4Hint = true;
+
+                            if (info.AutoIpv6Hint)
+                                (record.RDATA as DnsSVCBRecordData).AutoIpv6Hint = true;
+
+                            break;
+                    }
+                }
+
+                HttpResponse response = context.Response;
+
+                response.ContentType = "text/plain";
+                response.Headers.ContentDisposition = "attachment;filename=" + (zoneInfo.Name.Length == 0 ? "root.zone" : zoneInfo.Name + ".zone");
+
+                await using (StreamWriter sW = new StreamWriter(response.Body))
+                {
+                    await ZoneFile.WriteZoneFileToAsync(sW, zoneInfo.Name, records, delegate (DnsResourceRecord record)
+                    {
+                        if (record.Tag is null)
+                            return null;
+
+                        GenericRecordInfo recordInfo = record.GetAuthGenericRecordInfo();
+
+                        if (recordInfo.Disabled || ((recordInfo.Comments is not null) && recordInfo.Comments.TrimStart().StartsWith('{')))
+                        {
+                            using (MemoryStream mS = new MemoryStream())
+                            {
+                                Utf8JsonWriter jsonWriter = new Utf8JsonWriter(mS);
+
+                                jsonWriter.WriteStartObject();
+                                jsonWriter.WriteBoolean("disabled", recordInfo.Disabled);
+                                jsonWriter.WriteString("comments", recordInfo.Comments);
+                                jsonWriter.WriteEndObject();
+
+                                jsonWriter.Flush();
+
+                                return Encoding.UTF8.GetString(mS.ToArray());
+                            }
+                        }
+
+                        return recordInfo.Comments?.Replace("\r", "").Replace("\n", "\\n");
+                    });
+                }
+            }
+
+            public void CloneZone(HttpContext context)
+            {
+                User sessionUser = _dnsWebService.GetSessionUser(context);
+
+                if (!_dnsWebService._authManager.IsPermitted(PermissionSection.Zones, sessionUser, PermissionFlag.Modify))
+                    throw new DnsWebServiceException("Access was denied.");
+
+                HttpRequest request = context.Request;
+
+                string zoneName = request.GetQueryOrForm("zone").Trim('.');
+                if (DnsClient.IsDomainNameUnicode(zoneName))
+                    zoneName = DnsClient.ConvertDomainNameToAscii(zoneName);
+
+                string sourceZoneName = request.GetQueryOrForm("sourceZone").Trim('.');
+                if (DnsClient.IsDomainNameUnicode(sourceZoneName))
+                    sourceZoneName = DnsClient.ConvertDomainNameToAscii(sourceZoneName);
+
+                AuthZoneInfo sourceZoneInfo = _dnsWebService._dnsServer.AuthZoneManager.GetAuthZoneInfo(sourceZoneName);
+                if (sourceZoneInfo is null)
+                    throw new DnsWebServiceException("No such zone was found: " + sourceZoneName);
+
+                if (!_dnsWebService._authManager.IsPermitted(PermissionSection.Zones, sourceZoneInfo.Name, sessionUser, PermissionFlag.View))
+                    throw new DnsWebServiceException("Access was denied.");
+
+                AuthZoneInfo zoneInfo = _dnsWebService._dnsServer.AuthZoneManager.CloneZone(zoneName, sourceZoneInfo.Name);
+
+                Permission sourceZonePermissions = _dnsWebService._authManager.GetPermission(PermissionSection.Zones, sourceZoneInfo.Name);
+
+                foreach (KeyValuePair<User, PermissionFlag> userPermission in sourceZonePermissions.UserPermissions)
+                    _dnsWebService._authManager.SetPermission(PermissionSection.Zones, zoneInfo.Name, userPermission.Key, userPermission.Value);
+
+                foreach (KeyValuePair<Group, PermissionFlag> groupPermissions in sourceZonePermissions.GroupPermissions)
+                    _dnsWebService._authManager.SetPermission(PermissionSection.Zones, zoneInfo.Name, groupPermissions.Key, groupPermissions.Value);
+
+                _dnsWebService._authManager.SetPermission(PermissionSection.Zones, zoneInfo.Name, sessionUser, PermissionFlag.ViewModifyDelete);
+                _dnsWebService._authManager.SetPermission(PermissionSection.Zones, zoneInfo.Name, _dnsWebService._authManager.GetGroup(Group.ADMINISTRATORS), PermissionFlag.ViewModifyDelete);
+                _dnsWebService._authManager.SetPermission(PermissionSection.Zones, zoneInfo.Name, _dnsWebService._authManager.GetGroup(Group.DNS_ADMINISTRATORS), PermissionFlag.ViewModifyDelete);
+                _dnsWebService._authManager.SaveConfigFile();
+
+                _dnsWebService._log.Write(_dnsWebService.GetRemoteEndPoint(context), "[" + sessionUser.Username + "] " + sourceZoneInfo.TypeName + " zone '" + sourceZoneInfo.DisplayName + "' was cloned as '" + zoneInfo.DisplayName + "' sucessfully.");
+            }
+
+            public void DeleteZone(HttpContext context)
+            {
+                User sessionUser = _dnsWebService.GetSessionUser(context);
+
+                if (!_dnsWebService._authManager.IsPermitted(PermissionSection.Zones, sessionUser, PermissionFlag.Delete))
+                    throw new DnsWebServiceException("Access was denied.");
+
+                if (context.Request.TryGetQueryOrForm("zones", out string strZoneNames))
+                {
+                    string[] zoneNames = strZoneNames.Split(",", StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+                    List<string> deleted = new List<string>(zoneNames.Length);
+                    Dictionary<string, string> failed = new Dictionary<string, string>(zoneNames.Length);
+
+                    foreach (string strZoneName in zoneNames)
+                    {
+                        string zoneName = strZoneName.Trim('.').ToLowerInvariant();
+
+                        try
+                        {
+                            DeleteZone(zoneName);
+                            deleted.Add(zoneName);
+                        }
+                        catch (Exception ex)
+                        {
+                            failed.Add(zoneName, ex.Message);
+                            _dnsWebService._log.Write(_dnsWebService.GetRemoteEndPoint(context), "[" + sessionUser.Username + "] Failed to deleted zone: " + zoneName, ex);
+                        }
+                    }
+
+                    Utf8JsonWriter jsonWriter = context.GetCurrentJsonWriter();
+
+                    jsonWriter.WriteStartArray("deleted");
+
+                    foreach (string zoneName in deleted)
+                        jsonWriter.WriteStringValue(zoneName);
+
+                    jsonWriter.WriteEndArray();
+
+                    jsonWriter.WriteStartObject("failed");
+
+                    foreach (KeyValuePair<string, string> entry in failed)
+                        jsonWriter.WriteString(entry.Key, entry.Value);
+
+                    jsonWriter.WriteEndObject();
+                }
+                else
+                {
+                    string zoneName = context.Request.GetQueryOrFormAlt("zone", "domain").Trim('.');
+
+                    DeleteZone(zoneName);
+                }
+
+                void DeleteZone(string zoneName)
+                {
+                    if (DnsClient.IsDomainNameUnicode(zoneName))
+                        zoneName = DnsClient.ConvertDomainNameToAscii(zoneName);
+
+                    AuthZoneInfo zoneInfo = _dnsWebService._dnsServer.AuthZoneManager.GetAuthZoneInfo(zoneName);
+                    if (zoneInfo is null)
+                        throw new DnsWebServiceException("No such zone was found: " + zoneName);
+
+                    if (!_dnsWebService._authManager.IsPermitted(PermissionSection.Zones, zoneInfo.Name, sessionUser, PermissionFlag.Delete))
+                        throw new DnsWebServiceException("Access was denied.");
+
+                    if (!_dnsWebService._dnsServer.AuthZoneManager.DeleteZone(zoneInfo, true))
+                        throw new DnsWebServiceException("Failed to delete the zone '" + zoneInfo.DisplayName + "': no such zone exists.");
+
+                    _dnsWebService._authManager.RemoveAllPermissions(PermissionSection.Zones, zoneInfo.Name);
+                    _dnsWebService._authManager.SaveConfigFile();
+
+                    _dnsWebService._log.Write(_dnsWebService.GetRemoteEndPoint(context), "[" + sessionUser.Username + "] " + zoneInfo.TypeName + " zone was deleted: " + zoneInfo.DisplayName);
+
+                    _dnsWebService._dnsServer.CacheZoneManager.DeleteZone(zoneInfo.Name);
+                }
+            }
+
+            public void EnableZone(HttpContext context)
+            {
+                User sessionUser = _dnsWebService.GetSessionUser(context);
+
+                if (!_dnsWebService._authManager.IsPermitted(PermissionSection.Zones, sessionUser, PermissionFlag.Modify))
+                    throw new DnsWebServiceException("Access was denied.");
+
+                string zoneName = context.Request.GetQueryOrFormAlt("zone", "domain").Trim('.');
+
+                if (DnsClient.IsDomainNameUnicode(zoneName))
+                    zoneName = DnsClient.ConvertDomainNameToAscii(zoneName);
+
+                AuthZoneInfo zoneInfo = _dnsWebService._dnsServer.AuthZoneManager.GetAuthZoneInfo(zoneName);
+                if (zoneInfo is null)
+                    throw new DnsWebServiceException("No such zone was found: " + zoneName);
+
+                if (!_dnsWebService._authManager.IsPermitted(PermissionSection.Zones, zoneInfo.Name, sessionUser, PermissionFlag.Modify))
+                    throw new DnsWebServiceException("Access was denied.");
+
+                zoneInfo.Disabled = false;
+                _dnsWebService._dnsServer.AuthZoneManager.SaveZoneFile(zoneInfo.Name);
+
+                _dnsWebService._log.Write(_dnsWebService.GetRemoteEndPoint(context), "[" + sessionUser.Username + "] " + zoneInfo.TypeName + " zone was enabled: " + zoneInfo.DisplayName);
+
+                _dnsWebService._dnsServer.CacheZoneManager.DeleteZone(zoneInfo.Name);
+            }
+
+            public void DisableZone(HttpContext context)
+            {
+                User sessionUser = _dnsWebService.GetSessionUser(context);
+
+                if (!_dnsWebService._authManager.IsPermitted(PermissionSection.Zones, sessionUser, PermissionFlag.Modify))
+                    throw new DnsWebServiceException("Access was denied.");
+
+                string zoneName = context.Request.GetQueryOrFormAlt("zone", "domain").Trim('.');
+
+                if (DnsClient.IsDomainNameUnicode(zoneName))
+                    zoneName = DnsClient.ConvertDomainNameToAscii(zoneName);
+
+                AuthZoneInfo zoneInfo = _dnsWebService._dnsServer.AuthZoneManager.GetAuthZoneInfo(zoneName);
+                if (zoneInfo is null)
+                    throw new DnsWebServiceException("No such zone was found: " + zoneName);
+
+                if (!_dnsWebService._authManager.IsPermitted(PermissionSection.Zones, zoneInfo.Name, sessionUser, PermissionFlag.Modify))
+                    throw new DnsWebServiceException("Access was denied.");
+
+                zoneInfo.Disabled = true;
+                _dnsWebService._dnsServer.AuthZoneManager.SaveZoneFile(zoneInfo.Name);
+
+                _dnsWebService._log.Write(_dnsWebService.GetRemoteEndPoint(context), "[" + sessionUser.Username + "] " + zoneInfo.TypeName + " zone was disabled: " + zoneInfo.DisplayName);
+
+                _dnsWebService._dnsServer.CacheZoneManager.DeleteZone(zoneInfo.Name);
+            }
+
+            public void GetZoneOptions(HttpContext context)
+            {
+                User sessionUser = _dnsWebService.GetSessionUser(context);
+
+                if (!_dnsWebService._authManager.IsPermitted(PermissionSection.Zones, sessionUser, PermissionFlag.Modify))
+                    throw new DnsWebServiceException("Access was denied.");
+
+                HttpRequest request = context.Request;
+
+                string zoneName = request.GetQueryOrFormAlt("zone", "domain").Trim('.');
+
+                if (DnsClient.IsDomainNameUnicode(zoneName))
+                    zoneName = DnsClient.ConvertDomainNameToAscii(zoneName);
+
+                AuthZoneInfo zoneInfo = _dnsWebService._dnsServer.AuthZoneManager.GetAuthZoneInfo(zoneName);
+                if (zoneInfo is null)
+                    throw new DnsWebServiceException("No such zone was found: " + zoneName);
+
+                if (!_dnsWebService._authManager.IsPermitted(PermissionSection.Zones, zoneInfo.Name, sessionUser, PermissionFlag.View))
+                    throw new DnsWebServiceException("Access was denied.");
+
+                Utf8JsonWriter jsonWriter = context.GetCurrentJsonWriter();
+
+                jsonWriter.WriteString("name", zoneInfo.Name);
+
+                if (DnsClient.TryConvertDomainNameToUnicode(zoneInfo.Name, out string nameIdn))
+                    jsonWriter.WriteString("nameIdn", nameIdn);
+
+                jsonWriter.WriteString("type", zoneInfo.Type.ToString());
+                jsonWriter.WriteBoolean("disabled", zoneInfo.Disabled);
+
+                jsonWriter.WriteString("queryAccess", zoneInfo.QueryAccess.ToString());
+                jsonWriter.WriteStartArray("queryAccessNetworkACL");
+
+                if (zoneInfo.QueryAccessNetworkACL is not null)
+                {
+                    foreach (NetworkAccessControl nac in zoneInfo.QueryAccessNetworkACL)
+                        jsonWriter.WriteStringValue(nac.ToString());
+                }
+
+                jsonWriter.WriteEndArray();
+            }
+
+            public void SetZoneOptions(HttpContext context)
+            {
+                User sessionUser = _dnsWebService.GetSessionUser(context);
+
+                if (!_dnsWebService._authManager.IsPermitted(PermissionSection.Zones, sessionUser, PermissionFlag.Modify))
+                    throw new DnsWebServiceException("Access was denied.");
+
+                HttpRequest request = context.Request;
+
+                string zoneName = request.GetQueryOrFormAlt("zone", "domain").Trim('.');
+
+                if (DnsClient.IsDomainNameUnicode(zoneName))
+                    zoneName = DnsClient.ConvertDomainNameToAscii(zoneName);
+
+                AuthZoneInfo zoneInfo = _dnsWebService._dnsServer.AuthZoneManager.GetAuthZoneInfo(zoneName);
+                if ((zoneInfo is null) || (zoneInfo.Type != AuthZoneType.Forwarder))
+                    throw new DnsWebServiceException("No such zone was found: " + zoneName);
+
+                if (!_dnsWebService._authManager.IsPermitted(PermissionSection.Zones, zoneInfo.Name, sessionUser, PermissionFlag.Delete))
+                    throw new DnsWebServiceException("Access was denied.");
+
+                if (request.TryGetQueryOrForm("disabled", bool.Parse, out bool disabled))
+                    zoneInfo.Disabled = disabled;
+
+                string queryAccessNetworkACL = request.QueryOrForm("queryAccessNetworkACL");
+                if (queryAccessNetworkACL is not null)
+                {
+                    if ((queryAccessNetworkACL.Length == 0) || queryAccessNetworkACL.Equals("false", StringComparison.OrdinalIgnoreCase))
+                        zoneInfo.QueryAccessNetworkACL = null;
+                    else
+                        zoneInfo.QueryAccessNetworkACL = queryAccessNetworkACL.Split(NetworkAccessControl.Parse, ',');
+                }
+
+                if (request.TryGetQueryOrFormEnum("queryAccess", out AuthZoneQueryAccess queryAccess))
+                    zoneInfo.QueryAccess = queryAccess;
+
+                _dnsWebService._log.Write(_dnsWebService.GetRemoteEndPoint(context), "[" + sessionUser.Username + "] " + zoneInfo.TypeName + " zone options were updated successfully: " + zoneInfo.DisplayName);
+
+                _dnsWebService._dnsServer.AuthZoneManager.SaveZoneFile(zoneInfo.Name);
+            }
+
+            public void AddRecord(HttpContext context)
+            {
+                HttpRequest request = context.Request;
+
+                string domain = request.GetQueryOrForm("domain").Trim('.');
+
+                if (DnsClient.IsDomainNameUnicode(domain))
+                    domain = DnsClient.ConvertDomainNameToAscii(domain);
+
+                string zoneName = request.QueryOrForm("zone");
+                if (string.IsNullOrEmpty(zoneName))
+                {
+                    zoneName = null;
+                }
+                else
+                {
+                    zoneName = zoneName.Trim('.');
+
+                    if (DnsClient.IsDomainNameUnicode(zoneName))
+                        zoneName = DnsClient.ConvertDomainNameToAscii(zoneName);
+                }
+
+                AuthZoneInfo zoneInfo = _dnsWebService._dnsServer.AuthZoneManager.FindAuthZoneInfo(zoneName ?? domain);
+                if (zoneInfo is null)
+                    throw new DnsWebServiceException("No such zone was found: " + domain);
+
+                User sessionUser = _dnsWebService.GetSessionUser(context);
+
+                if (!_dnsWebService._authManager.IsPermitted(PermissionSection.Zones, zoneInfo.Name, sessionUser, PermissionFlag.Modify))
+                    throw new DnsWebServiceException("Access was denied.");
+
+                DnsResourceRecordType type = request.GetQueryOrFormEnum<DnsResourceRecordType>("type");
+
+                uint defaultTtl;
+
+                switch (type)
+                {
+                    case DnsResourceRecordType.NS:
+                        defaultTtl = _dnsWebService._dnsServer.AuthZoneManager.DefaultNsRecordTtl;
+                        break;
+
+                    default:
+                        defaultTtl = _dnsWebService._dnsServer.AuthZoneManager.DefaultRecordTtl;
+                        break;
+                }
+
+                uint ttl = request.GetQueryOrForm("ttl", ZoneFile.ParseTtl, defaultTtl);
+                bool overwrite = request.GetQueryOrForm("overwrite", bool.Parse, false);
+                string comments = request.QueryOrForm("comments");
+                uint expiryTtl = request.GetQueryOrForm("expiryTtl", ZoneFile.ParseTtl, 0u);
+
+                DnsResourceRecord newRecord;
+
+                switch (type)
+                {
+                    case DnsResourceRecordType.A:
+                    case DnsResourceRecordType.AAAA:
+                        {
+                            string strIPAddress = request.GetQueryOrFormAlt("ipAddress", "value");
+                            IPAddress ipAddress;
+
+                            if (strIPAddress.Equals("request-ip-address", StringComparison.Ordinal))
+                                ipAddress = _dnsWebService.GetRemoteEndPoint(context).Address;
+                            else
+                                ipAddress = IPAddress.Parse(strIPAddress);
+
+                            bool ptr = request.GetQueryOrForm("ptr", bool.Parse, false);
+                            if (ptr)
+                            {
+                                string ptrDomain = Zone.GetReverseZone(ipAddress, type == DnsResourceRecordType.A ? 32 : 128);
+
+                                AuthZoneInfo reverseZoneInfo = _dnsWebService._dnsServer.AuthZoneManager.FindAuthZoneInfo(ptrDomain);
+                                if ((reverseZoneInfo is null) || (reverseZoneInfo.Type != AuthZoneType.Forwarder))
+                                    throw new DnsWebServiceException("No Conditional Forwarder reverse zone available to add PTR record.");
+
+                                if (!_dnsWebService._authManager.IsPermitted(PermissionSection.Zones, reverseZoneInfo.Name, sessionUser, PermissionFlag.Modify))
+                                    throw new DnsWebServiceException("Cannot update reverse zone to add PTR record: access was denied.");
+
+                                DnsResourceRecord ptrRecord = new DnsResourceRecord(ptrDomain, DnsResourceRecordType.PTR, DnsClass.IN, ttl, new DnsPTRRecordData(domain));
+                                ptrRecord.GetAuthGenericRecordInfo().LastModified = DateTime.UtcNow;
+                                ptrRecord.GetAuthGenericRecordInfo().ExpiryTtl = expiryTtl;
+
+                                _dnsWebService._dnsServer.AuthZoneManager.SetRecord(reverseZoneInfo.Name, ptrRecord);
+                                _dnsWebService._dnsServer.AuthZoneManager.SaveZoneFile(reverseZoneInfo.Name);
+                            }
+
+                            if (type == DnsResourceRecordType.A)
+                                newRecord = new DnsResourceRecord(domain, type, DnsClass.IN, ttl, new DnsARecordData(ipAddress));
+                            else
+                                newRecord = new DnsResourceRecord(domain, type, DnsClass.IN, ttl, new DnsAAAARecordData(ipAddress));
+                        }
+                        break;
+
+                    case DnsResourceRecordType.NS:
+                        {
+                            string nameServer = request.GetQueryOrFormAlt("nameServer", "value").Trim('.');
+                            string glueAddresses = request.GetQueryOrForm("glue", null);
+
+                            newRecord = new DnsResourceRecord(domain, type, DnsClass.IN, ttl, new DnsNSRecordData(nameServer));
+
+                            if (!string.IsNullOrEmpty(glueAddresses))
+                            {
+                                if (zoneInfo.Name.Equals(domain, StringComparison.OrdinalIgnoreCase) && (nameServer.Equals(domain, StringComparison.OrdinalIgnoreCase) || nameServer.EndsWith("." + domain, StringComparison.OrdinalIgnoreCase)))
+                                    throw new DnsWebServiceException("The zone's own NS records cannot have glue addresses. Please add separate A/AAAA records in the zone instead.");
+
+                                newRecord.SetGlueRecords(glueAddresses);
+                            }
+                        }
+                        break;
+
+                    case DnsResourceRecordType.CNAME:
+                        {
+                            if (!overwrite)
+                            {
+                                IReadOnlyList<DnsResourceRecord> existingRecords = _dnsWebService._dnsServer.AuthZoneManager.GetRecords(zoneInfo.Name, domain, type);
+                                if (existingRecords.Count > 0)
+                                    throw new DnsWebServiceException("Record already exists. Use overwrite option if you wish to overwrite existing record.");
+                            }
+
+                            string cname = request.GetQueryOrFormAlt("cname", "value").Trim('.');
+
+                            if (cname.Equals(domain, StringComparison.OrdinalIgnoreCase))
+                                throw new DnsWebServiceException("CNAME domain name cannot be same as that of the record name.");
+
+                            newRecord = new DnsResourceRecord(domain, type, DnsClass.IN, ttl, new DnsCNAMERecordData(cname));
+
+                            overwrite = true;
+                        }
+                        break;
+
+                    case DnsResourceRecordType.PTR:
+                        {
+                            string ptrName = request.GetQueryOrFormAlt("ptrName", "value").Trim('.');
+
+                            newRecord = new DnsResourceRecord(domain, type, DnsClass.IN, ttl, new DnsPTRRecordData(ptrName));
+                        }
+                        break;
+
+                    case DnsResourceRecordType.MX:
+                        {
+                            ushort preference = request.GetQueryOrForm("preference", ushort.Parse);
+                            string exchange = request.GetQueryOrFormAlt("exchange", "value").Trim('.');
+
+                            newRecord = new DnsResourceRecord(domain, type, DnsClass.IN, ttl, new DnsMXRecordData(preference, exchange));
+                        }
+                        break;
+
+                    case DnsResourceRecordType.TXT:
+                        {
+                            DnsTXTRecordData txtRData;
+
+                            if (request.TryQueryOrFormArray("characterStringsBase64", delegate (string value) { return Convert.FromBase64String(value); }, out ArraySegment<byte>[] characterStrings))
+                            {
+                                txtRData = new DnsTXTRecordData(characterStrings);
+                            }
+                            else
+                            {
+                                string text = request.GetQueryOrFormAlt("text", "value");
+                                bool splitText = request.GetQueryOrForm("splitText", bool.Parse, false);
+
+                                txtRData = splitText ? new DnsTXTRecordData(DecodeCharacterStrings(text)) : new DnsTXTRecordData(text);
+                            }
+
+                            newRecord = new DnsResourceRecord(domain, type, DnsClass.IN, ttl, txtRData);
+                        }
+                        break;
+
+                    case DnsResourceRecordType.RP:
+                        {
+                            string mailbox = request.GetQueryOrForm("mailbox", "").Trim('.');
+                            string txtDomain = request.GetQueryOrForm("txtDomain", "").Trim('.');
+
+                            newRecord = new DnsResourceRecord(domain, type, DnsClass.IN, ttl, new DnsRPRecordData(mailbox, txtDomain));
+                        }
+                        break;
+
+                    case DnsResourceRecordType.SRV:
+                        {
+                            ushort priority = request.GetQueryOrForm("priority", ushort.Parse);
+                            ushort weight = request.GetQueryOrForm("weight", ushort.Parse);
+                            ushort port = request.GetQueryOrForm("port", ushort.Parse);
+                            string target = request.GetQueryOrFormAlt("target", "value").Trim('.');
+
+                            newRecord = new DnsResourceRecord(domain, type, DnsClass.IN, ttl, new DnsSRVRecordData(priority, weight, port, target));
+                        }
+                        break;
+
+                    case DnsResourceRecordType.NAPTR:
+                        {
+                            ushort order = request.GetQueryOrForm("naptrOrder", ushort.Parse);
+                            ushort preference = request.GetQueryOrForm("naptrPreference", ushort.Parse);
+                            string flags = request.GetQueryOrForm("naptrFlags", "");
+                            string services = request.GetQueryOrForm("naptrServices", "");
+                            string regexp = request.GetQueryOrForm("naptrRegexp", "");
+                            string replacement = request.GetQueryOrForm("naptrReplacement", "").Trim('.');
+
+                            newRecord = new DnsResourceRecord(domain, type, DnsClass.IN, ttl, new DnsNAPTRRecordData(order, preference, flags, services, regexp, replacement));
+                        }
+                        break;
+
+                    case DnsResourceRecordType.DNAME:
+                        {
+                            if (!overwrite)
+                            {
+                                IReadOnlyList<DnsResourceRecord> existingRecords = _dnsWebService._dnsServer.AuthZoneManager.GetRecords(zoneInfo.Name, domain, type);
+                                if (existingRecords.Count > 0)
+                                    throw new DnsWebServiceException("Record already exists. Use overwrite option if you wish to overwrite existing record.");
+                            }
+
+                            string dname = request.GetQueryOrFormAlt("dname", "value").Trim('.');
+
+                            if (dname.EndsWith("." + domain, StringComparison.OrdinalIgnoreCase))
+                                throw new DnsWebServiceException("DNAME domain name cannot be a sub domain of the record name.");
+
+                            if (dname.Equals(domain, StringComparison.OrdinalIgnoreCase))
+                                throw new DnsWebServiceException("DNAME domain name cannot be same as that of the record name.");
+
+                            newRecord = new DnsResourceRecord(domain, type, DnsClass.IN, ttl, new DnsDNAMERecordData(dname));
+
+                            overwrite = true;
+                        }
+                        break;
+
+                    case DnsResourceRecordType.DS:
+                        {
+                            ushort keyTag = request.GetQueryOrForm("keyTag", ushort.Parse);
+                            DnssecAlgorithm algorithm = Enum.Parse<DnssecAlgorithm>(request.GetQueryOrForm("algorithm").Replace('-', '_'), true);
+                            DnssecDigestType digestType = Enum.Parse<DnssecDigestType>(request.GetQueryOrForm("digestType").Replace('-', '_'), true);
+                            byte[] digest = request.GetQueryOrFormAlt("digest", "value", Convert.FromHexString);
+
+                            newRecord = new DnsResourceRecord(domain, type, DnsClass.IN, ttl, new DnsDSRecordData(keyTag, algorithm, digestType, digest));
+                        }
+                        break;
+
+                    case DnsResourceRecordType.SSHFP:
+                        {
+                            DnsSSHFPAlgorithm sshfpAlgorithm = request.GetQueryOrFormEnum<DnsSSHFPAlgorithm>("sshfpAlgorithm");
+                            DnsSSHFPFingerprintType sshfpFingerprintType = request.GetQueryOrFormEnum<DnsSSHFPFingerprintType>("sshfpFingerprintType");
+                            byte[] sshfpFingerprint = request.GetQueryOrForm("sshfpFingerprint", Convert.FromHexString);
+
+                            newRecord = new DnsResourceRecord(domain, type, DnsClass.IN, ttl, new DnsSSHFPRecordData(sshfpAlgorithm, sshfpFingerprintType, sshfpFingerprint));
+                        }
+                        break;
+
+                    case DnsResourceRecordType.TLSA:
+                        {
+                            DnsTLSACertificateUsage tlsaCertificateUsage = Enum.Parse<DnsTLSACertificateUsage>(request.GetQueryOrForm("tlsaCertificateUsage").Replace('-', '_'), true);
+                            DnsTLSASelector tlsaSelector = request.GetQueryOrFormEnum<DnsTLSASelector>("tlsaSelector");
+                            DnsTLSAMatchingType tlsaMatchingType = Enum.Parse<DnsTLSAMatchingType>(request.GetQueryOrForm("tlsaMatchingType").Replace('-', '_'), true);
+                            string tlsaCertificateAssociationData = request.GetQueryOrForm("tlsaCertificateAssociationData");
+
+                            newRecord = new DnsResourceRecord(domain, type, DnsClass.IN, ttl, new DnsTLSARecordData(tlsaCertificateUsage, tlsaSelector, tlsaMatchingType, tlsaCertificateAssociationData));
+                        }
+                        break;
+
+                    case DnsResourceRecordType.SVCB:
+                    case DnsResourceRecordType.HTTPS:
+                        {
+                            ushort svcPriority = request.GetQueryOrForm("svcPriority", ushort.Parse);
+                            string targetName = request.GetQueryOrForm("svcTargetName").Trim('.');
+                            string strSvcParams = request.GetQueryOrForm("svcParams");
+                            bool autoIpv4Hint = request.GetQueryOrForm("autoIpv4Hint", bool.Parse, false);
+                            bool autoIpv6Hint = request.GetQueryOrForm("autoIpv6Hint", bool.Parse, false);
+
+                            Dictionary<DnsSvcParamKey, DnsSvcParamValue> svcParams;
+
+                            if (strSvcParams.Equals("false", StringComparison.OrdinalIgnoreCase))
+                            {
+                                svcParams = new Dictionary<DnsSvcParamKey, DnsSvcParamValue>(0);
+                            }
+                            else
+                            {
+                                string[] strSvcParamsParts = strSvcParams.Split('|');
+                                svcParams = new Dictionary<DnsSvcParamKey, DnsSvcParamValue>(strSvcParamsParts.Length / 2);
+
+                                for (int i = 0; i < strSvcParamsParts.Length; i += 2)
+                                {
+                                    DnsSvcParamKey svcParamKey = Enum.Parse<DnsSvcParamKey>(strSvcParamsParts[i].Replace('-', '_'), true);
+                                    DnsSvcParamValue svcParamValue = DnsSvcParamValue.Parse(svcParamKey, strSvcParamsParts[i + 1]);
+
+                                    svcParams.Add(svcParamKey, svcParamValue);
+                                }
+                            }
+
+                            newRecord = new DnsResourceRecord(domain, type, DnsClass.IN, ttl, new DnsSVCBRecordData(svcPriority, targetName, svcParams));
+
+                            if (autoIpv4Hint)
+                                newRecord.GetAuthSVCBRecordInfo().AutoIpv4Hint = true;
+
+                            if (autoIpv6Hint)
+                                newRecord.GetAuthSVCBRecordInfo().AutoIpv6Hint = true;
+
+                            if (autoIpv4Hint || autoIpv6Hint)
+                                ResolveSvcbAutoHints(zoneInfo.Name, newRecord, autoIpv4Hint, autoIpv6Hint, svcParams);
+                        }
+                        break;
+
+                    case DnsResourceRecordType.URI:
+                        {
+                            ushort priority = request.GetQueryOrForm("uriPriority", ushort.Parse);
+                            ushort weight = request.GetQueryOrForm("uriWeight", ushort.Parse);
+                            Uri uri = request.GetQueryOrForm("uri", delegate (string value) { return new Uri(value); });
+
+                            newRecord = new DnsResourceRecord(domain, type, DnsClass.IN, ttl, new DnsURIRecordData(priority, weight, uri));
+                        }
+                        break;
+
+                    case DnsResourceRecordType.CAA:
+                        {
+                            byte flags = request.GetQueryOrForm("flags", byte.Parse);
+                            string tag = request.GetQueryOrForm("tag");
+                            string value = request.GetQueryOrForm("value");
+
+                            newRecord = new DnsResourceRecord(domain, type, DnsClass.IN, ttl, new DnsCAARecordData(flags, tag, value));
+                        }
+                        break;
+
+                    case DnsResourceRecordType.ANAME:
+                        {
+                            string aname = request.GetQueryOrFormAlt("aname", "value").Trim('.');
+
+                            newRecord = new DnsResourceRecord(domain, type, DnsClass.IN, ttl, new DnsANAMERecordData(aname));
+                        }
+                        break;
+
+                    case DnsResourceRecordType.FWD:
+                        {
+                            DnsTransportProtocol protocol = request.GetQueryOrFormEnum("protocol", DnsTransportProtocol.Udp);
+                            string forwarder = request.GetQueryOrFormAlt("forwarder", "value");
+                            bool dnssecValidation = request.GetQueryOrForm("dnssecValidation", bool.Parse, false);
+
+                            DnsForwarderRecordProxyType proxyType = DnsForwarderRecordProxyType.DefaultProxy;
+                            string proxyAddress = null;
+                            ushort proxyPort = 0;
+                            string proxyUsername = null;
+                            string proxyPassword = null;
+
+                            if (!forwarder.Equals("this-server", StringComparison.Ordinal))
+                            {
+                                proxyType = request.GetQueryOrFormEnum("proxyType", DnsForwarderRecordProxyType.DefaultProxy);
+                                switch (proxyType)
+                                {
+                                    case DnsForwarderRecordProxyType.Http:
+                                    case DnsForwarderRecordProxyType.Socks5:
+                                        proxyAddress = request.GetQueryOrForm("proxyAddress");
+                                        proxyPort = request.GetQueryOrForm("proxyPort", ushort.Parse);
+                                        proxyUsername = request.QueryOrForm("proxyUsername");
+                                        proxyPassword = request.QueryOrForm("proxyPassword");
+                                        break;
+                                }
+                            }
+
+                            byte priority = request.GetQueryOrForm("forwarderPriority", byte.Parse, byte.MinValue);
+
+                            if (protocol == DnsTransportProtocol.Quic)
+                                DnsServer.ValidateQuicSupport();
+
+                            newRecord = new DnsResourceRecord(domain, type, DnsClass.IN, 0, new DnsForwarderRecordData(protocol, forwarder, dnssecValidation, proxyType, proxyAddress, proxyPort, proxyUsername, proxyPassword, priority));
+                        }
+                        break;
+
+                    case DnsResourceRecordType.APP:
+                        {
+                            if (!overwrite)
+                            {
+                                IReadOnlyList<DnsResourceRecord> existingRecords = _dnsWebService._dnsServer.AuthZoneManager.GetRecords(zoneInfo.Name, domain, type);
+                                if (existingRecords.Count > 0)
+                                    throw new DnsWebServiceException("Record already exists. Use overwrite option if you wish to overwrite existing record.");
+                            }
+
+                            string appName = request.GetQueryOrFormAlt("appName", "value");
+                            string classPath = request.GetQueryOrForm("classPath");
+                            string recordData = request.GetQueryOrForm("recordData", "");
+
+                            newRecord = new DnsResourceRecord(domain, type, DnsClass.IN, ttl, new DnsApplicationRecordData(appName, classPath, recordData));
+
+                            overwrite = true;
+                        }
+                        break;
+
+                    default:
+                        {
+                            string strRData = request.GetQueryOrForm("rdata");
+
+                            byte[] rdata;
+
+                            if (strRData.Contains(':'))
+                                rdata = strRData.ParseColonHexString();
+                            else
+                                rdata = Convert.FromHexString(strRData);
+
+                            newRecord = new DnsResourceRecord(domain, type, DnsClass.IN, ttl, DnsResourceRecord.ReadRecordDataFrom(type, rdata));
+                        }
+                        break;
+                }
+
+                GenericRecordInfo recordInfo = newRecord.GetAuthGenericRecordInfo();
+
+                recordInfo.LastModified = DateTime.UtcNow;
+                recordInfo.ExpiryTtl = expiryTtl;
+
+                if (!string.IsNullOrEmpty(comments))
+                    recordInfo.Comments = comments;
+
+                if (overwrite)
+                {
+                    _dnsWebService._dnsServer.AuthZoneManager.SetRecord(zoneInfo.Name, newRecord);
+                }
+                else
+                {
+                    if (!_dnsWebService._dnsServer.AuthZoneManager.AddRecord(zoneInfo.Name, newRecord))
+                        throw new DnsWebServiceException("Cannot add record: record already exists.");
+                }
+
+                if ((type == DnsResourceRecordType.A) || (type == DnsResourceRecordType.AAAA))
+                {
+                    bool updateSvcbHints = request.GetQueryOrForm("updateSvcbHints", bool.Parse, false);
+                    if (updateSvcbHints)
+                        UpdateSvcbAutoHints(zoneInfo.Name, domain, type == DnsResourceRecordType.A, type == DnsResourceRecordType.AAAA);
+                }
+
+                _dnsWebService._log.Write(_dnsWebService.GetRemoteEndPoint(context), "[" + sessionUser.Username + "] New record was added to " + zoneInfo.TypeName + " zone '" + zoneInfo.DisplayName + "' successfully {record: " + newRecord.ToString() + "}");
+
+                _dnsWebService._dnsServer.AuthZoneManager.SaveZoneFile(zoneInfo.Name);
+
+                Utf8JsonWriter jsonWriter = context.GetCurrentJsonWriter();
+
+                jsonWriter.WritePropertyName("zone");
+                WriteZoneInfoAsJson(zoneInfo, jsonWriter);
+
+                jsonWriter.WritePropertyName("addedRecord");
+                WriteRecordAsJson(newRecord, jsonWriter, true);
+            }
+
+            public void GetRecords(HttpContext context)
+            {
+                HttpRequest request = context.Request;
+
+                string domain = request.GetQueryOrForm("domain").Trim('.');
+
+                if (DnsClient.IsDomainNameUnicode(domain))
+                    domain = DnsClient.ConvertDomainNameToAscii(domain);
+
+                string zoneName = request.QueryOrForm("zone");
+                if (string.IsNullOrEmpty(zoneName))
+                {
+                    zoneName = null;
+                }
+                else
+                {
+                    zoneName = zoneName.Trim('.');
+
+                    if (DnsClient.IsDomainNameUnicode(zoneName))
+                        zoneName = DnsClient.ConvertDomainNameToAscii(zoneName);
+                }
+
+                AuthZoneInfo zoneInfo = _dnsWebService._dnsServer.AuthZoneManager.FindAuthZoneInfo(zoneName ?? domain);
+                if (zoneInfo is null)
+                    throw new DnsWebServiceException("No such zone was found: " + domain);
+
+                User sessionUser = _dnsWebService.GetSessionUser(context);
+
+                if (!_dnsWebService._authManager.IsPermitted(PermissionSection.Zones, zoneInfo.Name, sessionUser, PermissionFlag.View))
+                    throw new DnsWebServiceException("Access was denied.");
+
+                bool listZone = request.GetQueryOrForm("listZone", bool.Parse, false);
+
+                List<DnsResourceRecord> records = new List<DnsResourceRecord>();
+
+                if (listZone)
+                    _dnsWebService._dnsServer.AuthZoneManager.ListAllZoneRecords(zoneInfo.Name, records);
+                else
+                    _dnsWebService._dnsServer.AuthZoneManager.ListAllRecords(zoneInfo.Name, domain, records);
+
+                Utf8JsonWriter jsonWriter = context.GetCurrentJsonWriter();
+
+                jsonWriter.WritePropertyName("zone");
+                WriteZoneInfoAsJson(zoneInfo, jsonWriter);
+
+                WriteRecordsAsJson(records, jsonWriter, true);
+            }
+
+            public void DeleteRecord(HttpContext context)
+            {
+                HttpRequest request = context.Request;
+
+                string domain = request.GetQueryOrForm("domain").Trim('.');
+
+                if (DnsClient.IsDomainNameUnicode(domain))
+                    domain = DnsClient.ConvertDomainNameToAscii(domain);
+
+                string zoneName = request.QueryOrForm("zone");
+                if (string.IsNullOrEmpty(zoneName))
+                {
+                    zoneName = null;
+                }
+                else
+                {
+                    zoneName = zoneName.Trim('.');
+
+                    if (DnsClient.IsDomainNameUnicode(zoneName))
+                        zoneName = DnsClient.ConvertDomainNameToAscii(zoneName);
+                }
+
+                AuthZoneInfo zoneInfo = _dnsWebService._dnsServer.AuthZoneManager.FindAuthZoneInfo(zoneName ?? domain);
+                if (zoneInfo is null)
+                    throw new DnsWebServiceException("No such zone was found: " + domain);
+
+                User sessionUser = _dnsWebService.GetSessionUser(context);
+
+                if (!_dnsWebService._authManager.IsPermitted(PermissionSection.Zones, zoneInfo.Name, sessionUser, PermissionFlag.Delete))
+                    throw new DnsWebServiceException("Access was denied.");
+
+                DnsResourceRecordType type = request.GetQueryOrFormEnum<DnsResourceRecordType>("type");
+                switch (type)
+                {
+                    case DnsResourceRecordType.A:
+                    case DnsResourceRecordType.AAAA:
+                        {
+                            IPAddress ipAddress = IPAddress.Parse(request.GetQueryOrFormAlt("ipAddress", "value"));
+
+                            if (type == DnsResourceRecordType.A)
+                            {
+                                if (!_dnsWebService._dnsServer.AuthZoneManager.DeleteRecord(zoneInfo.Name, domain, type, new DnsARecordData(ipAddress)))
+                                    throw new DnsWebServiceException("Cannot delete record: no such record exists.");
+                            }
+                            else
+                            {
+                                if (!_dnsWebService._dnsServer.AuthZoneManager.DeleteRecord(zoneInfo.Name, domain, type, new DnsAAAARecordData(ipAddress)))
+                                    throw new DnsWebServiceException("Cannot delete record: no such record exists.");
+                            }
+
+                            string ptrDomain = Zone.GetReverseZone(ipAddress, type == DnsResourceRecordType.A ? 32 : 128);
+                            AuthZoneInfo reverseZoneInfo = _dnsWebService._dnsServer.AuthZoneManager.FindAuthZoneInfo(ptrDomain);
+                            if ((reverseZoneInfo is not null) && ((reverseZoneInfo.Type == AuthZoneType.Primary) || (reverseZoneInfo.Type == AuthZoneType.Forwarder)))
+                            {
+                                IReadOnlyList<DnsResourceRecord> ptrRecords = _dnsWebService._dnsServer.AuthZoneManager.GetRecords(reverseZoneInfo.Name, ptrDomain, DnsResourceRecordType.PTR);
+                                if (ptrRecords.Count > 0)
+                                {
+                                    foreach (DnsResourceRecord ptrRecord in ptrRecords)
+                                    {
+                                        if ((ptrRecord.RDATA as DnsPTRRecordData).Domain.Equals(domain, StringComparison.OrdinalIgnoreCase))
+                                        {
+                                            if (_dnsWebService._authManager.IsPermitted(PermissionSection.Zones, reverseZoneInfo.Name, sessionUser, PermissionFlag.Delete))
+                                            {
+                                                _dnsWebService._dnsServer.AuthZoneManager.DeleteRecord(reverseZoneInfo.Name, ptrDomain, DnsResourceRecordType.PTR, ptrRecord.RDATA);
+                                                _dnsWebService._dnsServer.AuthZoneManager.SaveZoneFile(reverseZoneInfo.Name);
+                                            }
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
+
+                            bool updateSvcbHints = request.GetQueryOrForm("updateSvcbHints", bool.Parse, false);
+                            if (updateSvcbHints)
+                                UpdateSvcbAutoHints(zoneInfo.Name, domain, type == DnsResourceRecordType.A, type == DnsResourceRecordType.AAAA);
+                        }
+                        break;
+
+                    case DnsResourceRecordType.NS:
+                        {
+                            string nameServer = request.GetQueryOrFormAlt("nameServer", "value").Trim('.');
+
+                            if (!_dnsWebService._dnsServer.AuthZoneManager.DeleteRecord(zoneInfo.Name, domain, type, new DnsNSRecordData(nameServer, false)))
+                                throw new DnsWebServiceException("Cannot delete record: no such record exists.");
+                        }
+                        break;
+
+                    case DnsResourceRecordType.CNAME:
+                        if (!_dnsWebService._dnsServer.AuthZoneManager.DeleteRecords(zoneInfo.Name, domain, type))
+                            throw new DnsWebServiceException("Cannot delete record: no such record exists.");
+
+                        break;
+
+                    case DnsResourceRecordType.PTR:
+                        {
+                            string ptrName = request.GetQueryOrFormAlt("ptrName", "value").Trim('.');
+
+                            if (!_dnsWebService._dnsServer.AuthZoneManager.DeleteRecord(zoneInfo.Name, domain, type, new DnsPTRRecordData(ptrName)))
+                                throw new DnsWebServiceException("Cannot delete record: no such record exists.");
+                        }
+                        break;
+
+                    case DnsResourceRecordType.MX:
+                        {
+                            ushort preference = request.GetQueryOrForm("preference", ushort.Parse);
+                            string exchange = request.GetQueryOrFormAlt("exchange", "value").Trim('.');
+
+                            if (!_dnsWebService._dnsServer.AuthZoneManager.DeleteRecord(zoneInfo.Name, domain, type, new DnsMXRecordData(preference, exchange)))
+                                throw new DnsWebServiceException("Cannot delete record: no such record exists.");
+                        }
+                        break;
+
+                    case DnsResourceRecordType.TXT:
+                        {
+                            DnsTXTRecordData txtRData;
+
+                            if (request.TryQueryOrFormArray("characterStringsBase64", delegate (string value) { return Convert.FromBase64String(value); }, out ArraySegment<byte>[] characterStrings))
+                            {
+                                txtRData = new DnsTXTRecordData(characterStrings);
+                            }
+                            else
+                            {
+                                string text = request.GetQueryOrFormAlt("text", "value");
+                                bool splitText = request.GetQueryOrForm("splitText", bool.Parse, false);
+
+                                txtRData = splitText ? new DnsTXTRecordData(DecodeCharacterStrings(text)) : new DnsTXTRecordData(text);
+                            }
+
+                            if (!_dnsWebService._dnsServer.AuthZoneManager.DeleteRecord(zoneInfo.Name, domain, type, txtRData))
+                                throw new DnsWebServiceException("Cannot delete record: no such record exists.");
+                        }
+                        break;
+
+                    case DnsResourceRecordType.RP:
+                        {
+                            string mailbox = request.GetQueryOrForm("mailbox", "").Trim('.');
+                            string txtDomain = request.GetQueryOrForm("txtDomain", "").Trim('.');
+
+                            if (!_dnsWebService._dnsServer.AuthZoneManager.DeleteRecord(zoneInfo.Name, domain, type, new DnsRPRecordData(mailbox, txtDomain)))
+                                throw new DnsWebServiceException("Cannot delete record: no such record exists.");
+                        }
+                        break;
+
+                    case DnsResourceRecordType.SRV:
+                        {
+                            ushort priority = request.GetQueryOrForm("priority", ushort.Parse);
+                            ushort weight = request.GetQueryOrForm("weight", ushort.Parse);
+                            ushort port = request.GetQueryOrForm("port", ushort.Parse);
+                            string target = request.GetQueryOrFormAlt("target", "value").Trim('.');
+
+                            if (!_dnsWebService._dnsServer.AuthZoneManager.DeleteRecord(zoneInfo.Name, domain, type, new DnsSRVRecordData(priority, weight, port, target)))
+                                throw new DnsWebServiceException("Cannot delete record: no such record exists.");
+                        }
+                        break;
+
+                    case DnsResourceRecordType.NAPTR:
+                        {
+                            ushort order = request.GetQueryOrForm("naptrOrder", ushort.Parse);
+                            ushort preference = request.GetQueryOrForm("naptrPreference", ushort.Parse);
+                            string flags = request.GetQueryOrForm("naptrFlags", "");
+                            string services = request.GetQueryOrForm("naptrServices", "");
+                            string regexp = request.GetQueryOrForm("naptrRegexp", "");
+                            string replacement = request.GetQueryOrForm("naptrReplacement", "").Trim('.');
+
+                            if (!_dnsWebService._dnsServer.AuthZoneManager.DeleteRecord(zoneInfo.Name, domain, type, new DnsNAPTRRecordData(order, preference, flags, services, regexp, replacement)))
+                                throw new DnsWebServiceException("Cannot delete record: no such record exists.");
+                        }
+                        break;
+
+                    case DnsResourceRecordType.DNAME:
+                        if (!_dnsWebService._dnsServer.AuthZoneManager.DeleteRecords(zoneInfo.Name, domain, type))
+                            throw new DnsWebServiceException("Cannot delete record: no such record exists.");
+
+                        break;
+
+                    case DnsResourceRecordType.DS:
+                        {
+                            ushort keyTag = request.GetQueryOrForm("keyTag", ushort.Parse);
+                            DnssecAlgorithm algorithm = Enum.Parse<DnssecAlgorithm>(request.GetQueryOrForm("algorithm").Replace('-', '_'), true);
+                            DnssecDigestType digestType = Enum.Parse<DnssecDigestType>(request.GetQueryOrForm("digestType").Replace('-', '_'), true);
+                            byte[] digest = Convert.FromHexString(request.GetQueryOrFormAlt("digest", "value"));
+
+                            if (!_dnsWebService._dnsServer.AuthZoneManager.DeleteRecord(zoneInfo.Name, domain, type, new DnsDSRecordData(keyTag, algorithm, digestType, digest)))
+                                throw new DnsWebServiceException("Cannot delete record: no such record exists.");
+                        }
+                        break;
+
+                    case DnsResourceRecordType.SSHFP:
+                        {
+                            DnsSSHFPAlgorithm sshfpAlgorithm = request.GetQueryOrFormEnum<DnsSSHFPAlgorithm>("sshfpAlgorithm");
+                            DnsSSHFPFingerprintType sshfpFingerprintType = request.GetQueryOrFormEnum<DnsSSHFPFingerprintType>("sshfpFingerprintType");
+                            byte[] sshfpFingerprint = request.GetQueryOrForm("sshfpFingerprint", Convert.FromHexString);
+
+                            if (!_dnsWebService._dnsServer.AuthZoneManager.DeleteRecord(zoneInfo.Name, domain, type, new DnsSSHFPRecordData(sshfpAlgorithm, sshfpFingerprintType, sshfpFingerprint)))
+                                throw new DnsWebServiceException("Cannot delete record: no such record exists.");
+                        }
+                        break;
+
+                    case DnsResourceRecordType.TLSA:
+                        {
+                            DnsTLSACertificateUsage tlsaCertificateUsage = Enum.Parse<DnsTLSACertificateUsage>(request.GetQueryOrForm("tlsaCertificateUsage").Replace('-', '_'), true);
+                            DnsTLSASelector tlsaSelector = request.GetQueryOrFormEnum<DnsTLSASelector>("tlsaSelector");
+                            DnsTLSAMatchingType tlsaMatchingType = Enum.Parse<DnsTLSAMatchingType>(request.GetQueryOrForm("tlsaMatchingType").Replace('-', '_'), true);
+                            string tlsaCertificateAssociationData = request.GetQueryOrForm("tlsaCertificateAssociationData");
+
+                            if (!_dnsWebService._dnsServer.AuthZoneManager.DeleteRecord(zoneInfo.Name, domain, type, new DnsTLSARecordData(tlsaCertificateUsage, tlsaSelector, tlsaMatchingType, tlsaCertificateAssociationData)))
+                                throw new DnsWebServiceException("Cannot delete record: no such record exists.");
+                        }
+                        break;
+
+                    case DnsResourceRecordType.SVCB:
+                    case DnsResourceRecordType.HTTPS:
+                        {
+                            ushort svcPriority = request.GetQueryOrForm("svcPriority", ushort.Parse);
+                            string targetName = request.GetQueryOrForm("svcTargetName").Trim('.');
+                            string strSvcParams = request.GetQueryOrForm("svcParams");
+
+                            Dictionary<DnsSvcParamKey, DnsSvcParamValue> svcParams;
+
+                            if (strSvcParams.Equals("false", StringComparison.OrdinalIgnoreCase))
+                            {
+                                svcParams = new Dictionary<DnsSvcParamKey, DnsSvcParamValue>(0);
+                            }
+                            else
+                            {
+                                string[] strSvcParamsParts = strSvcParams.Split('|');
+                                svcParams = new Dictionary<DnsSvcParamKey, DnsSvcParamValue>(strSvcParamsParts.Length / 2);
+
+                                for (int i = 0; i < strSvcParamsParts.Length; i += 2)
+                                {
+                                    DnsSvcParamKey svcParamKey = Enum.Parse<DnsSvcParamKey>(strSvcParamsParts[i].Replace('-', '_'), true);
+                                    DnsSvcParamValue svcParamValue = DnsSvcParamValue.Parse(svcParamKey, strSvcParamsParts[i + 1]);
+
+                                    svcParams.Add(svcParamKey, svcParamValue);
+                                }
+                            }
+
+                            if (!_dnsWebService._dnsServer.AuthZoneManager.DeleteRecord(zoneInfo.Name, domain, type, new DnsSVCBRecordData(svcPriority, targetName, svcParams)))
+                                throw new DnsWebServiceException("Cannot delete record: no such record exists.");
+                        }
+                        break;
+
+                    case DnsResourceRecordType.URI:
+                        {
+                            ushort priority = request.GetQueryOrForm("uriPriority", ushort.Parse);
+                            ushort weight = request.GetQueryOrForm("uriWeight", ushort.Parse);
+                            Uri uri = request.GetQueryOrForm("uri", delegate (string value) { return new Uri(value); });
+
+                            if (!_dnsWebService._dnsServer.AuthZoneManager.DeleteRecord(zoneInfo.Name, domain, type, new DnsURIRecordData(priority, weight, uri)))
+                                throw new DnsWebServiceException("Cannot delete record: no such record exists.");
+                        }
+                        break;
+
+                    case DnsResourceRecordType.CAA:
+                        {
+                            byte flags = request.GetQueryOrForm("flags", byte.Parse);
+                            string tag = request.GetQueryOrForm("tag");
+                            string value = request.GetQueryOrForm("value");
+
+                            if (!_dnsWebService._dnsServer.AuthZoneManager.DeleteRecord(zoneInfo.Name, domain, type, new DnsCAARecordData(flags, tag, value)))
+                                throw new DnsWebServiceException("Cannot delete record: no such record exists.");
+                        }
+                        break;
+
+                    case DnsResourceRecordType.ANAME:
+                        {
+                            string aname = request.GetQueryOrFormAlt("aname", "value").Trim('.');
+
+                            if (!_dnsWebService._dnsServer.AuthZoneManager.DeleteRecord(zoneInfo.Name, domain, type, new DnsANAMERecordData(aname)))
+                                throw new DnsWebServiceException("Cannot delete record: no such record exists.");
+                        }
+                        break;
+
+                    case DnsResourceRecordType.FWD:
+                        {
+                            DnsTransportProtocol protocol = request.GetQueryOrFormEnum("protocol", DnsTransportProtocol.Udp);
+                            string forwarder = request.GetQueryOrFormAlt("forwarder", "value");
+
+                            if (!_dnsWebService._dnsServer.AuthZoneManager.DeleteRecord(zoneInfo.Name, domain, type, DnsForwarderRecordData.CreatePartialRecordData(protocol, forwarder)))
+                                throw new DnsWebServiceException("Cannot delete record: no such record exists.");
+                        }
+                        break;
+
+                    case DnsResourceRecordType.APP:
+                        if (!_dnsWebService._dnsServer.AuthZoneManager.DeleteRecords(zoneInfo.Name, domain, type))
+                            throw new DnsWebServiceException("Cannot delete record: no such record exists.");
+
+                        break;
+
+                    default:
+                        {
+                            string strRData = request.GetQueryOrForm("rdata", string.Empty);
+
+                            byte[] rdata;
+
+                            if (strRData.Contains(':'))
+                                rdata = strRData.ParseColonHexString();
+                            else
+                                rdata = Convert.FromHexString(strRData);
+
+                            if (!_dnsWebService._dnsServer.AuthZoneManager.DeleteRecord(zoneInfo.Name, domain, type, new DnsUnknownRecordData(rdata)))
+                                throw new DnsWebServiceException("Cannot delete record: no such record exists.");
+                        }
+                        break;
+                }
+
+                _dnsWebService._log.Write(_dnsWebService.GetRemoteEndPoint(context), "[" + sessionUser.Username + "] Record was deleted from " + zoneInfo.TypeName + " zone '" + zoneInfo.DisplayName + "' successfully {domain: " + domain + "; type: " + type + ";}");
+
+                _dnsWebService._dnsServer.AuthZoneManager.SaveZoneFile(zoneInfo.Name);
+            }
+
+            public void UpdateRecord(HttpContext context)
+            {
+                HttpRequest request = context.Request;
+
+                string domain = request.GetQueryOrForm("domain").Trim('.');
+
+                if (DnsClient.IsDomainNameUnicode(domain))
+                    domain = DnsClient.ConvertDomainNameToAscii(domain);
+
+                string zoneName = request.QueryOrForm("zone");
+                if (string.IsNullOrEmpty(zoneName))
+                {
+                    zoneName = null;
+                }
+                else
+                {
+                    zoneName = zoneName.Trim('.');
+
+                    if (DnsClient.IsDomainNameUnicode(zoneName))
+                        zoneName = DnsClient.ConvertDomainNameToAscii(zoneName);
+                }
+
+                AuthZoneInfo zoneInfo = _dnsWebService._dnsServer.AuthZoneManager.FindAuthZoneInfo(zoneName ?? domain);
+                if (zoneInfo is null)
+                    throw new DnsWebServiceException("No such zone was found: " + domain);
+
+                User sessionUser = _dnsWebService.GetSessionUser(context);
+
+                if (!_dnsWebService._authManager.IsPermitted(PermissionSection.Zones, zoneInfo.Name, sessionUser, PermissionFlag.Modify))
+                    throw new DnsWebServiceException("Access was denied.");
+
+                string newDomain = request.GetQueryOrForm("newDomain", domain).Trim('.');
+
+                DnsResourceRecordType type = request.GetQueryOrFormEnum<DnsResourceRecordType>("type");
+
+                uint defaultTtl;
+
+                switch (type)
+                {
+                    case DnsResourceRecordType.NS:
+                        defaultTtl = _dnsWebService._dnsServer.AuthZoneManager.DefaultNsRecordTtl;
+                        break;
+
+                    case DnsResourceRecordType.SOA:
+                        defaultTtl = _dnsWebService._dnsServer.AuthZoneManager.DefaultSoaRecordTtl;
+                        break;
+
+                    default:
+                        defaultTtl = _dnsWebService._dnsServer.AuthZoneManager.DefaultRecordTtl;
+                        break;
+                }
+
+                uint ttl = request.GetQueryOrForm("ttl", ZoneFile.ParseTtl, defaultTtl);
+
+                bool disable = request.GetQueryOrForm("disable", bool.Parse, false);
+                string comments = request.QueryOrForm("comments");
+                uint expiryTtl = request.GetQueryOrForm("expiryTtl", ZoneFile.ParseTtl, 0u);
+
+                DnsResourceRecord oldRecord = null;
+                DnsResourceRecord newRecord;
+
+                switch (type)
+                {
+                    case DnsResourceRecordType.A:
+                    case DnsResourceRecordType.AAAA:
+                        {
+                            IPAddress ipAddress = IPAddress.Parse(request.GetQueryOrFormAlt("ipAddress", "value"));
+                            IPAddress newIpAddress = IPAddress.Parse(request.GetQueryOrFormAlt("newIpAddress", "newValue", ipAddress.ToString()));
+
+                            bool ptr = request.GetQueryOrForm("ptr", bool.Parse, false);
+                            if (ptr)
+                            {
+                                string newPtrDomain = Zone.GetReverseZone(newIpAddress, type == DnsResourceRecordType.A ? 32 : 128);
+
+                                AuthZoneInfo newReverseZoneInfo = _dnsWebService._dnsServer.AuthZoneManager.FindAuthZoneInfo(newPtrDomain);
+                                if ((newReverseZoneInfo is null) || (newReverseZoneInfo.Type != AuthZoneType.Forwarder))
+                                    throw new DnsWebServiceException("No Conditional Forwarder reverse zone available to add PTR record.");
+
+                                if (!_dnsWebService._authManager.IsPermitted(PermissionSection.Zones, newReverseZoneInfo.Name, sessionUser, PermissionFlag.Modify))
+                                    throw new DnsWebServiceException("Cannot update reverse zone to add PTR record: access was denied.");
+
+                                string oldPtrDomain = Zone.GetReverseZone(ipAddress, type == DnsResourceRecordType.A ? 32 : 128);
+
+                                AuthZoneInfo oldReverseZoneInfo = _dnsWebService._dnsServer.AuthZoneManager.FindAuthZoneInfo(oldPtrDomain);
+                                if ((oldReverseZoneInfo is not null) && ((oldReverseZoneInfo.Type == AuthZoneType.Primary) || (oldReverseZoneInfo.Type == AuthZoneType.Forwarder)))
+                                {
+                                    if (!_dnsWebService._authManager.IsPermitted(PermissionSection.Zones, oldReverseZoneInfo.Name, sessionUser, PermissionFlag.Delete))
+                                        throw new DnsWebServiceException("Cannot update reverse zone to delete existing PTR record: access was denied.");
+
+                                    _dnsWebService._dnsServer.AuthZoneManager.DeleteRecords(oldReverseZoneInfo.Name, oldPtrDomain, DnsResourceRecordType.PTR);
+                                    _dnsWebService._dnsServer.AuthZoneManager.SaveZoneFile(oldReverseZoneInfo.Name);
+                                }
+
+                                DnsResourceRecord ptrRecord = new DnsResourceRecord(newPtrDomain, DnsResourceRecordType.PTR, DnsClass.IN, ttl, new DnsPTRRecordData(domain));
+                                ptrRecord.GetAuthGenericRecordInfo().LastModified = DateTime.UtcNow;
+                                ptrRecord.GetAuthGenericRecordInfo().ExpiryTtl = expiryTtl;
+
+                                _dnsWebService._dnsServer.AuthZoneManager.SetRecord(newReverseZoneInfo.Name, ptrRecord);
+                                _dnsWebService._dnsServer.AuthZoneManager.SaveZoneFile(newReverseZoneInfo.Name);
+                            }
+
+                            if (type == DnsResourceRecordType.A)
+                            {
+                                oldRecord = new DnsResourceRecord(domain, type, DnsClass.IN, 0, new DnsARecordData(ipAddress));
+                                newRecord = new DnsResourceRecord(newDomain, type, DnsClass.IN, ttl, new DnsARecordData(newIpAddress));
+                            }
+                            else
+                            {
+                                oldRecord = new DnsResourceRecord(domain, type, DnsClass.IN, 0, new DnsAAAARecordData(ipAddress));
+                                newRecord = new DnsResourceRecord(newDomain, type, DnsClass.IN, ttl, new DnsAAAARecordData(newIpAddress));
+                            }
+                        }
+                        break;
+
+                    case DnsResourceRecordType.NS:
+                        {
+                            string nameServer = request.GetQueryOrFormAlt("nameServer", "value").Trim('.');
+                            string newNameServer = request.GetQueryOrFormAlt("newNameServer", "newValue", nameServer).Trim('.');
+
+                            oldRecord = new DnsResourceRecord(domain, type, DnsClass.IN, 0, new DnsNSRecordData(nameServer));
+                            newRecord = new DnsResourceRecord(newDomain, type, DnsClass.IN, ttl, new DnsNSRecordData(newNameServer));
+
+                            if (request.TryGetQueryOrForm("glue", out string glueAddresses))
+                            {
+                                if (zoneInfo.Name.Equals(newDomain, StringComparison.OrdinalIgnoreCase) && (newNameServer.Equals(newDomain, StringComparison.OrdinalIgnoreCase) || newNameServer.EndsWith("." + newDomain, StringComparison.OrdinalIgnoreCase)))
+                                    throw new DnsWebServiceException("The zone's own NS records cannot have glue addresses. Please add separate A/AAAA records in the zone instead.");
+
+                                newRecord.SetGlueRecords(glueAddresses);
+                            }
+
+                        }
+                        break;
+
+                    case DnsResourceRecordType.CNAME:
+                        {
+                            string cname = request.GetQueryOrFormAlt("cname", "value").Trim('.');
+
+                            if (cname.Equals(newDomain, StringComparison.OrdinalIgnoreCase))
+                                throw new DnsWebServiceException("CNAME domain name cannot be same as that of the record name.");
+
+                            oldRecord = new DnsResourceRecord(domain, type, DnsClass.IN, 0, new DnsCNAMERecordData(cname));
+                            newRecord = new DnsResourceRecord(newDomain, type, DnsClass.IN, ttl, new DnsCNAMERecordData(cname));
+                        }
+                        break;
+
+                    case DnsResourceRecordType.SOA:
+                        throw new DnsWebServiceException("The SOA record of a Conditional Forwarder zone cannot be modified.");
+
+                    case DnsResourceRecordType.PTR:
+                        {
+                            string ptrName = request.GetQueryOrFormAlt("ptrName", "value").Trim('.');
+                            string newPtrName = request.GetQueryOrFormAlt("newPtrName", "newValue", ptrName).Trim('.');
+
+                            oldRecord = new DnsResourceRecord(domain, type, DnsClass.IN, 0, new DnsPTRRecordData(ptrName));
+                            newRecord = new DnsResourceRecord(newDomain, type, DnsClass.IN, ttl, new DnsPTRRecordData(newPtrName));
+                        }
+                        break;
+
+                    case DnsResourceRecordType.MX:
+                        {
+                            ushort preference = request.GetQueryOrForm("preference", ushort.Parse);
+                            ushort newPreference = request.GetQueryOrForm("newPreference", ushort.Parse, preference);
+
+                            string exchange = request.GetQueryOrFormAlt("exchange", "value").Trim('.');
+                            string newExchange = request.GetQueryOrFormAlt("newExchange", "newValue", exchange).Trim('.');
+
+                            oldRecord = new DnsResourceRecord(domain, type, DnsClass.IN, 0, new DnsMXRecordData(preference, exchange));
+                            newRecord = new DnsResourceRecord(newDomain, type, DnsClass.IN, ttl, new DnsMXRecordData(newPreference, newExchange));
+                        }
+                        break;
+
+                    case DnsResourceRecordType.TXT:
+                        {
+                            string text = null;
+                            bool splitText = false;
+                            DnsTXTRecordData oldTxtRData;
+
+                            if (request.TryQueryOrFormArray("characterStringsBase64", delegate (string value) { return Convert.FromBase64String(value); }, out ArraySegment<byte>[] characterStrings))
+                            {
+                                oldTxtRData = new DnsTXTRecordData(characterStrings);
+                            }
+                            else
+                            {
+                                text = request.GetQueryOrFormAlt("text", "value");
+                                splitText = request.GetQueryOrForm("splitText", bool.Parse, false);
+
+                                oldTxtRData = splitText ? new DnsTXTRecordData(DecodeCharacterStrings(text)) : new DnsTXTRecordData(text);
+                            }
+
+                            DnsTXTRecordData newTxtRData;
+
+                            if (request.TryQueryOrFormArray("newCharacterStringsBase64", delegate (string value) { return Convert.FromBase64String(value); }, out ArraySegment<byte>[] newCharacterStrings))
+                            {
+                                newTxtRData = new DnsTXTRecordData(newCharacterStrings);
+                            }
+                            else
+                            {
+                                string newText = request.GetQueryOrFormAlt("newText", "newValue", text);
+                                bool newSplitText = request.GetQueryOrForm("newSplitText", bool.Parse, splitText);
+
+                                if (newText is null)
+                                    newTxtRData = new DnsTXTRecordData(characterStrings);
+                                else
+                                    newTxtRData = newSplitText ? new DnsTXTRecordData(DecodeCharacterStrings(newText)) : new DnsTXTRecordData(newText);
+                            }
+
+                            oldRecord = new DnsResourceRecord(domain, type, DnsClass.IN, 0, oldTxtRData);
+                            newRecord = new DnsResourceRecord(newDomain, type, DnsClass.IN, ttl, newTxtRData);
+                        }
+                        break;
+
+                    case DnsResourceRecordType.RP:
+                        {
+                            string mailbox = request.GetQueryOrForm("mailbox", "").Trim('.');
+                            string newMailbox = request.GetQueryOrForm("newMailbox", mailbox).Trim('.');
+
+                            string txtDomain = request.GetQueryOrForm("txtDomain", "").Trim('.');
+                            string newTxtDomain = request.GetQueryOrForm("newTxtDomain", txtDomain).Trim('.');
+
+                            oldRecord = new DnsResourceRecord(domain, type, DnsClass.IN, 0, new DnsRPRecordData(mailbox, txtDomain));
+                            newRecord = new DnsResourceRecord(newDomain, type, DnsClass.IN, ttl, new DnsRPRecordData(newMailbox, newTxtDomain));
+                        }
+                        break;
+
+                    case DnsResourceRecordType.SRV:
+                        {
+                            ushort priority = request.GetQueryOrForm("priority", ushort.Parse);
+                            ushort newPriority = request.GetQueryOrForm("newPriority", ushort.Parse, priority);
+
+                            ushort weight = request.GetQueryOrForm("weight", ushort.Parse);
+                            ushort newWeight = request.GetQueryOrForm("newWeight", ushort.Parse, weight);
+
+                            ushort port = request.GetQueryOrForm("port", ushort.Parse);
+                            ushort newPort = request.GetQueryOrForm("newPort", ushort.Parse, port);
+
+                            string target = request.GetQueryOrFormAlt("target", "value").Trim('.');
+                            string newTarget = request.GetQueryOrFormAlt("newTarget", "newValue", target).Trim('.');
+
+                            oldRecord = new DnsResourceRecord(domain, type, DnsClass.IN, 0, new DnsSRVRecordData(priority, weight, port, target));
+                            newRecord = new DnsResourceRecord(newDomain, type, DnsClass.IN, ttl, new DnsSRVRecordData(newPriority, newWeight, newPort, newTarget));
+                        }
+                        break;
+
+                    case DnsResourceRecordType.NAPTR:
+                        {
+                            ushort order = request.GetQueryOrForm("naptrOrder", ushort.Parse);
+                            ushort newOrder = request.GetQueryOrForm("naptrNewOrder", ushort.Parse, order);
+
+                            ushort preference = request.GetQueryOrForm("naptrPreference", ushort.Parse);
+                            ushort newPreference = request.GetQueryOrForm("naptrNewPreference", ushort.Parse, preference);
+
+                            string flags = request.GetQueryOrForm("naptrFlags", "");
+                            string newFlags = request.GetQueryOrForm("naptrNewFlags", flags);
+
+                            string services = request.GetQueryOrForm("naptrServices", "");
+                            string newServices = request.GetQueryOrForm("naptrNewServices", services);
+
+                            string regexp = request.GetQueryOrForm("naptrRegexp", "");
+                            string newRegexp = request.GetQueryOrForm("naptrNewRegexp", regexp);
+
+                            string replacement = request.GetQueryOrForm("naptrReplacement", "").Trim('.');
+                            string newReplacement = request.GetQueryOrForm("naptrNewReplacement", replacement).Trim('.');
+
+                            oldRecord = new DnsResourceRecord(domain, type, DnsClass.IN, 0, new DnsNAPTRRecordData(order, preference, flags, services, regexp, replacement));
+                            newRecord = new DnsResourceRecord(newDomain, type, DnsClass.IN, ttl, new DnsNAPTRRecordData(newOrder, newPreference, newFlags, newServices, newRegexp, newReplacement));
+                        }
+                        break;
+
+                    case DnsResourceRecordType.DNAME:
+                        {
+                            string dname = request.GetQueryOrFormAlt("dname", "value").Trim('.');
+
+                            if (dname.EndsWith("." + newDomain, StringComparison.OrdinalIgnoreCase))
+                                throw new DnsWebServiceException("DNAME domain name cannot be a sub domain of the record name.");
+
+                            if (dname.Equals(newDomain, StringComparison.OrdinalIgnoreCase))
+                                throw new DnsWebServiceException("DNAME domain name cannot be same as that of the record name.");
+
+                            oldRecord = new DnsResourceRecord(domain, type, DnsClass.IN, 0, new DnsDNAMERecordData(dname));
+                            newRecord = new DnsResourceRecord(newDomain, type, DnsClass.IN, ttl, new DnsDNAMERecordData(dname));
+                        }
+                        break;
+
+                    case DnsResourceRecordType.DS:
+                        {
+                            ushort keyTag = request.GetQueryOrForm("keyTag", ushort.Parse);
+                            ushort newKeyTag = request.GetQueryOrForm("newKeyTag", ushort.Parse, keyTag);
+
+                            DnssecAlgorithm algorithm = Enum.Parse<DnssecAlgorithm>(request.GetQueryOrForm("algorithm").Replace('-', '_'), true);
+                            DnssecAlgorithm newAlgorithm = Enum.Parse<DnssecAlgorithm>(request.GetQueryOrForm("newAlgorithm", algorithm.ToString()).Replace('-', '_'), true);
+
+                            DnssecDigestType digestType = Enum.Parse<DnssecDigestType>(request.GetQueryOrForm("digestType").Replace('-', '_'), true);
+                            DnssecDigestType newDigestType = Enum.Parse<DnssecDigestType>(request.GetQueryOrForm("newDigestType", digestType.ToString()).Replace('-', '_'), true);
+
+                            byte[] digest = request.GetQueryOrFormAlt("digest", "value", Convert.FromHexString);
+                            byte[] newDigest = request.GetQueryOrFormAlt("newDigest", "newValue", Convert.FromHexString, digest);
+
+                            oldRecord = new DnsResourceRecord(domain, type, DnsClass.IN, 0, new DnsDSRecordData(keyTag, algorithm, digestType, digest));
+                            newRecord = new DnsResourceRecord(newDomain, type, DnsClass.IN, ttl, new DnsDSRecordData(newKeyTag, newAlgorithm, newDigestType, newDigest));
+                        }
+                        break;
+
+                    case DnsResourceRecordType.SSHFP:
+                        {
+                            DnsSSHFPAlgorithm sshfpAlgorithm = request.GetQueryOrFormEnum<DnsSSHFPAlgorithm>("sshfpAlgorithm");
+                            DnsSSHFPAlgorithm newSshfpAlgorithm = request.GetQueryOrFormEnum("newSshfpAlgorithm", sshfpAlgorithm);
+
+                            DnsSSHFPFingerprintType sshfpFingerprintType = request.GetQueryOrFormEnum<DnsSSHFPFingerprintType>("sshfpFingerprintType");
+                            DnsSSHFPFingerprintType newSshfpFingerprintType = request.GetQueryOrFormEnum("newSshfpFingerprintType", sshfpFingerprintType);
+
+                            byte[] sshfpFingerprint = request.GetQueryOrForm("sshfpFingerprint", Convert.FromHexString);
+                            byte[] newSshfpFingerprint = request.GetQueryOrForm("newSshfpFingerprint", Convert.FromHexString, sshfpFingerprint);
+
+                            oldRecord = new DnsResourceRecord(domain, type, DnsClass.IN, 0, new DnsSSHFPRecordData(sshfpAlgorithm, sshfpFingerprintType, sshfpFingerprint));
+                            newRecord = new DnsResourceRecord(newDomain, type, DnsClass.IN, ttl, new DnsSSHFPRecordData(newSshfpAlgorithm, newSshfpFingerprintType, newSshfpFingerprint));
+                        }
+                        break;
+
+                    case DnsResourceRecordType.TLSA:
+                        {
+                            DnsTLSACertificateUsage tlsaCertificateUsage = Enum.Parse<DnsTLSACertificateUsage>(request.GetQueryOrForm("tlsaCertificateUsage").Replace('-', '_'), true);
+                            DnsTLSACertificateUsage newTlsaCertificateUsage = Enum.Parse<DnsTLSACertificateUsage>(request.GetQueryOrForm("newTlsaCertificateUsage", tlsaCertificateUsage.ToString()).Replace('-', '_'), true);
+
+                            DnsTLSASelector tlsaSelector = request.GetQueryOrFormEnum<DnsTLSASelector>("tlsaSelector");
+                            DnsTLSASelector newTlsaSelector = request.GetQueryOrFormEnum("newTlsaSelector", tlsaSelector);
+
+                            DnsTLSAMatchingType tlsaMatchingType = Enum.Parse<DnsTLSAMatchingType>(request.GetQueryOrForm("tlsaMatchingType").Replace('-', '_'), true);
+                            DnsTLSAMatchingType newTlsaMatchingType = Enum.Parse<DnsTLSAMatchingType>(request.GetQueryOrForm("newTlsaMatchingType", tlsaMatchingType.ToString()).Replace('-', '_'), true);
+
+                            string tlsaCertificateAssociationData = request.GetQueryOrForm("tlsaCertificateAssociationData");
+                            string newTlsaCertificateAssociationData = request.GetQueryOrForm("newTlsaCertificateAssociationData", tlsaCertificateAssociationData);
+
+                            oldRecord = new DnsResourceRecord(domain, type, DnsClass.IN, 0, new DnsTLSARecordData(tlsaCertificateUsage, tlsaSelector, tlsaMatchingType, tlsaCertificateAssociationData));
+                            newRecord = new DnsResourceRecord(newDomain, type, DnsClass.IN, ttl, new DnsTLSARecordData(newTlsaCertificateUsage, newTlsaSelector, newTlsaMatchingType, newTlsaCertificateAssociationData));
+                        }
+                        break;
+
+                    case DnsResourceRecordType.SVCB:
+                    case DnsResourceRecordType.HTTPS:
+                        {
+                            ushort svcPriority = request.GetQueryOrForm("svcPriority", ushort.Parse);
+                            ushort newSvcPriority = request.GetQueryOrForm("newSvcPriority", ushort.Parse, svcPriority);
+
+                            string targetName = request.GetQueryOrForm("svcTargetName").Trim('.');
+                            string newTargetName = request.GetQueryOrForm("newSvcTargetName", targetName).Trim('.');
+
+                            string strSvcParams = request.GetQueryOrForm("svcParams");
+                            string strNewSvcParams = request.GetQueryOrForm("newSvcParams", strSvcParams);
+
+                            bool autoIpv4Hint = request.GetQueryOrForm("autoIpv4Hint", bool.Parse, false);
+                            bool autoIpv6Hint = request.GetQueryOrForm("autoIpv6Hint", bool.Parse, false);
+
+                            Dictionary<DnsSvcParamKey, DnsSvcParamValue> svcParams;
+
+                            if (strSvcParams.Equals("false", StringComparison.OrdinalIgnoreCase))
+                            {
+                                svcParams = new Dictionary<DnsSvcParamKey, DnsSvcParamValue>(0);
+                            }
+                            else
+                            {
+                                string[] strSvcParamsParts = strSvcParams.Split('|');
+                                svcParams = new Dictionary<DnsSvcParamKey, DnsSvcParamValue>(strSvcParamsParts.Length / 2);
+
+                                for (int i = 0; i < strSvcParamsParts.Length; i += 2)
+                                {
+                                    DnsSvcParamKey svcParamKey = Enum.Parse<DnsSvcParamKey>(strSvcParamsParts[i].Replace('-', '_'), true);
+                                    DnsSvcParamValue svcParamValue = DnsSvcParamValue.Parse(svcParamKey, strSvcParamsParts[i + 1]);
+
+                                    svcParams.Add(svcParamKey, svcParamValue);
+                                }
+                            }
+
+                            Dictionary<DnsSvcParamKey, DnsSvcParamValue> newSvcParams;
+
+                            if (strNewSvcParams.Equals("false", StringComparison.OrdinalIgnoreCase))
+                            {
+                                newSvcParams = new Dictionary<DnsSvcParamKey, DnsSvcParamValue>(0);
+                            }
+                            else
+                            {
+                                string[] strSvcParamsParts = strNewSvcParams.Split('|');
+                                newSvcParams = new Dictionary<DnsSvcParamKey, DnsSvcParamValue>(strSvcParamsParts.Length / 2);
+
+                                for (int i = 0; i < strSvcParamsParts.Length; i += 2)
+                                {
+                                    DnsSvcParamKey svcParamKey = Enum.Parse<DnsSvcParamKey>(strSvcParamsParts[i].Replace('-', '_'), true);
+                                    DnsSvcParamValue svcParamValue = DnsSvcParamValue.Parse(svcParamKey, strSvcParamsParts[i + 1]);
+
+                                    newSvcParams.Add(svcParamKey, svcParamValue);
+                                }
+                            }
+
+                            oldRecord = new DnsResourceRecord(domain, type, DnsClass.IN, 0, new DnsSVCBRecordData(svcPriority, targetName, svcParams));
+                            newRecord = new DnsResourceRecord(newDomain, type, DnsClass.IN, ttl, new DnsSVCBRecordData(newSvcPriority, newTargetName, newSvcParams));
+
+                            if (autoIpv4Hint)
+                                newRecord.GetAuthSVCBRecordInfo().AutoIpv4Hint = true;
+
+                            if (autoIpv6Hint)
+                                newRecord.GetAuthSVCBRecordInfo().AutoIpv6Hint = true;
+
+                            if (autoIpv4Hint || autoIpv6Hint)
+                                ResolveSvcbAutoHints(zoneInfo.Name, newRecord, autoIpv4Hint, autoIpv6Hint, newSvcParams);
+                        }
+                        break;
+
+                    case DnsResourceRecordType.URI:
+                        {
+                            ushort priority = request.GetQueryOrForm("uriPriority", ushort.Parse);
+                            ushort newPriority = request.GetQueryOrForm("newUriPriority", ushort.Parse, priority);
+
+                            ushort weight = request.GetQueryOrForm("uriWeight", ushort.Parse);
+                            ushort newWeight = request.GetQueryOrForm("newUriWeight", ushort.Parse, weight);
+
+                            Uri uri = request.GetQueryOrForm("uri", delegate (string value) { return new Uri(value); });
+                            Uri newUri = request.GetQueryOrForm("newUri", delegate (string value) { return new Uri(value); }, uri);
+
+                            oldRecord = new DnsResourceRecord(domain, type, DnsClass.IN, 0, new DnsURIRecordData(priority, weight, uri));
+                            newRecord = new DnsResourceRecord(newDomain, type, DnsClass.IN, ttl, new DnsURIRecordData(newPriority, newWeight, newUri));
+                        }
+                        break;
+
+                    case DnsResourceRecordType.CAA:
+                        {
+                            byte flags = request.GetQueryOrForm("flags", byte.Parse);
+                            byte newFlags = request.GetQueryOrForm("newFlags", byte.Parse, flags);
+
+                            string tag = request.GetQueryOrForm("tag");
+                            string newTag = request.GetQueryOrForm("newTag", tag);
+
+                            string value = request.GetQueryOrForm("value");
+                            string newValue = request.GetQueryOrForm("newValue", value);
+
+                            oldRecord = new DnsResourceRecord(domain, type, DnsClass.IN, 0, new DnsCAARecordData(flags, tag, value));
+                            newRecord = new DnsResourceRecord(newDomain, type, DnsClass.IN, ttl, new DnsCAARecordData(newFlags, newTag, newValue));
+                        }
+                        break;
+
+                    case DnsResourceRecordType.ANAME:
+                        {
+                            string aname = request.GetQueryOrFormAlt("aname", "value").Trim('.');
+                            string newAName = request.GetQueryOrFormAlt("newAName", "newValue", aname).Trim('.');
+
+                            oldRecord = new DnsResourceRecord(domain, type, DnsClass.IN, 0, new DnsANAMERecordData(aname));
+                            newRecord = new DnsResourceRecord(newDomain, type, DnsClass.IN, ttl, new DnsANAMERecordData(newAName));
+                        }
+                        break;
+
+                    case DnsResourceRecordType.FWD:
+                        {
+                            DnsTransportProtocol protocol = request.GetQueryOrFormEnum("protocol", DnsTransportProtocol.Udp);
+                            DnsTransportProtocol newProtocol = request.GetQueryOrFormEnum("newProtocol", protocol);
+
+                            string forwarder = request.GetQueryOrFormAlt("forwarder", "value");
+                            string newForwarder = request.GetQueryOrFormAlt("newForwarder", "newValue", forwarder);
+
+                            bool dnssecValidation = request.GetQueryOrForm("dnssecValidation", bool.Parse, false);
+
+                            DnsForwarderRecordProxyType proxyType = DnsForwarderRecordProxyType.DefaultProxy;
+                            string proxyAddress = null;
+                            ushort proxyPort = 0;
+                            string proxyUsername = null;
+                            string proxyPassword = null;
+
+                            if (!newForwarder.Equals("this-server", StringComparison.Ordinal))
+                            {
+                                proxyType = request.GetQueryOrFormEnum("proxyType", DnsForwarderRecordProxyType.DefaultProxy);
+                                switch (proxyType)
+                                {
+                                    case DnsForwarderRecordProxyType.Http:
+                                    case DnsForwarderRecordProxyType.Socks5:
+                                        proxyAddress = request.GetQueryOrForm("proxyAddress");
+                                        proxyPort = request.GetQueryOrForm("proxyPort", ushort.Parse);
+                                        proxyUsername = request.QueryOrForm("proxyUsername");
+                                        proxyPassword = request.QueryOrForm("proxyPassword");
+                                        break;
+                                }
+                            }
+
+                            byte priority = request.GetQueryOrForm("forwarderPriority", byte.Parse, byte.MinValue);
+
+                            if (newProtocol == DnsTransportProtocol.Quic)
+                                DnsServer.ValidateQuicSupport();
+
+                            oldRecord = new DnsResourceRecord(domain, type, DnsClass.IN, 0, DnsForwarderRecordData.CreatePartialRecordData(protocol, forwarder));
+                            newRecord = new DnsResourceRecord(newDomain, type, DnsClass.IN, 0, new DnsForwarderRecordData(newProtocol, newForwarder, dnssecValidation, proxyType, proxyAddress, proxyPort, proxyUsername, proxyPassword, priority));
+                        }
+                        break;
+
+                    case DnsResourceRecordType.APP:
+                        {
+                            string appName = request.GetQueryOrFormAlt("appName", "value");
+                            string classPath = request.GetQueryOrForm("classPath");
+                            string recordData = request.GetQueryOrForm("recordData", "");
+
+                            oldRecord = new DnsResourceRecord(domain, type, DnsClass.IN, 0, new DnsApplicationRecordData(appName, classPath, recordData));
+                            newRecord = new DnsResourceRecord(newDomain, type, DnsClass.IN, ttl, new DnsApplicationRecordData(appName, classPath, recordData));
+                        }
+                        break;
+
+                    default:
+                        {
+                            string strRData = request.GetQueryOrForm("rdata");
+                            string strNewRData = request.GetQueryOrForm("newRData", strRData);
+
+                            byte[] rdata;
+
+                            if (strRData.Contains(':'))
+                                rdata = strRData.ParseColonHexString();
+                            else
+                                rdata = Convert.FromHexString(strRData);
+
+                            byte[] newRData;
+
+                            if (strNewRData.Contains(':'))
+                                newRData = strNewRData.ParseColonHexString();
+                            else
+                                newRData = Convert.FromHexString(strNewRData);
+
+                            oldRecord = new DnsResourceRecord(domain, type, DnsClass.IN, 0, new DnsUnknownRecordData(rdata));
+                            newRecord = new DnsResourceRecord(newDomain, type, DnsClass.IN, ttl, new DnsUnknownRecordData(newRData));
+                        }
+                        break;
+                }
+
+                GenericRecordInfo recordInfo = newRecord.GetAuthGenericRecordInfo();
+
+                recordInfo.LastModified = DateTime.UtcNow;
+                recordInfo.ExpiryTtl = expiryTtl;
+                recordInfo.Disabled = disable;
+                recordInfo.Comments = comments;
+
+                _dnsWebService._dnsServer.AuthZoneManager.UpdateRecord(zoneInfo.Name, oldRecord, newRecord);
+
+                if ((type == DnsResourceRecordType.A) || (type == DnsResourceRecordType.AAAA))
+                {
+                    bool updateSvcbHints = request.GetQueryOrForm("updateSvcbHints", bool.Parse, false);
+                    if (updateSvcbHints)
+                        UpdateSvcbAutoHints(zoneInfo.Name, newDomain, type == DnsResourceRecordType.A, type == DnsResourceRecordType.AAAA);
+                }
+
+                _dnsWebService._log.Write(_dnsWebService.GetRemoteEndPoint(context), "[" + sessionUser.Username + "] Record was updated for " + zoneInfo.TypeName + " zone '" + zoneInfo.DisplayName + "' successfully {" + (oldRecord is null ? "" : "oldRecord: " + oldRecord.ToString() + "; ") + "newRecord: " + newRecord.ToString() + "}");
+
+                _dnsWebService._dnsServer.AuthZoneManager.SaveZoneFile(zoneInfo.Name);
+
+                Utf8JsonWriter jsonWriter = context.GetCurrentJsonWriter();
+
+                jsonWriter.WritePropertyName("zone");
+                WriteZoneInfoAsJson(zoneInfo, jsonWriter);
+
+                jsonWriter.WritePropertyName("updatedRecord");
+                WriteRecordAsJson(newRecord, jsonWriter, true);
+            }
+
+            #endregion
+        }
+    }
+}

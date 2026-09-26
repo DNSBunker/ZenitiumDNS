@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<Version>$(ZenitiumDnsVersion)</Version>
+		<CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<FrameworkReference Include="Microsoft.AspNetCore.App" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="..\ZenitiumDns.ApplicationCommon\ZenitiumDns.ApplicationCommon.csproj" />
+		<ProjectReference Include="..\ZenitiumLibrary\ZenitiumLibrary.csproj" />
+		<ProjectReference Include="..\ZenitiumLibrary.ByteTree\ZenitiumLibrary.ByteTree.csproj" />
+		<ProjectReference Include="..\ZenitiumLibrary.IO\ZenitiumLibrary.IO.csproj" />
+		<ProjectReference Include="..\ZenitiumLibrary.Net\ZenitiumLibrary.Net.csproj" />
+		<ProjectReference Include="..\ZenitiumLibrary.Security.OTP\ZenitiumLibrary.Security.OTP.csproj" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<PackageReference Include="BouncyCastle.Cryptography" Version="2.7.0" />
+		<PackageReference Include="Microsoft.AspNetCore.Authentication.OpenIdConnect" Version="10.0.12" />
+		<PackageReference Include="QRCoder" Version="1.8.0" />
+		<PackageReference Include="System.DirectoryServices.Protocols" Version="10.0.12" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<None Remove="www\**;dohwww\**;named.root;root-anchors.xml" />
+		<Content Include="www\**;dohwww\**;named.root;root-anchors.xml">
+			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+		</Content>
+	</ItemGroup>
+
+</Project>

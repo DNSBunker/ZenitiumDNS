@@ -1,6 +1,6 @@
-# ZenitiumDNS 15.5 im Vergleich zu Technitium DNS Server 15.5
+# ZenitiumDNS 15.5.1 im Vergleich zu Technitium DNS Server 15.5
 
-Dieses Dokument listet ausschließlich die Unterschiede zwischen dem Original-Build **Technitium DNS Server 15.5** (veröffentlicht am 19. September 2026) und dem Build **ZenitiumDNS 15.5** (Stand 26. September 2026) auf. Die vollständige Versionsgeschichte steht in [CHANGELOG.md](CHANGELOG.md).
+Dieses Dokument listet ausschließlich die Unterschiede zwischen dem Original-Build **Technitium DNS Server 15.5** (veröffentlicht am 19. September 2026) und dem Build **ZenitiumDNS 15.5.1** (Stand 26. September 2026) auf. ZenitiumDNS 15.5.1 enthält außerdem alle Korrekturen aus Technitium DNS Server 15.5.1; welche davon ZenitiumDNS schon vorher hatte, steht am Ende. Die vollständige Versionsgeschichte steht in [CHANGELOG.md](CHANGELOG.md).
 
 ## Überblick
 
@@ -21,6 +21,10 @@ Dieses Dokument listet ausschließlich die Unterschiede zwischen dem Original-Bu
 | Gestörte IPv6-Anbindung | IPv6-Adressen werden weiter angefragt, Zeitüberschreitungen verzögern Auflösungen | IPv6 wird automatisch ausgesetzt und nach erfolgreicher Prüfung wieder genutzt |
 | Antwortzeiten in Übersicht und Metriken | nicht vorhanden | Median, Perzentile, Cache/rekursiv, live und pro Minute |
 | Weboberfläche | Bootstrap-Standardoptik, feste Mindestbreite 970 px, Einstellungen in einer langen Seite je Tab | eigenes Design mit Seitenleiste und Messwertleiste, mobil nutzbar, thematische Einstellungsbereiche mit Erklärungen |
+| Anfragen vom Typ ANY, AXFR/IXFR, ohne RD-Flag, fremde Opcodes oder Klassen | werden verarbeitet | per Anfragefilter über UDP verworfen, über TCP/DoT/DoH/DoQ mit `REFUSED` abgewiesen |
+| DNSSEC mit ML-DSA-44 (Post-Quantum) | unbekannter Algorithmus, Zone gilt als unsigniert | wird validiert, mit Downgrade-Schutz |
+| Mitgelieferte Apps | müssen einzeln installiert werden, sind danach sofort aktiv | vorinstalliert, standardmäßig deaktiviert, einzeln aktivierbar |
+| Docker | Image und Compose-Datei | entfernt |
 
 ## Messwerte
 
@@ -57,6 +61,22 @@ Funktionstests im isolierten Netz-Namespace mit nachgebauter DNS-Hierarchie:
   - Windows-Dienst, Systemtray, Windows-Firewall-Bibliothek und Windows-Installer.
 - **Erhalten:** Conditional-Forwarder-Zonen mit lokalen Einträgen und Zugriffsbeschränkung, Blocklisten, erlaubte und blockierte Domains, die Resolver-Apps (Advanced Blocking, Advanced Forwarding, DNS64, DNS Rebinding Protection, Drop Requests, Log Exporter, NX Domain, Query Logs für SQLite, MySQL, PostgreSQL und SQL Server).
 - **Protokollverhalten:** AXFR/IXFR werden mit `REFUSED` und EDE „Not Supported“ beantwortet, NOTIFY und UPDATE mit `NOTIMP`, TSIG-signierte Anfragen mit `BADKEY`.
+
+### Anfragefilter
+- Regeln nach dem Vorbild von dnsdist, standardmäßig aktiv: nicht lesbar oder unter 12 Byte, über 1232 Byte, Opcode ungleich QUERY, Klasse ungleich IN, ANY, AXFR/IXFR, ohne RD-Flag, EDNS-Version größer 0.
+- UDP-Treffer werden verworfen, über TCP, DoT, DoH und DoQ gibt es `REFUSED` mit EDE „Prohibited“. Loopback ist ausgenommen.
+- Trefferzähler je Regel in Einstellungen, JSON-Metriken und Prometheus (`request_filter_matches_total`).
+
+### DNSSEC
+- Validierung von ML-DSA-44 (Algorithmus 18) und Schutz vor Downgrades auf klassische Algorithmen, wenn der DS-Datensatz einen Post-Quantum-Algorithmus ankündigt.
+- Der DNS-Client erklärt, warum die DNSSEC-Prüfung gegen diesen Server scheitert, wenn dessen Validierung ausgeschaltet ist.
+
+### Apps
+- Mitgelieferte Apps werden beim ersten Start deaktiviert installiert und bei Paket-Updates aktualisiert. Deinstallierte Apps bleiben entfernt.
+- Aktivieren und Deaktivieren in der Weboberfläche und über `api/apps/enable` und `api/apps/disable`.
+
+### Standardwerte neuer Installationen
+- 100.000 Cache-Einträge, Blockier-TTL 300 s, Listen-Backlog 1024, TCP-Empfangs-Timeout 5 s, IPv6 für ausgehende Anfragen aktiviert, Statistik und Logs 30 Tage.
 
 ### Statistik und Überwachung
 - Antwortzeit-Messung für alle Transportprotokolle mit Durchschnitt, Median, 95./99. Perzentil, Maximum und getrennten Werten für Cache und rekursive Auflösung.
@@ -100,6 +120,9 @@ Funktionstests im isolierten Netz-Namespace mit nachgebauter DNS-Hierarchie:
 - Die Prüfung auf spezielle Zonen erzeugt keine temporären Strings mehr.
 - Enumeratoren werden in den heißen Pfaden nicht mehr geboxt.
 - Zeitstempel der letzten Nutzung werden höchstens einmal pro Sekunde geschrieben.
+- Statistikdaten laufen über eine lockfreie Warteschlange mit eigenem Thread, eindeutige Clients werden per HyperLogLog gezählt.
+- UDP-Empfangs-Threads wecken weitere Threads erst bei anhaltendem Rückstau, Sendepuffer werden wiederverwendet.
+- Server-GC mit nebenläufiger Garbage Collection.
 
 ### Verschlüsselte Protokolle
 - **DNS-over-TCP und DNS-over-TLS:** Standardmäßig höchstens 100 laufende Anfragen pro Verbindung, einstellbar. Das Original ließ beliebig viele zu.
@@ -112,6 +135,9 @@ Funktionstests im isolierten Netz-Namespace mit nachgebauter DNS-Hierarchie:
 - Benutzer ohne Admin-Rechte können keine fremden Sitzungen mehr löschen.
 - Beim Wiederherstellen einer Sicherung werden keine Dateien außerhalb des Zielordners mehr geschrieben.
 - TLS-Zertifikatspfade neben dem Konfigurationsordner werden korrekt gespeichert (Upstream-Issue #2162).
+- DNS-over-HTTPS per POST: Anfragen über 65.535 Byte werden mit 413 abgewiesen und begrenzt gelesen.
+- DNS-Nachrichten mit unplausiblen Eintragszahlen werden vor dem Parsen verworfen.
+- Werte in Inline-Handlern der Weboberfläche werden für JavaScript maskiert.
 
 ### Web-API und Weboberfläche
 - Die Eintrags-APIs beachten `zone=.` für die Root-Zone.
@@ -130,12 +156,12 @@ Funktionstests im isolierten Netz-Namespace mit nachgebauter DNS-Hierarchie:
   - zufälliges Admin-Passwort,
   - automatische Anpassung von systemd-resolved,
   - mitgelieferte DNS-Apps.
-- Das Docker-Image wird aus dem Quellcode gebaut.
+- Docker-Image, Compose-Datei und die Umgebungsvariablen zur Erstkonfiguration wurden entfernt.
 - Update-Prüfung und App-Store sind standardmäßig deaktiviert: `DNS_SERVER_UPDATE_CHECK_URL`, `DNS_SERVER_APP_STORE_URL`.
 
 ## Kompatibilität
 
-- **Konfiguration:** Einstellungen, Benutzer, Conditional-Forwarder-Zonen, Blocklisten, erlaubte und blockierte Domains, Statistiken und Sicherungen von Technitium DNS Server 15.5 können übernommen werden. ZenitiumDNS speichert die DNS-Einstellungen im Format Version 7 und Zonendateien mit Zoneninformationen Version 15. Diese Dateien kann das Original nicht mehr lesen.
+- **Konfiguration:** Einstellungen, Benutzer, Conditional-Forwarder-Zonen, Blocklisten, erlaubte und blockierte Domains, Statistiken und Sicherungen von Technitium DNS Server 15.5 können übernommen werden. ZenitiumDNS speichert die DNS-Einstellungen im Format Version 8 und Zonendateien mit Zoneninformationen Version 15. Diese Dateien kann das Original nicht mehr lesen.
 - **Entfernte Zonentypen:** Zonendateien von Primary-, Secondary-, Stub-, Secondary-Forwarder- und Catalog-Zonen bleiben im Ordner `zones` liegen, werden aber beim Start übersprungen und protokolliert. Sie lassen sich bei Bedarf mit dem Original weiterverwenden.
 - **DHCP und Cluster:** DHCP-Bereichsdateien und die Cluster-Konfiguration werden ignoriert. Berechtigungen für den Bereich DHCP werden beim Laden verworfen. Eine vorhandene Gruppe „DHCP Administrators“ bleibt als gewöhnliche Gruppe ohne Sonderrechte bestehen und kann gelöscht werden.
 - **HTTP-API:** Die Aufrufe für DNSSEC, Catalog-Zonen, Zonenkonvertierung, Resync, TSIG, DHCP und Clustering sowie der Parameter `node` entfallen. `api/zones/create` akzeptiert nur noch den Typ `Forwarder`.
@@ -143,3 +169,16 @@ Funktionstests im isolierten Netz-Namespace mit nachgebauter DNS-Hierarchie:
 - **DNS-Apps:** Die Namensräume wurden umbenannt (`ZenitiumDns.*`, `ZenitiumLibrary.*`). Für Technitium kompilierte Apps müssen gegen `ZenitiumDns.ApplicationCommon` neu kompiliert werden. Alle mitgelieferten Apps sind bereits angepasst.
 - **Syslog-Export:** Durch die Korrektur der doppelten Formatierung ändert sich das Format der Syslog-Nachrichten der Log Exporter App. Die Metadaten stehen jetzt als echte strukturierte Daten nach RFC 5424 in der Nachricht.
 - **Pipelining:** Clients, die über eine einzelne TCP- oder TLS-Verbindung mehr als 100 Anfragen gleichzeitig offen halten, werden gebremst, bis Antworten gesendet wurden.
+
+## Abgleich mit Technitium DNS Server 15.5.1
+
+Technitium DNS Server 15.5.1 erschien am 26. September 2026. Alle Korrekturen daraus sind in ZenitiumDNS 15.5.1 enthalten, soweit sie noch vorhandene Teile betreffen (DHCP-Korrekturen entfallen). Einige davon hatte ZenitiumDNS bereits vorher:
+
+| Korrektur in 15.5.1 | In ZenitiumDNS |
+| ------------------- | -------------- |
+| XSS über App-Namen in der Weboberfläche | schon in 15.5 behoben |
+| Löschen fremder Sitzungen durch Benutzer ohne Admin-Rechte | schon in 15.5 behoben, zusätzlich Längenprüfung des Teil-Tokens übernommen |
+| Blockierende Garbage Collection in der Cache-Wartung (Upstream-Issue #2174) | schon in 15.5 durch Hintergrund-GC behoben, zusätzlich GC nur nach großen Bereinigungen übernommen |
+| Resolver-Limits bei langen CNAME-Ketten (Upstream-Issue #2175) | schon in 15.5 durch höhere Limits behoben, jetzt ohne Hash-Limit und mit EDE „ResolverLimitReached“ |
+| XSS in der Liste der Logdateien, RA-Flag in Blockierantworten, lokale Blocklisten, RRSIG-Zeitraum, Pfadvergleiche, `install.sh` | neu übernommen |
+

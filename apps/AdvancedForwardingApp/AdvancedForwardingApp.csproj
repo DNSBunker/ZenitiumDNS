@@ -1,0 +1,40 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<Version>5.2</Version>
+		<AssemblyName>AdvancedForwardingApp</AssemblyName>
+		<RootNamespace>AdvancedForwarding</RootNamespace>
+		<Description>Provides advanced, bulk conditional forwarding options. Supports creating groups based on client's IP address or subnet to enable different conditional forwarding configuration for each group. Supports AdGuard Upstreams config files.\n\nNote: This app works independent of the DNS server's built-in Conditional Forwarder Zones feature.</Description>
+		<GeneratePackageOnBuild>false</GeneratePackageOnBuild>
+		<OutputType>Library</OutputType>
+		<Nullable>enable</Nullable>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="..\..\src\ZenitiumDns.ApplicationCommon\ZenitiumDns.ApplicationCommon.csproj">
+			<Private>false</Private>
+		</ProjectReference>
+	</ItemGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="..\..\src\ZenitiumLibrary\ZenitiumLibrary.csproj">
+			<Private>false</Private>
+		</ProjectReference>
+		<ProjectReference Include="..\..\src\ZenitiumLibrary.Net\ZenitiumLibrary.Net.csproj">
+			<Private>false</Private>
+		</ProjectReference>
+	</ItemGroup>
+
+	<ItemGroup>
+		<None Update="adguard-upstreams.txt">
+			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+		</None>
+		<None Update="dnsApp.config">
+			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+		</None>
+		<None Update="README.md">
+			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+		</None>
+	</ItemGroup>
+
+</Project>
