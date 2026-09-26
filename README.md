@@ -1,0 +1,129 @@
+<p align="center">
+	<img src="docs/logo.png" alt="ZenitiumDNS" width="96" /><br />
+	<b>ZenitiumDNS</b><br />
+	<br />
+	<b>Eigener DNS-Server für Privatsphäre und Sicherheit</b><br />
+	<b>Werbung und Schadsoftware im ganzen Netzwerk auf DNS-Ebene blockieren</b>
+</p>
+
+ZenitiumDNS ist ein quelloffener rekursiver DNS-Resolver, den du selbst betreiben kannst – als öffentlicher Resolver im Internet oder als zentraler Resolver im eigenen Netz. Er löst Namen selbst über die Root-Server auf oder leitet sie verschlüsselt an Forwarder weiter, blockiert Werbung und Schadsoftware auf DNS-Ebene und bringt eine deutschsprachige Weboberfläche mit Statistiken, Antwortzeiten und Protokollen mit.
+
+Um die Namensauflösung kümmert sich kaum jemand, denn sie läuft automatisch im Hintergrund und ist schwer zu durchschauen. Die meisten Programme nutzen den DNS-Resolver des Betriebssystems, der wiederum per UDP den DNS-Server des Internetanbieters fragt. Das funktioniert, aber der Anbieter sieht und kontrolliert damit, welche Webseiten du aufrufst, auch wenn diese HTTPS verwenden. Manche Anbieter leiten Anfragen sogar um, blockieren sie oder verändern Inhalte. ZenitiumDNS nimmt Anfragen über UDP, TCP, [DNS-over-TLS](https://de.wikipedia.org/wiki/DNS_over_TLS), [DNS-over-HTTPS](https://de.wikipedia.org/wiki/DNS_over_HTTPS) und [DNS-over-QUIC](https://www.ietf.org/rfc/rfc9250.html) entgegen und löst sie als rekursiver Resolver direkt über die Root-Server auf, auf Wunsch mit DNSSEC-Validierung. Alternativ nutzt er Forwarder über dieselben verschlüsselten Protokolle.
+
+Der Funktionsumfang ist auf den Betrieb als Resolver zugeschnitten. Autoritative Zonen, Zonentransfers, DHCP-Server, Clustering und die Windows-Komponenten des Originals sind entfernt. Für interne Domains gibt es Weiterleitungszonen (Conditional Forwarder), in denen sich einzelne Einträge lokal überschreiben lassen.
+
+# Herkunft
+ZenitiumDNS ist ein Fork von [Technitium DNS Server](https://github.com/TechnitiumSoftware/DnsServer) und [TechnitiumLibrary](https://github.com/TechnitiumSoftware/TechnitiumLibrary) von Shreyas Zare auf Basis von Version 15.5. Beide Projekte stehen unter der GNU General Public License v3.0, ebenso dieser Fork. Welche Änderungen der Fork enthält, steht in [NOTICE.md](NOTICE.md). Alle Unterschiede zum Original-Build mit Messwerten sind in [CHANGELOG-ZenitiumDNS.md](CHANGELOG-ZenitiumDNS.md) aufgeführt.
+
+# Was ZenitiumDNS gegenüber dem Original bietet
+- Auf öffentliche Resolver zugeschnitten: Autoritative Zonen (Primary, Secondary, Stub, Catalog), DNSSEC-Signierung, Zonentransfers, NOTIFY, dynamische Updates, TSIG, DHCP-Server, Clustering, Windows-Dienst, Systemtray und Windows-Installer sind entfernt. Das verkleinert Angriffsfläche und Weboberfläche.
+- Eigenständiges Debian-13-Paket mit eingebauter .NET-Laufzeit, gehärtetem systemd-Dienst und zufälligem Admin-Passwort bei der Erstinstallation.
+- Deutschsprachige Weboberfläche mit eigenem Design: Seitenleiste, Messwertleiste mit Verläufen, Einstellungen in thematischen Bereichen, Hell-, Dunkel- und Bernstein-Modus, auch auf dem Smartphone bedienbar.
+- Antwortzeit-Statistik: Median, 95./99. Perzentil und Durchschnitt getrennt nach Cache und rekursiver Auflösung, als Live-Kennzahl, Minutenverlauf und Prometheus-Metrik.
+- Automatischer IPv6-Rückfall: Ist IPv6 gestört, pausiert der Resolver ausgehende IPv6-Anfragen und nutzt IPv4, bis IPv6 wieder funktioniert.
+- Keine Verbindungen zu Servern des Originalprojekts. Update-Prüfung und App-Store sind standardmäßig aus und lassen sich auf eigene Server umstellen.
+- Robusterer rekursiver Resolver:
+  - löst lange CNAME-Ketten und Nameserver ohne Glue-Einträge vollständig auf,
+  - fällt bei Problemen mit dem Root-Priming auf die Root-Hints zurück,
+  - bewertet Nameserver getrennt nach IPv4 und IPv6,
+  - umgeht nicht erreichbare Adressen nach wenigen Anfragen.
+- Deutlich effizientere Anfrageverarbeitung:
+  - rund 70 % weniger CPU-Zeit pro Anfrage bei gleicher Last,
+  - rund 65 % weniger Speicherallokationen,
+  - keine minütlichen Hänger durch die Cache-Wartung.
+- Zusätzliche Fehler- und Sicherheitskorrekturen im Cache, in den Query-Log-Apps, der Weboberfläche und bei DNS-over-TCP/TLS.
+
+# Funktionen
+
+## Resolver
+- Rekursive Auflösung direkt über die Root-Server oder Weiterleitung an Forwarder.
+- Öffentliche Resolver wie Cloudflare, Google, Quad9 oder AdGuard lassen sich über [DNS-over-TLS](https://www.rfc-editor.org/rfc/rfc7858.html), [DNS-over-HTTPS](https://www.rfc-editor.org/rfc/rfc8484.html) oder [DNS-over-QUIC](https://www.ietf.org/rfc/rfc9250.html) als Forwarder nutzen.
+- Latenzbasierte Auswahl der Nameserver mit paralleler Abfrage. Antwortzeit und Fehlerrate werden getrennt für IPv4 und IPv6 geführt.
+- Automatischer IPv6-Rückfall bei gestörter IPv6-Anbindung mit Hintergrundprüfung und manueller Prüfung in der Weboberfläche.
+- DNSSEC-Validierung mit RSA, ECDSA und EdDSA für rekursiven Resolver, Forwarder und Weiterleitungszonen, mit NSEC und NSEC3.
+- QNAME-Minimierung ([RFC 9156](https://www.rfc-editor.org/rfc/rfc9156.html)).
+- Zufällige Groß-/Kleinschreibung des QNAME bei UDP ([draft-vixie-dnsext-dns0x20-00](https://datatracker.ietf.org/doc/html/draft-vixie-dnsext-dns0x20-00)). Abweichende Antworten gelten als Spoofing-Versuch und werden sofort über TCP wiederholt.
+- EDNS(0) ([RFC 6891](https://datatracker.ietf.org/doc/html/rfc6891)), EDNS Client Subnet ([RFC 7871](https://datatracker.ietf.org/doc/html/rfc7871)) und Extended DNS Errors ([RFC 8914](https://datatracker.ietf.org/doc/html/rfc8914)).
+- Lokal bereitgestellte Zonen ([RFC 6303](https://www.rfc-editor.org/rfc/rfc6303)) und Domainnamen für besondere Zwecke ([RFC 6761](https://www.rfc-editor.org/rfc/rfc6761)).
+- DNS64 ([RFC 6147](https://www.rfc-editor.org/rfc/rfc6147)) für reine IPv6-Clients über die DNS64 App.
+- Weiterleitungszonen (Conditional Forwarder) für interne Domains, mit Zugriffsbeschränkung pro Zone und lokal überschreibbaren Einträgen (A, AAAA, CNAME, MX, TXT, SRV, SVCB/HTTPS, CAA, ANAME, FWD, APP u. a.).
+- Negative Trust Anchors über Weiterleitungszonen mit abgeschalteter DNSSEC-Validierung.
+- Conditional Forwarding in großer Zahl über die Advanced Forwarding App.
+
+## Cache
+- Umfangreicher Cache mit Serve Stale ([RFC 8767](https://www.rfc-editor.org/rfc/rfc8767)) und Prefetch.
+- Der Cache wird beim Beenden gespeichert und beim Start wieder geladen.
+- Cache-Ansicht mit Nameserver-Statistik je Adressfamilie in der Weboberfläche.
+
+## Schutz und Filter
+- Blockiert Werbung und Schadsoftware über eine oder mehrere Blocklisten-URLs, manuell blockierte Domains und Ausnahmen über erlaubte Domains.
+- Erkennung von CNAME-Cloaking: Domains, die per CNAME auf blockierte Domains verweisen, werden ebenfalls blockiert.
+- Blocklisten mit regulären Ausdrücken und unterschiedlichen Listen je Client-IP-Adresse oder Subnetz über die Advanced Blocking App.
+- Schutz vor DNS-Rebinding-Angriffen mit der DNS Rebinding Protection App.
+- Zugriffssteuerung für die Rekursion per Netzwerk-ACL.
+- Ratenbegrenzung pro Client-Subnetz (Anfragen pro Minute) mit Ausnahmeliste.
+
+## Protokolle
+- Eigene Dienste für [DNS-over-TLS](https://www.rfc-editor.org/rfc/rfc7858.html), [DNS-over-HTTPS](https://www.rfc-editor.org/rfc/rfc8484.html) (HTTP/1.1, HTTP/2 und HTTP/3) und [DNS-over-QUIC](https://www.ietf.org/rfc/rfc9250.html).
+- DNS über das [PROXY-Protokoll](https://www.haproxy.org/download/1.8/doc/proxy-protocol.txt) in Version 1 und 2 für UDP und TCP, z. B. hinter einem Load Balancer.
+- Bearbeitung von Anfragen außer der Reihe für DNS-over-TCP und DNS-over-TLS ([RFC 7766](https://www.rfc-editor.org/rfc/rfc7766#section-7)) mit einstellbarer Obergrenze pro Verbindung.
+- HTTP- und SOCKS5-Proxys für ausgehende Anfragen, etwa über das [Tor-Netzwerk](https://www.torproject.org/).
+
+## Betrieb und Überwachung
+- Übersicht mit Anfragen pro Sekunde, Antwortzeiten (Median, 95./99. Perzentil), Cache-Trefferquote, Fehler- und Blockierquote, Verlauf und Top-Listen.
+- Prometheus-Metriken und JSON-Metriken über die HTTP-API.
+- Eingebaute System- und Anfrageprotokollierung sowie Export der Anfrageprotokolle in SQLite, MySQL, PostgreSQL oder SQL Server über Apps.
+- Hohe Performance: dedizierte UDP-Empfangs-Threads beantworten Cache-Treffer ohne Thread-Wechsel. In Tests auf einem Rechner mit 20 Kernen wurden über 700.000 Anfragen pro Sekunde beantwortet.
+- Weboberfläche zur Konfiguration im Browser, mit Dunkelmodus.
+- Eingebaute HTTP-API, über die andere Programme den DNS-Server steuern und konfigurieren.
+- Mehrbenutzerbetrieb mit Rollen und nicht ablaufenden API-Tokens, Zwei-Faktor-Authentifizierung (2FA) per TOTP, Single Sign-On mit OpenID Connect und Anmeldung über LDAP.
+- Eingebauter DNS-Client zum Testen von Auflösungen.
+- Läuft unter Linux (Debian-Paket, Docker) und überall, wo .NET 10 verfügbar ist.
+- Quelloffene, plattformübergreifende Umsetzung mit .NET 10.
+
+# Aufbau des Repositorys
+| Pfad | Inhalt |
+| ---- | ------ |
+| `src/ZenitiumDns` | Plattformübergreifender Server-Host (`ZenitiumDns.dll`) mit den Linux-Installationsskripten und Dienstdefinitionen. |
+| `src/ZenitiumDns.Core` | DNS-Server, Webdienst, HTTP-API und Weboberfläche (`www`). |
+| `src/ZenitiumDns.ApplicationCommon` | Schnittstellen für die Entwicklung von DNS-Apps. |
+| `src/ZenitiumLibrary*` | Gemeinsame Bibliothek für DNS-Protokoll, Netzwerk, Ein-/Ausgabe und Sicherheit. |
+| `apps` | Mitgelieferte DNS-Apps. |
+| `setup/debian` | Build-Skript für das Debian-Paket, systemd-Dienst und Maintainer-Skripte. |
+| `docs` | Build-Anleitung, API-Dokumentation und Übersicht der Umgebungsvariablen. |
+
+# Schnellstart
+Server mit dem [.NET 10 SDK](https://dotnet.microsoft.com/download) bauen und starten:
+
+```
+dotnet publish src/ZenitiumDns/ZenitiumDns.csproj -c Release -o publish
+dotnet publish/ZenitiumDns.dll
+```
+
+Oder das Debian-13-Paket bauen und installieren:
+
+```
+setup/debian/build-deb.sh
+sudo apt install ./setup/debian/dist/zenitiumdns_*.deb
+```
+
+Oder das Docker-Image bauen und starten:
+
+```
+docker compose up -d --build
+```
+
+Anschließend im Browser `http://<IP-Adresse-des-Servers>:5380/` öffnen, um die Weboberfläche aufzurufen.
+
+# Dokumentation
+- [Build-Anleitung](docs/BUILD.md)
+- [Debian-Paket](setup/debian/README.Debian.md)
+- [HTTP-API-Dokumentation (Englisch)](docs/APIDOCS.md)
+- [Umgebungsvariablen](docs/EnvironmentVariables.md)
+- [Umgebungsvariablen für Docker](docs/DockerEnvironmentVariables.md)
+- [Unterstützte RFCs](docs/SupportedRFCs.md)
+- [Änderungsprotokoll](CHANGELOG.md)
+- [Unterschiede zum Original-Build](CHANGELOG-ZenitiumDNS.md)
+
+# Lizenz
+ZenitiumDNS ist freie Software unter der [GNU General Public License v3.0](LICENSE).
