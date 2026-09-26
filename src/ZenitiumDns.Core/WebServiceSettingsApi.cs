@@ -60,6 +60,55 @@ namespace ZenitiumDns.Core
 
             #region private
 
+            private static void WritePrefixLimits(Utf8JsonWriter jsonWriter, string propertyName, IReadOnlyDictionary<int, (int, int)> prefixLimits)
+            {
+                jsonWriter.WriteStartArray(propertyName);
+
+                foreach (KeyValuePair<int, (int, int)> prefixLimit in prefixLimits)
+                {
+                    jsonWriter.WriteStartObject();
+
+                    jsonWriter.WriteNumber("prefix", prefixLimit.Key);
+                    jsonWriter.WriteNumber("udpLimit", prefixLimit.Value.Item1);
+                    jsonWriter.WriteNumber("tcpLimit", prefixLimit.Value.Item2);
+
+                    jsonWriter.WriteEndObject();
+                }
+
+                jsonWriter.WriteEndArray();
+            }
+
+            private static bool TryReadPrefixLimits(HttpRequest request, string name, out Dictionary<int, (int, int)> prefixLimits)
+            {
+                if (!request.TryQueryOrFormArray(name, delegate (JsonElement jsonObject)
+                {
+                    int prefix = jsonObject.GetProperty("prefix").GetInt32();
+                    int udpLimit = jsonObject.GetProperty("udpLimit").GetInt32();
+                    int tcpLimit = jsonObject.GetProperty("tcpLimit").GetInt32();
+
+                    return new KeyValuePair<int, (int, int)>(prefix, (udpLimit, tcpLimit));
+                }, delegate (ArraySegment<string> tableRow)
+                {
+                    int prefix = int.Parse(tableRow[0]);
+                    int udpLimit = int.Parse(tableRow[1]);
+                    int tcpLimit = int.Parse(tableRow[2]);
+
+                    return new KeyValuePair<int, (int, int)>(prefix, (udpLimit, tcpLimit));
+                },
+                    3, out KeyValuePair<int, (int, int)>[] entries, '|'))
+                {
+                    prefixLimits = null;
+                    return false;
+                }
+
+                prefixLimits = new Dictionary<int, (int, int)>(entries.Length);
+
+                foreach (KeyValuePair<int, (int, int)> entry in entries)
+                    prefixLimits[entry.Key] = entry.Value;
+
+                return true;
+            }
+
             private void WriteDnsSettings(Utf8JsonWriter jsonWriter)
             {
                 jsonWriter.WriteString("version", _dnsWebService.GetServerVersion());
@@ -104,6 +153,24 @@ namespace ZenitiumDns.Core
 
                 jsonWriter.WriteEndObject();
 
+                ClientBlockListManager clientBlockListManager = _dnsWebService._dnsServer.ClientBlockListManager;
+
+                jsonWriter.WriteStartArray("clientBlockListUrls");
+
+                foreach (Uri listUrl in clientBlockListManager.ListUrls)
+                    jsonWriter.WriteStringValue(listUrl.AbsoluteUri);
+
+                jsonWriter.WriteEndArray();
+
+                jsonWriter.WriteNumber("clientBlockListUpdateIntervalHours", clientBlockListManager.UpdateIntervalHours);
+                jsonWriter.WriteNumber("clientBlockListAddressRanges", clientBlockListManager.AddressRanges);
+                jsonWriter.WriteNumber("clientBlockListDrops", clientBlockListManager.Drops);
+
+                if (clientBlockListManager.LastUpdatedOn == DateTime.MinValue)
+                    jsonWriter.WriteNull("clientBlockListLastUpdatedOn");
+                else
+                    jsonWriter.WriteString("clientBlockListLastUpdatedOn", clientBlockListManager.LastUpdatedOn);
+
                 jsonWriter.WriteStartArray("socketPoolExcludedPorts");
 
                 ushort[] socketPoolExcludedPorts = UdpClientConnection.SocketPoolExcludedPorts;
@@ -126,45 +193,18 @@ namespace ZenitiumDns.Core
                 jsonWriter.WriteString("eDnsClientSubnetIpv4Override", _dnsWebService._dnsServer.EDnsClientSubnetIpv4Override?.ToString());
                 jsonWriter.WriteString("eDnsClientSubnetIpv6Override", _dnsWebService._dnsServer.EDnsClientSubnetIpv6Override?.ToString());
 
-                jsonWriter.WriteStartArray("qpmPrefixLimitsIPv4");
+                WritePrefixLimits(jsonWriter, "qpsPrefixLimitsIPv4", _dnsWebService._dnsServer.QpsPrefixLimitsIPv4);
+                WritePrefixLimits(jsonWriter, "qpsPrefixLimitsIPv6", _dnsWebService._dnsServer.QpsPrefixLimitsIPv6);
 
-                foreach (KeyValuePair<int, (int, int)> qpmPrefixLimit in _dnsWebService._dnsServer.QpmPrefixLimitsIPv4)
-                {
-                    jsonWriter.WriteStartObject();
+                jsonWriter.WriteNumber("rateLimitBurstSeconds", _dnsWebService._dnsServer.RateLimitBurstSeconds);
+                jsonWriter.WriteNumber("rateLimitUdpTruncationPercentage", _dnsWebService._dnsServer.RateLimitUdpTruncationPercentage);
 
-                    jsonWriter.WriteNumber("prefix", qpmPrefixLimit.Key);
-                    jsonWriter.WriteNumber("udpLimit", qpmPrefixLimit.Value.Item1);
-                    jsonWriter.WriteNumber("tcpLimit", qpmPrefixLimit.Value.Item2);
-
-                    jsonWriter.WriteEndObject();
-                }
-
-                jsonWriter.WriteEndArray();
-
-                jsonWriter.WriteStartArray("qpmPrefixLimitsIPv6");
-
-                foreach (KeyValuePair<int, (int, int)> qpmPrefixLimit in _dnsWebService._dnsServer.QpmPrefixLimitsIPv6)
-                {
-                    jsonWriter.WriteStartObject();
-
-                    jsonWriter.WriteNumber("prefix", qpmPrefixLimit.Key);
-                    jsonWriter.WriteNumber("udpLimit", qpmPrefixLimit.Value.Item1);
-                    jsonWriter.WriteNumber("tcpLimit", qpmPrefixLimit.Value.Item2);
-
-                    jsonWriter.WriteEndObject();
-                }
-
-                jsonWriter.WriteEndArray();
-
-                jsonWriter.WriteNumber("qpmLimitSampleMinutes", _dnsWebService._dnsServer.QpmLimitSampleMinutes);
-                jsonWriter.WriteNumber("qpmLimitUdpTruncationPercentage", _dnsWebService._dnsServer.QpmLimitUdpTruncationPercentage);
-
-                jsonWriter.WritePropertyName("qpmLimitBypassList");
+                jsonWriter.WritePropertyName("rateLimitBypassList");
                 jsonWriter.WriteStartArray();
 
-                if (_dnsWebService._dnsServer.QpmLimitBypassList is not null)
+                if (_dnsWebService._dnsServer.RateLimitBypassList is not null)
                 {
-                    foreach (NetworkAddress network in _dnsWebService._dnsServer.QpmLimitBypassList)
+                    foreach (NetworkAddress network in _dnsWebService._dnsServer.RateLimitBypassList)
                         jsonWriter.WriteStringValue(network.ToString());
                 }
 
@@ -225,6 +265,7 @@ namespace ZenitiumDns.Core
                 jsonWriter.WriteString("webServiceCspFrameAncestorsHeader", _dnsWebService._webServiceCspFrameAncestorsHeader);
                 jsonWriter.WriteString("webServiceTlsCertificatePath", _dnsWebService._webServiceTlsCertificatePath);
                 jsonWriter.WriteString("webServiceTlsCertificatePassword", string.IsNullOrEmpty(_dnsWebService._webServiceTlsCertificatePath) ? null : "************");
+                jsonWriter.WriteString("webServiceTlsCertificateKeyPath", _dnsWebService._webServiceTlsCertificateKeyPath);
 
                 jsonWriter.WriteBoolean("enableEDnsClientSubnetSourceAddress", _dnsWebService._dnsServer.EnableEDnsClientSubnetSourceAddress);
                 jsonWriter.WriteBoolean("enableDnsOverUdpProxy", _dnsWebService._dnsServer.EnableDnsOverUdpProxy);
@@ -264,6 +305,16 @@ namespace ZenitiumDns.Core
                 jsonWriter.WriteString("dnsOverHttpRealIpHeader", _dnsWebService._dnsServer.DnsOverHttpRealIpHeader);
                 jsonWriter.WriteString("dnsTlsCertificatePath", _dnsWebService._dnsServer.DnsTlsCertificatePath);
                 jsonWriter.WriteString("dnsTlsCertificatePassword", string.IsNullOrEmpty(_dnsWebService._dnsServer.DnsTlsCertificatePath) ? null : "************");
+                jsonWriter.WriteString("dnsTlsCertificateKeyPath", _dnsWebService._dnsServer.DnsTlsCertificateKeyPath);
+
+                jsonWriter.WriteBoolean("enableDdr", _dnsWebService._dnsServer.EnableDdr);
+                jsonWriter.WriteBoolean("ddrOnlyUnencrypted", _dnsWebService._dnsServer.DdrOnlyUnencrypted);
+                jsonWriter.WriteStartArray("ddrRecords");
+
+                foreach (DnsResourceRecord ddrRecord in _dnsWebService._dnsServer.GetDdrRecords())
+                    jsonWriter.WriteStringValue(ddrRecord.ToZoneFileEntry());
+
+                jsonWriter.WriteEndArray();
 
                 jsonWriter.WriteString("recursion", _dnsWebService._dnsServer.Recursion.ToString());
 
@@ -324,6 +375,8 @@ namespace ZenitiumDns.Core
 
                 jsonWriter.WriteString("blockingType", _dnsWebService._dnsServer.BlockingType.ToString());
                 jsonWriter.WriteNumber("blockingAnswerTtl", _dnsWebService._dnsServer.BlockingAnswerTtl);
+                jsonWriter.WriteNumber("blockingNegativeTtl", _dnsWebService._dnsServer.BlockingNegativeTtl);
+                jsonWriter.WriteString("blockingReportText", _dnsWebService._dnsServer.BlockingReportText);
 
                 jsonWriter.WritePropertyName("customBlockingAddresses");
                 jsonWriter.WriteStartArray();
@@ -598,6 +651,29 @@ namespace ZenitiumDns.Core
                         if (request.TryGetQueryOrForm("requestFilterRefuseOnly", bool.Parse, out bool requestFilterRefuseOnly))
                             _dnsWebService._dnsServer.RequestFilterRefuseOnly = requestFilterRefuseOnly;
 
+                        if (request.TryGetQueryOrForm("clientBlockListUpdateIntervalHours", int.Parse, out int clientBlockListUpdateIntervalHours))
+                            _dnsWebService._dnsServer.ClientBlockListManager.UpdateIntervalHours = clientBlockListUpdateIntervalHours;
+
+                        if (request.TryQueryOrFormArray("clientBlockListUrls", out string[] clientBlockListUrls))
+                        {
+                            List<Uri> listUrls = new List<Uri>(clientBlockListUrls.Length);
+
+                            foreach (string clientBlockListUrl in clientBlockListUrls)
+                            {
+                                string url = clientBlockListUrl.Trim();
+                                if (url.Length == 0)
+                                    continue;
+
+                                if (!Uri.TryCreate(url, UriKind.Absolute, out Uri listUrl) || ((listUrl.Scheme != Uri.UriSchemeHttps) && (listUrl.Scheme != Uri.UriSchemeHttp) && (listUrl.Scheme != Uri.UriSchemeFile)))
+                                    throw new DnsWebServiceException("Invalid client block list URL: " + url);
+
+                                if (!listUrls.Contains(listUrl))
+                                    listUrls.Add(listUrl);
+                            }
+
+                            _dnsWebService._dnsServer.ClientBlockListManager.ListUrls = listUrls;
+                        }
+
                         if (request.TryGetQueryOrForm("enableUdpSocketPool", bool.Parse, out bool enableUdpSocketPool))
                             _dnsWebService._dnsServer.EnableUdpSocketPool = enableUdpSocketPool;
 
@@ -650,104 +726,24 @@ namespace ZenitiumDns.Core
                                 _dnsWebService._dnsServer.EDnsClientSubnetIpv6Override = NetworkAddress.Parse(eDnsClientSubnetIpv6Override);
                         }
 
-                        if (request.TryQueryOrFormArray("qpmPrefixLimitsIPv4", delegate (JsonElement jsonObject)
-                        {
-                            int prefix = jsonObject.GetProperty("prefix").GetInt32();
-                            int udpLimit = jsonObject.GetProperty("udpLimit").GetInt32();
-                            int tcpLimit = jsonObject.GetProperty("tcpLimit").GetInt32();
+                        if (TryReadPrefixLimits(request, "qpsPrefixLimitsIPv4", out Dictionary<int, (int, int)> qpsPrefixLimitsIPv4))
+                            _dnsWebService._dnsServer.QpsPrefixLimitsIPv4 = qpsPrefixLimitsIPv4;
+                        else if (TryReadPrefixLimits(request, "qpmPrefixLimitsIPv4", out Dictionary<int, (int, int)> qpmPrefixLimitsIPv4))
+                            _dnsWebService._dnsServer.QpsPrefixLimitsIPv4 = DnsServer.ConvertLegacyQpmPrefixLimits(qpmPrefixLimitsIPv4, false);
 
-                            return new KeyValuePair<int, (int, int)>(prefix, (udpLimit, tcpLimit));
-                        }, delegate (ArraySegment<string> tableRow)
-                        {
-                            int prefix = int.Parse(tableRow[0]);
-                            int udpLimit = int.Parse(tableRow[1]);
-                            int tcpLimit = int.Parse(tableRow[2]);
+                        if (TryReadPrefixLimits(request, "qpsPrefixLimitsIPv6", out Dictionary<int, (int, int)> qpsPrefixLimitsIPv6))
+                            _dnsWebService._dnsServer.QpsPrefixLimitsIPv6 = qpsPrefixLimitsIPv6;
+                        else if (TryReadPrefixLimits(request, "qpmPrefixLimitsIPv6", out Dictionary<int, (int, int)> qpmPrefixLimitsIPv6))
+                            _dnsWebService._dnsServer.QpsPrefixLimitsIPv6 = DnsServer.ConvertLegacyQpmPrefixLimits(qpmPrefixLimitsIPv6, true);
 
-                            return new KeyValuePair<int, (int, int)>(prefix, (udpLimit, tcpLimit));
-                        },
-                            3, out KeyValuePair<int, (int, int)>[] qpmPrefixLimitsIPv4, '|'))
-                        {
-                            string strQpmPrefixLimitsIPv4 = "";
+                        if (request.TryGetQueryOrForm("rateLimitBurstSeconds", int.Parse, out int rateLimitBurstSeconds))
+                            _dnsWebService._dnsServer.RateLimitBurstSeconds = rateLimitBurstSeconds;
 
-                            if (qpmPrefixLimitsIPv4.Length == 0)
-                            {
-                                _dnsWebService._dnsServer.QpmPrefixLimitsIPv4 = null;
-                            }
-                            else
-                            {
-                                Dictionary<int, (int, int)> qpmPrefixLimitsIPv4Map = new Dictionary<int, (int, int)>(qpmPrefixLimitsIPv4.Length);
+                        if (request.TryGetQueryOrForm("rateLimitUdpTruncationPercentage", int.Parse, out int rateLimitUdpTruncationPercentage) || request.TryGetQueryOrForm("qpmLimitUdpTruncationPercentage", int.Parse, out rateLimitUdpTruncationPercentage))
+                            _dnsWebService._dnsServer.RateLimitUdpTruncationPercentage = rateLimitUdpTruncationPercentage;
 
-                                foreach (KeyValuePair<int, (int, int)> qpmPrefixLimit in qpmPrefixLimitsIPv4)
-                                {
-                                    qpmPrefixLimitsIPv4Map.Add(qpmPrefixLimit.Key, qpmPrefixLimit.Value);
-
-                                    if (strQpmPrefixLimitsIPv4.Length == 0)
-                                        strQpmPrefixLimitsIPv4 = qpmPrefixLimit.Key + "|" + qpmPrefixLimit.Value.Item1 + "|" + qpmPrefixLimit.Value.Item2;
-                                    else
-                                        strQpmPrefixLimitsIPv4 += "|" + qpmPrefixLimit.Key + "|" + qpmPrefixLimit.Value.Item1 + "|" + qpmPrefixLimit.Value.Item2;
-                                }
-
-                                _dnsWebService._dnsServer.QpmPrefixLimitsIPv4 = qpmPrefixLimitsIPv4Map;
-                            }
-
-                        }
-
-                        if (request.TryQueryOrFormArray("qpmPrefixLimitsIPv6", delegate (JsonElement jsonObject)
-                        {
-                            int prefix = jsonObject.GetProperty("prefix").GetInt32();
-                            int udpLimit = jsonObject.GetProperty("udpLimit").GetInt32();
-                            int tcpLimit = jsonObject.GetProperty("tcpLimit").GetInt32();
-
-                            return new KeyValuePair<int, (int, int)>(prefix, (udpLimit, tcpLimit));
-                        }, delegate (ArraySegment<string> tableRow)
-                        {
-                            int prefix = int.Parse(tableRow[0]);
-                            int udpLimit = int.Parse(tableRow[1]);
-                            int tcpLimit = int.Parse(tableRow[2]);
-
-                            return new KeyValuePair<int, (int, int)>(prefix, (udpLimit, tcpLimit));
-                        },
-                            3, out KeyValuePair<int, (int, int)>[] qpmPrefixLimitsIPv6, '|'))
-                        {
-                            string strQpmPrefixLimitsIPv6 = "";
-
-                            if (qpmPrefixLimitsIPv6.Length == 0)
-                            {
-                                _dnsWebService._dnsServer.QpmPrefixLimitsIPv6 = null;
-                            }
-                            else
-                            {
-                                Dictionary<int, (int, int)> qpmPrefixLimitsIPv6Map = new Dictionary<int, (int, int)>(qpmPrefixLimitsIPv6.Length);
-
-                                foreach (KeyValuePair<int, (int, int)> qpmPrefixLimit in qpmPrefixLimitsIPv6)
-                                {
-                                    qpmPrefixLimitsIPv6Map.Add(qpmPrefixLimit.Key, qpmPrefixLimit.Value);
-
-                                    if (strQpmPrefixLimitsIPv6.Length == 0)
-                                        strQpmPrefixLimitsIPv6 = qpmPrefixLimit.Key + "|" + qpmPrefixLimit.Value.Item1 + "|" + qpmPrefixLimit.Value.Item2;
-                                    else
-                                        strQpmPrefixLimitsIPv6 += "|" + qpmPrefixLimit.Key + "|" + qpmPrefixLimit.Value.Item1 + "|" + qpmPrefixLimit.Value.Item2;
-                                }
-
-                                _dnsWebService._dnsServer.QpmPrefixLimitsIPv6 = qpmPrefixLimitsIPv6Map;
-                            }
-
-                        }
-
-                        if (request.TryGetQueryOrForm("qpmLimitSampleMinutes", int.Parse, out int qpmLimitSampleMinutes))
-                        {
-                            _dnsWebService._dnsServer.QpmLimitSampleMinutes = qpmLimitSampleMinutes;
-                        }
-
-                        if (request.TryGetQueryOrForm("qpmLimitUdpTruncationPercentage", int.Parse, out int qpmLimitUdpTruncationPercentage))
-                        {
-                            _dnsWebService._dnsServer.QpmLimitUdpTruncationPercentage = qpmLimitUdpTruncationPercentage;
-                        }
-
-                        if (request.TryQueryOrFormArray("qpmLimitBypassList", NetworkAddress.Parse, out NetworkAddress[] qpmLimitBypassList))
-                        {
-                            _dnsWebService._dnsServer.QpmLimitBypassList = qpmLimitBypassList;
-                        }
+                        if (request.TryQueryOrFormArray("rateLimitBypassList", NetworkAddress.Parse, out NetworkAddress[] rateLimitBypassList) || request.TryQueryOrFormArray("qpmLimitBypassList", NetworkAddress.Parse, out rateLimitBypassList))
+                            _dnsWebService._dnsServer.RateLimitBypassList = rateLimitBypassList;
 
                         if (request.TryGetQueryOrForm("clientTimeout", int.Parse, out int clientTimeout))
                         {
@@ -990,8 +986,15 @@ namespace ZenitiumDns.Core
                                 if ((webServiceTlsCertificatePassword is null) || (webServiceTlsCertificatePassword == "************"))
                                     webServiceTlsCertificatePassword = _dnsWebService._webServiceTlsCertificatePassword;
 
-                                if ((webServiceTlsCertificatePath != _dnsWebService._webServiceTlsCertificatePath) || (webServiceTlsCertificatePassword != _dnsWebService._webServiceTlsCertificatePassword))
-                                    _dnsWebService.SetWebServiceTlsCertificate(webServiceTlsCertificatePath, webServiceTlsCertificatePassword);
+                                string webServiceTlsCertificateKeyPath = request.QueryOrForm("webServiceTlsCertificateKeyPath");
+
+                                if (webServiceTlsCertificateKeyPath is null)
+                                    webServiceTlsCertificateKeyPath = _dnsWebService._webServiceTlsCertificateKeyPath;
+                                else if (webServiceTlsCertificateKeyPath.Length == 0)
+                                    webServiceTlsCertificateKeyPath = null;
+
+                                if ((webServiceTlsCertificatePath != _dnsWebService._webServiceTlsCertificatePath) || (webServiceTlsCertificatePassword != _dnsWebService._webServiceTlsCertificatePassword) || (webServiceTlsCertificateKeyPath != _dnsWebService._webServiceTlsCertificateKeyPath))
+                                    _dnsWebService.SetWebServiceTlsCertificate(webServiceTlsCertificatePath, webServiceTlsCertificatePassword, webServiceTlsCertificateKeyPath);
                             }
                         }
 
@@ -1172,6 +1175,12 @@ namespace ZenitiumDns.Core
                         if (request.TryQueryOrForm("dnsOverHttpRealIpHeader", out string dnsOverHttpRealIpHeader))
                             _dnsWebService._dnsServer.DnsOverHttpRealIpHeader = dnsOverHttpRealIpHeader;
 
+                        if (request.TryGetQueryOrForm("enableDdr", bool.Parse, out bool enableDdr))
+                            _dnsWebService._dnsServer.EnableDdr = enableDdr;
+
+                        if (request.TryGetQueryOrForm("ddrOnlyUnencrypted", bool.Parse, out bool ddrOnlyUnencrypted))
+                            _dnsWebService._dnsServer.DdrOnlyUnencrypted = ddrOnlyUnencrypted;
+
                         string dnsTlsCertificatePath = request.QueryOrForm("dnsTlsCertificatePath");
                         if (dnsTlsCertificatePath is not null)
                         {
@@ -1189,9 +1198,16 @@ namespace ZenitiumDns.Core
                                 if ((dnsTlsCertificatePassword is null) || (dnsTlsCertificatePassword == "************"))
                                     dnsTlsCertificatePassword = _dnsWebService._dnsServer.DnsTlsCertificatePassword;
 
-                                if ((dnsTlsCertificatePath != _dnsWebService._dnsServer.DnsTlsCertificatePath) || (dnsTlsCertificatePassword != _dnsWebService._dnsServer.DnsTlsCertificatePassword))
+                                string dnsTlsCertificateKeyPath = request.QueryOrForm("dnsTlsCertificateKeyPath");
+
+                                if (dnsTlsCertificateKeyPath is null)
+                                    dnsTlsCertificateKeyPath = _dnsWebService._dnsServer.DnsTlsCertificateKeyPath;
+                                else if (dnsTlsCertificateKeyPath.Length == 0)
+                                    dnsTlsCertificateKeyPath = null;
+
+                                if ((dnsTlsCertificatePath != _dnsWebService._dnsServer.DnsTlsCertificatePath) || (dnsTlsCertificatePassword != _dnsWebService._dnsServer.DnsTlsCertificatePassword) || (dnsTlsCertificateKeyPath != _dnsWebService._dnsServer.DnsTlsCertificateKeyPath))
                                 {
-                                    _dnsWebService._dnsServer.SetDnsTlsCertificate(dnsTlsCertificatePath, dnsTlsCertificatePassword, true);
+                                    _dnsWebService._dnsServer.SetDnsTlsCertificate(dnsTlsCertificatePath, dnsTlsCertificatePassword, true, dnsTlsCertificateKeyPath);
 
                                     if (string.IsNullOrEmpty(_dnsWebService._dnsServer.DnsTlsCertificatePath) && (_dnsWebService._dnsServer.EnableDnsOverTls || _dnsWebService._dnsServer.EnableDnsOverHttps || _dnsWebService._dnsServer.EnableDnsOverQuic))
                                         restartDnsService = true;
@@ -1319,6 +1335,13 @@ namespace ZenitiumDns.Core
                         {
                             _dnsWebService._dnsServer.BlockingAnswerTtl = blockingAnswerTtl;
                         }
+
+                        if (request.TryGetQueryOrForm("blockingNegativeTtl", ZoneFile.ParseTtl, out uint blockingNegativeTtl))
+                            _dnsWebService._dnsServer.BlockingNegativeTtl = blockingNegativeTtl;
+
+                        string blockingReportText = request.QueryOrForm("blockingReportText");
+                        if (blockingReportText is not null)
+                            _dnsWebService._dnsServer.BlockingReportText = blockingReportText;
 
                         if (request.TryQueryOrFormArray("customBlockingAddresses", out string[] customBlockingAddresses))
                         {
@@ -1674,6 +1697,18 @@ namespace ZenitiumDns.Core
                 _dnsWebService._dnsServer.BlockListZoneManager.ForceUpdateBlockLists();
 
                 _dnsWebService._log.Write(_dnsWebService.GetRemoteEndPoint(context), "[" + sessionUser.Username + "] Block list update was triggered.");
+            }
+
+            public void ForceUpdateClientBlockLists(HttpContext context)
+            {
+                User sessionUser = _dnsWebService.GetSessionUser(context);
+
+                if (!_dnsWebService._authManager.IsPermitted(PermissionSection.Settings, sessionUser, PermissionFlag.Modify))
+                    throw new DnsWebServiceException("Access was denied.");
+
+                _ = _dnsWebService._dnsServer.ClientBlockListManager.UpdateAsync();
+
+                _dnsWebService._log.Write(_dnsWebService.GetRemoteEndPoint(context), "[" + sessionUser.Username + "] Client block list update was triggered.");
             }
 
             public void TemporaryDisableBlocking(HttpContext context)

@@ -80,6 +80,7 @@ namespace ZenitiumDns.Core
 
         readonly WebServiceApi _api;
         readonly WebServiceDashboardApi _dashboardApi;
+        readonly WebServiceSelfTestApi _selfTestApi;
         readonly WebServiceZonesApi _zonesApi;
         readonly WebServiceOtherZonesApi _otherZonesApi;
         readonly WebServiceAppsApi _appsApi;
@@ -123,6 +124,7 @@ namespace ZenitiumDns.Core
 
         string _webServiceTlsCertificatePath;
         string _webServiceTlsCertificatePassword;
+        string _webServiceTlsCertificateKeyPath;
         string _webServiceRealIpHeader = "X-Real-IP";
         string _webServiceCspFrameAncestorsHeader = "'none'";
 
@@ -171,6 +173,7 @@ namespace ZenitiumDns.Core
 
             _api = new WebServiceApi(this, updateCheckUri);
             _dashboardApi = new WebServiceDashboardApi(this);
+            _selfTestApi = new WebServiceSelfTestApi(this);
             _zonesApi = new WebServiceZonesApi(this);
             _otherZonesApi = new WebServiceOtherZonesApi(this);
             _appsApi = new WebServiceAppsApi(this);
@@ -401,7 +404,7 @@ namespace ZenitiumDns.Core
             BinaryReader bR = new BinaryReader(s);
 
             int version = bR.ReadByte();
-            if (version > 4)
+            if (version > 5)
                 throw new InvalidDataException("Web Service config version not supported.");
 
             _webServiceHttpPort = bR.ReadInt32();
@@ -486,6 +489,23 @@ namespace ZenitiumDns.Core
             if (_webServiceTlsCertificatePath.Length == 0)
                 _webServiceTlsCertificatePath = null;
 
+            _webServiceRealIpHeader = s.ReadShortString();
+
+            if (version >= 3)
+                _webServiceCspFrameAncestorsHeader = s.ReadShortString();
+            else
+                _webServiceCspFrameAncestorsHeader = "'none'";
+
+            if (version >= 5)
+            {
+                string webServiceTlsCertificateKeyPath = s.ReadShortString();
+                _webServiceTlsCertificateKeyPath = webServiceTlsCertificateKeyPath.Length == 0 ? null : webServiceTlsCertificateKeyPath;
+            }
+            else
+            {
+                _webServiceTlsCertificateKeyPath = null;
+            }
+
             if (_webServiceTlsCertificatePath is null)
             {
                 StopTlsCertificateUpdateTimer();
@@ -496,7 +516,7 @@ namespace ZenitiumDns.Core
 
                 try
                 {
-                    LoadWebServiceTlsCertificate(webServiceTlsCertificateAbsolutePath, _webServiceTlsCertificatePassword);
+                    LoadWebServiceTlsCertificate(webServiceTlsCertificateAbsolutePath, _webServiceTlsCertificatePassword, ConvertToAbsolutePath(_webServiceTlsCertificateKeyPath));
                 }
                 catch (Exception ex)
                 {
@@ -507,13 +527,6 @@ namespace ZenitiumDns.Core
             }
 
             CheckAndLoadSelfSignedCertificate(false, false);
-
-            _webServiceRealIpHeader = s.ReadShortString();
-
-            if (version >= 3)
-                _webServiceCspFrameAncestorsHeader = s.ReadShortString();
-            else
-                _webServiceCspFrameAncestorsHeader = "'none'";
         }
 
         private void WriteConfigTo(Stream s)
@@ -521,7 +534,7 @@ namespace ZenitiumDns.Core
             BinaryWriter bW = new BinaryWriter(s);
 
             bW.Write(Encoding.ASCII.GetBytes("WC"));
-            bW.Write((byte)4);
+            bW.Write((byte)5);
 
             bW.Write(_webServiceHttpPort);
             bW.Write(_webServiceTlsPort);
@@ -558,6 +571,7 @@ namespace ZenitiumDns.Core
 
             s.WriteShortString(_webServiceRealIpHeader);
             s.WriteShortString(_webServiceCspFrameAncestorsHeader);
+            s.WriteShortString(_webServiceTlsCertificateKeyPath ?? string.Empty);
         }
 
         #endregion
@@ -1711,6 +1725,8 @@ namespace ZenitiumDns.Core
             _webService.MapGetAndPost("/api/blocked/import", _otherZonesApi.ImportBlockedZones);
             _webService.MapGetAndPost("/api/blocked/export", _otherZonesApi.ExportBlockedZonesAsync);
 
+            _webService.MapGetAndPost("/api/selftest/run", _selfTestApi.RunAsync);
+
             _webService.MapGetAndPost("/api/apps/list", _appsApi.ListInstalledAppsAsync);
             _webService.MapGetAndPost("/api/apps/listStoreApps", _appsApi.ListStoreApps);
             _webService.MapGetAndPost("/api/apps/downloadAndInstall", _appsApi.DownloadAndInstallAppAsync);
@@ -1729,6 +1745,7 @@ namespace ZenitiumDns.Core
             _webService.MapGetAndPost("/api/settings/get", _settingsApi.GetDnsSettings);
             _webService.MapGetAndPost("/api/settings/set", _settingsApi.SetDnsSettingsAsync);
             _webService.MapGetAndPost("/api/settings/forceUpdateBlockLists", _settingsApi.ForceUpdateBlockLists);
+            _webService.MapGetAndPost("/api/settings/forceUpdateClientBlockLists", _settingsApi.ForceUpdateClientBlockLists);
             _webService.MapGetAndPost("/api/settings/temporaryDisableBlocking", _settingsApi.TemporaryDisableBlocking);
             _webService.MapGetAndPost("/api/settings/backup", _settingsApi.BackupSettingsAsync);
             _webService.MapPost("/api/settings/restore", _settingsApi.RestoreSettingsAsync);
@@ -2040,12 +2057,11 @@ namespace ZenitiumDns.Core
 
                         try
                         {
-                            FileInfo fileInfo = new FileInfo(webServiceTlsCertificatePath);
+                            string webServiceTlsCertificateKeyPath = ConvertToAbsolutePath(_webServiceTlsCertificateKeyPath);
+                            DateTime lastModifiedOn = TlsCertificateFile.GetLastWriteTimeUtc(webServiceTlsCertificatePath, webServiceTlsCertificateKeyPath);
 
-                            if (fileInfo.Exists && (fileInfo.LastWriteTimeUtc != _webServiceCertificateLastModifiedOn))
-                            {
-                                LoadWebServiceTlsCertificate(webServiceTlsCertificatePath, _webServiceTlsCertificatePassword);
-                            }
+                            if ((lastModifiedOn != DateTime.MinValue) && (lastModifiedOn != _webServiceCertificateLastModifiedOn))
+                                LoadWebServiceTlsCertificate(webServiceTlsCertificatePath, _webServiceTlsCertificatePassword, webServiceTlsCertificateKeyPath);
                         }
                         catch (Exception ex)
                         {
@@ -2065,37 +2081,9 @@ namespace ZenitiumDns.Core
             }
         }
 
-        private void LoadWebServiceTlsCertificate(string tlsCertificatePath, string tlsCertificatePassword)
+        private void LoadWebServiceTlsCertificate(string tlsCertificatePath, string tlsCertificatePassword, string tlsCertificateKeyPath = null)
         {
-            FileInfo fileInfo = new FileInfo(tlsCertificatePath);
-
-            if (!fileInfo.Exists)
-                throw new ArgumentException("Web Service TLS certificate file does not exists: " + tlsCertificatePath);
-
-            switch (Path.GetExtension(tlsCertificatePath).ToLowerInvariant())
-            {
-                case ".pfx":
-                case ".p12":
-                    break;
-
-                default:
-                    throw new ArgumentException("Web Service TLS certificate file must be PKCS #12 formatted with .pfx or .p12 extension: " + tlsCertificatePath);
-            }
-
-            X509Certificate2Collection certificateCollection = X509CertificateLoader.LoadPkcs12CollectionFromFile(tlsCertificatePath, tlsCertificatePassword, X509KeyStorageFlags.PersistKeySet);
-            X509Certificate2 serverCertificate = null;
-
-            foreach (X509Certificate2 certificate in certificateCollection)
-            {
-                if (certificate.HasPrivateKey)
-                {
-                    serverCertificate = certificate;
-                    break;
-                }
-            }
-
-            if (serverCertificate is null)
-                throw new ArgumentException("Web Service TLS certificate file must contain a certificate with private key.");
+            SslStreamCertificateContext certificateContext = TlsCertificateFile.Load(tlsCertificatePath, tlsCertificateKeyPath, tlsCertificatePassword, out _);
 
             List<SslApplicationProtocol> applicationProtocols = new List<SslApplicationProtocol>();
 
@@ -2110,10 +2098,10 @@ namespace ZenitiumDns.Core
             _webServiceSslServerAuthenticationOptions = new SslServerAuthenticationOptions
             {
                 ApplicationProtocols = applicationProtocols,
-                ServerCertificateContext = SslStreamCertificateContext.Create(serverCertificate, certificateCollection, false)
+                ServerCertificateContext = certificateContext
             };
 
-            _webServiceCertificateLastModifiedOn = fileInfo.LastWriteTimeUtc;
+            _webServiceCertificateLastModifiedOn = TlsCertificateFile.GetLastWriteTimeUtc(tlsCertificatePath, tlsCertificateKeyPath);
 
             _log.Write("Web Service TLS certificate was loaded: " + tlsCertificatePath);
         }
@@ -2124,11 +2112,12 @@ namespace ZenitiumDns.Core
 
             _webServiceTlsCertificatePath = null;
             _webServiceTlsCertificatePassword = null;
+            _webServiceTlsCertificateKeyPath = null;
 
             StopTlsCertificateUpdateTimer();
         }
 
-        public void SetWebServiceTlsCertificate(string webServiceTlsCertificatePath, string webServiceTlsCertificatePassword)
+        public void SetWebServiceTlsCertificate(string webServiceTlsCertificatePath, string webServiceTlsCertificatePassword, string webServiceTlsCertificateKeyPath = null)
         {
             if (string.IsNullOrWhiteSpace(webServiceTlsCertificatePath))
                 throw new ArgumentException("Web service TLS certificate path cannot be null or empty.", nameof(webServiceTlsCertificatePath));
@@ -2139,12 +2128,20 @@ namespace ZenitiumDns.Core
             if (webServiceTlsCertificatePassword?.Length > 255)
                 throw new ArgumentException("Web service TLS certificate password length cannot exceed 255 characters.", nameof(webServiceTlsCertificatePassword));
 
-            webServiceTlsCertificatePath = ConvertToAbsolutePath(webServiceTlsCertificatePath);
+            if (webServiceTlsCertificateKeyPath?.Length > 255)
+                throw new ArgumentException("Web service TLS private key path length cannot exceed 255 characters.", nameof(webServiceTlsCertificateKeyPath));
 
-            LoadWebServiceTlsCertificate(webServiceTlsCertificatePath, webServiceTlsCertificatePassword);
+            if (string.IsNullOrEmpty(webServiceTlsCertificateKeyPath))
+                webServiceTlsCertificateKeyPath = null;
+
+            webServiceTlsCertificatePath = ConvertToAbsolutePath(webServiceTlsCertificatePath);
+            string webServiceTlsCertificateKeyAbsolutePath = ConvertToAbsolutePath(webServiceTlsCertificateKeyPath);
+
+            LoadWebServiceTlsCertificate(webServiceTlsCertificatePath, webServiceTlsCertificatePassword, webServiceTlsCertificateKeyAbsolutePath);
 
             _webServiceTlsCertificatePath = ConvertToRelativePath(webServiceTlsCertificatePath);
             _webServiceTlsCertificatePassword = webServiceTlsCertificatePassword;
+            _webServiceTlsCertificateKeyPath = webServiceTlsCertificateKeyAbsolutePath is null ? null : ConvertToRelativePath(webServiceTlsCertificateKeyAbsolutePath);
 
             StartTlsCertificateUpdateTimer();
         }

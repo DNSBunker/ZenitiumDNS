@@ -50,6 +50,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
     <script src="js/apps.js"></script>
     <script src="js/dnsclient.js"></script>
     <script src="js/logs.js"></script>
+    <script src="js/selftest.js"></script>
 </head>
 <body>
     <div class="AlertPlaceholder toast-region" role="status" aria-live="polite"></div>
@@ -71,6 +72,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
                 <li id="mainPanelTabListApps" role="presentation"><a href="#mainPanelTabPaneApps" aria-controls="mainPanelTabPaneApps" role="tab" data-toggle="tab" onclick="refreshApps();"><span class="fa fa-fw fa-puzzle-piece" aria-hidden="true"></span> Apps</a></li>
                 <li id="mainPanelTabListDnsClient" role="presentation"><a href="#mainPanelTabPaneDnsClient" aria-controls="mainPanelTabPaneDnsClient" role="tab" data-toggle="tab"><span class="fa fa-fw fa-search" aria-hidden="true"></span> DNS-Client</a></li>
                 <li id="mainPanelTabListLogs" role="presentation"><a href="#mainPanelTabPaneLogs" aria-controls="mainPanelTabPaneLogs" role="tab" data-toggle="tab" onclick="refreshLogsTab();"><span class="fa fa-fw fa-list-alt" aria-hidden="true"></span> Protokolle</a></li>
+                <li id="mainPanelTabListSelfTest" role="presentation"><a href="#mainPanelTabPaneSelfTest" aria-controls="mainPanelTabPaneSelfTest" role="tab" data-toggle="tab" onclick="refreshSelfTest(false);"><span class="fa fa-fw fa-stethoscope" aria-hidden="true"></span> Selbsttest</a></li>
                 <li class="nav-sep" role="separator"></li>
                 <li id="mainPanelTabListSettings" role="presentation"><a href="#mainPanelTabPaneSettings" aria-controls="mainPanelTabPaneSettings" role="tab" data-toggle="tab" onclick="refreshDnsSettings();"><span class="fa fa-fw fa-cog" aria-hidden="true"></span> Einstellungen</a></li>
                 <li id="mainPanelTabListAdmin" role="presentation"><a href="#mainPanelTabPaneAdmin" aria-controls="mainPanelTabPaneAdmin" role="tab" data-toggle="tab" onclick="refreshAdminTab();"><span class="fa fa-fw fa-users" aria-hidden="true"></span> Verwaltung</a></li>
@@ -161,6 +163,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
             <div id="pageMain" class="page">
                             <div class="tab-content">
                                 <div id="mainPanelTabPaneDashboard" role="tabpanel" class="tab-pane active dashboard" style="padding: 10px 0 0 0;">
+                                    <div id="divDashboardHealthAlert" style="display: none;"></div>
+                                    <div id="divDashboardHealth" class="dashboard-health" role="alert" style="display: none;"></div>
                                     <div class="dashboard-toolbar">
                                         <div class="pull-left">
                                             <div class="btn-group" data-toggle="buttons">
@@ -1061,6 +1065,22 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
                                 </div>
 
+                                <div id="mainPanelTabPaneSelfTest" role="tabpanel" class="tab-pane" style="padding: 10px 0 0 0;">
+                                    <div class="section-intro">
+                                        <div class="pull-left">
+                                            Der Selbsttest prüft, ob der Resolver wie vorgesehen arbeitet: lauschende Dienste, Auflösung und DNSSEC, Zertifikate, Sicherheitseinstellungen, Blocklisten, Apps und das System. Schwere Probleme erscheinen zusätzlich auf der Übersicht. Ergebnisse werden eine Minute zwischengespeichert.
+                                        </div>
+                                        <div class="pull-right">
+                                            <button id="btnSelfTestRun" type="button" class="btn btn-primary btn-sm" onclick="refreshSelfTest(true);" data-loading-text="Prüfe..."><span class="fa fa-refresh" aria-hidden="true"></span> Erneut prüfen</button>
+                                        </div>
+                                        <div class="clearfix"></div>
+                                    </div>
+
+                                    <div id="divSelfTestSummary" class="selftest-summary"></div>
+                                    <div id="divSelfTestLoader" style="display: none; height: 300px;"></div>
+                                    <div id="divSelfTestResults"></div>
+                                </div>
+
                                 <div id="mainPanelTabPaneSettings" role="tabpanel" class="tab-pane" style="padding: 10px 0 0 0;">
                                     <div id="divDnsSettingsLoader" style="margin-top: 10px; height: 400px;"></div>
 
@@ -1076,7 +1096,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
                                     <li id="settingsTabListCache" role="presentation"><a href="#settingsTabPaneCache" aria-controls="settingsTabPaneCache" role="tab" data-toggle="tab"><span class="fa fa-database fa-fw" aria-hidden="true"></span> Cache</a></li>
                                     <li id="settingsTabListBlocking" role="presentation"><a href="#settingsTabPaneBlocking" aria-controls="settingsTabPaneBlocking" role="tab" data-toggle="tab"><span class="fa fa-ban fa-fw" aria-hidden="true"></span> Blockierung</a></li>
                                     <li id="settingsTabListRequestFilter" role="presentation"><a href="#settingsTabPaneRequestFilter" aria-controls="settingsTabPaneRequestFilter" role="tab" data-toggle="tab"><span class="fa fa-shield fa-fw" aria-hidden="true"></span> Anfragefilter</a></li>
-                                    <li id="settingsTabListRateLimiting" role="presentation"><a href="#settingsTabPaneRateLimiting" aria-controls="settingsTabPaneRateLimiting" role="tab" data-toggle="tab"><span class="fa fa-hourglass-half fa-fw" aria-hidden="true"></span> Ratenbegrenzung</a></li>
+                                    <li id="settingsTabListRateLimiting" role="presentation"><a href="#settingsTabPaneRateLimiting" aria-controls="settingsTabPaneRateLimiting" role="tab" data-toggle="tab"><span class="fa fa-sliders fa-fw" aria-hidden="true"></span> Ratenbegrenzung</a></li>
                                     <li id="settingsTabListOptionalProtocols" role="presentation"><a href="#settingsTabPaneOptionalProtocols" aria-controls="settingsTabPaneOptionalProtocols" role="tab" data-toggle="tab"><span class="fa fa-lock fa-fw" aria-hidden="true"></span> Verschlüsselte Protokolle</a></li>
                                     <li id="settingsTabListWebService" role="presentation"><a href="#settingsTabPaneWebService" aria-controls="settingsTabPaneWebService" role="tab" data-toggle="tab"><span class="fa fa-desktop fa-fw" aria-hidden="true"></span> Weboberfläche</a></li>
                                     <li id="settingsTabListLogging" role="presentation"><a href="#settingsTabPaneLogging" aria-controls="settingsTabPaneLogging" role="tab" data-toggle="tab"><span class="fa fa-file-text-o fa-fw" aria-hidden="true"></span> Protokollierung</a></li>
@@ -1782,6 +1802,14 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
                                 </div>
 
                                 <div class="form-group">
+                                    <label for="txtBlockingReportText" class="col-sm-3 control-label">Blockierungstext</label>
+                                    <div class="col-sm-6">
+                                        <input type="text" class="form-control" id="txtBlockingReportText" maxlength="255" placeholder="source={source}; domain={domain}">
+                                    </div>
+                                    <div class="col-sm-offset-3 col-sm-8 help-block-text">Eigener Text für den Extended DNS Error und den TXT-Bericht, zum Beispiel <code>Blockiert von Beispiel-DNS: {domain}</code>. Platzhalter: <code>{domain}</code> für die blockierte Domain, <code>{list}</code> für die Blocklisten-URL, <code>{source}</code> für die Quelle. Leer lassen für den Standardtext.</div>
+                                </div>
+
+                                <div class="form-group">
                                     <label class="col-sm-3 control-label">Vorübergehend pausiert bis</label>
                                     <div class="col-sm-8">
                                         <div id="lblTemporaryDisableBlockingTill" style="padding-top: 7px;"></div>
@@ -1823,9 +1851,17 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
                                 <div class="form-group">
                                     <label for="txtBlockingAnswerTtl" class="col-sm-3 control-label">TTL der Blockierantwort</label>
                                     <div class="col-sm-8">
-                                        <input type="text" class="form-control" id="txtBlockingAnswerTtl" placeholder="TTL" style="width: 100px; display: inline;"> <span class="unit">Sekunden (Standard 30)</span>
+                                        <input type="text" class="form-control" id="txtBlockingAnswerTtl" placeholder="TTL" style="width: 100px; display: inline;"> <span class="unit">Sekunden (Standard 300)</span>
                                     </div>
-                                    <div class="col-sm-offset-3 col-sm-8 help-block-text">Wie lange Clients eine Blockierantwort zwischenspeichern.</div>
+                                    <div class="col-sm-offset-3 col-sm-8 help-block-text">Wie lange Clients Blockierantworten mit Adressen (Nulladresse, eigene Adressen) und den TXT-Bericht zwischenspeichern.</div>
+                                </div>
+
+                                <div class="form-group">
+                                    <label for="txtBlockingNegativeTtl" class="col-sm-3 control-label">SOA für negatives Caching</label>
+                                    <div class="col-sm-8">
+                                        <input type="text" class="form-control" id="txtBlockingNegativeTtl" placeholder="TTL" style="width: 100px; display: inline;"> <span class="unit">Sekunden (Standard 300)</span>
+                                    </div>
+                                    <div class="col-sm-offset-3 col-sm-8 help-block-text">NXDOMAIN- und NODATA-Blockierantworten enthalten einen SOA-Eintrag. Dieser Wert ist dessen TTL und MINIMUM und legt fest, wie lange Clients und nachgelagerte Resolver die Antwort nach RFC 2308 negativ zwischenspeichern. Primärserver und Kontakt im SOA kommen aus dem Serverdomainnamen und der Kontaktadresse unter Server.</div>
                                 </div>
                                 </div>
 
@@ -1839,13 +1875,13 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
                                         <label for="optQuickBlockList" class="control-label" style="padding-top: 8px;">Schnell hinzufügen</label>
                                         <select id="optQuickBlockList" class="form-control" style="width: 100%;"></select>
                                     </div>
-                                    <div class="col-sm-offset-3 col-sm-8 help-block-text">Eine URL pro Zeile. Unterstützt werden das hosts-Format, reine Domainlisten, Wildcard-Listen und das Adblock-Plus-Format. Lokale Dateien lassen sich per <code>file:///pfad/zur/liste.txt</code> einbinden. Ein vorangestelltes <code>!</code> macht die Liste zur Erlaubnisliste (nicht für Adblock-Plus-Listen). Zeilen, die mit <code>#</code> beginnen, sind Kommentare. Die Schnellauswahl lässt sich über <code>www/json/readme.txt</code> anpassen.</div>
+                                    <div class="col-sm-offset-3 col-sm-8 help-block-text">Eine URL pro Zeile. Unterstützt werden das hosts-Format, reine Domainlisten, Wildcard-Listen und das Adblock-Plus-Format. Lokale Dateien lassen sich per <code>file:///pfad/zur/liste.txt</code> einbinden. Ein vorangestelltes <code>!</code> macht die Liste zur Erlaubnisliste (nicht für Adblock-Plus-Listen). Zeilen, die mit <code>#</code> beginnen, sind Kommentare. Die Schnellauswahl bietet die Listen von HaGeZi im Wildcard-Domain-Format vom Build-Mirror <code>hagezi-mirror.dnsbunker.org</code>, der jede neue Version sofort veröffentlicht, etwa alle 4 bis 8 Stunden. Aus der Gruppe „Multi“ genügt eine Stufe, die Threat Intelligence Feeds ergänzen sie.</div>
                                 </div>
 
                                 <div class="form-group">
                                     <label for="txtBlockListUpdateIntervalHours" class="col-sm-3 control-label">Aktualisierungsintervall</label>
                                     <div class="col-sm-8">
-                                        <input type="number" class="form-control" id="txtBlockListUpdateIntervalHours" placeholder="Stunden" style="width: 100px; display: inline;"> <span class="unit">Stunden (0–168, Standard 24, 0 = keine automatische Aktualisierung)</span>
+                                        <input type="number" class="form-control" id="txtBlockListUpdateIntervalHours" placeholder="Stunden" style="width: 100px; display: inline;"> <span class="unit">Stunden (0–168, Standard 8, 0 = keine automatische Aktualisierung)</span>
                                     </div>
 
                                 </div>
@@ -1941,11 +1977,48 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
                                     </div>
                                 </div>
                                 </div>
+
+                                <div class="well well-sm form-horizontal settings-section">
+                                    <h4 class="settings-section-title">Client-Sperrlisten</h4>
+                                    <p class="settings-section-desc">Anfragen von Adressen auf diesen Listen werden ohne Antwort verworfen, über UDP noch vor dem Auswerten der Anfrage. TCP-, DoT-, DoQ- und DoH-Verbindungen werden sofort getrennt. Unterstützt werden Listen mit einzelnen IP-Adressen oder Netzen in CIDR-Schreibweise, auch mit Zusatzspalten wie bei IPsum oder Spamhaus DROP. Loopback und die Ausnahmen der Ratenbegrenzung werden nie gesperrt.</p>
+                                <div class="form-group">
+                                    <label for="txtClientBlockListUrls" class="col-sm-3 control-label">Listen-URLs</label>
+                                    <div class="col-sm-6">
+                                        <textarea id="txtClientBlockListUrls" class="form-control" rows="4" spellcheck="false"></textarea>
+                                        <label for="optQuickClientBlockList" class="control-label" style="padding-top: 8px;">Schnell hinzufügen</label>
+                                        <select id="optQuickClientBlockList" class="form-control" style="width: 100%;">
+                                            <option value=""></option>
+                                            <option value="https://raw.githubusercontent.com/stamparm/ipsum/master/levels/3.txt">IPsum Level 3 – auf mindestens drei Sperrlisten (empfohlen)</option>
+                                            <option value="https://raw.githubusercontent.com/stamparm/ipsum/master/levels/2.txt">IPsum Level 2 – mehr Treffer, mehr Fehlalarme</option>
+                                            <option value="https://raw.githubusercontent.com/stamparm/ipsum/master/levels/4.txt">IPsum Level 4 – nur sehr häufig gemeldete Adressen</option>
+                                            <option value="https://raw.githubusercontent.com/stamparm/ipsum/master/levels/5.txt">IPsum Level 5 – nur die auffälligsten Adressen</option>
+                                            <option value="https://www.spamhaus.org/drop/drop.txt">Spamhaus DROP – gekaperte und kriminelle IPv4-Netze</option>
+                                            <option value="https://www.spamhaus.org/drop/dropv6.txt">Spamhaus DROPv6 – gekaperte und kriminelle IPv6-Netze</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-sm-offset-3 col-sm-8 help-block-text">Eine URL pro Zeile, <code>https://</code> oder <code>file:///pfad/liste.txt</code>. Hinter CGNAT teilen sich viele Nutzer eine Adresse; strengere IPsum-Level sperren weniger, aber sicherer.</div>
+                                </div>
+
+                                <div class="form-group">
+                                    <label for="txtClientBlockListUpdateIntervalHours" class="col-sm-3 control-label">Aktualisierungsintervall</label>
+                                    <div class="col-sm-8">
+                                        <input type="number" class="form-control" id="txtClientBlockListUpdateIntervalHours" placeholder="Stunden" style="width: 100px; display: inline;"> <span class="unit">Stunden (0–168, Standard 24, 0 = keine automatische Aktualisierung)</span>
+                                    </div>
+                                </div>
+
+                                <div class="form-group">
+                                    <label class="col-sm-3 control-label">Status</label>
+                                    <div class="col-sm-8">
+                                        <div id="lblClientBlockListStatus" style="padding-top: 7px;"></div>
+                                        <div style="padding-top: 8px;"><button id="btnUpdateClientBlockListsNow" type="button" class="btn btn-default btn-sm" data-loading-text="Aktualisiere..." onclick="forceUpdateClientBlockLists();">Jetzt aktualisieren</button></div>
+                                    </div>
+                                </div>
+                                </div>
                                 </div>
                                 <div id="settingsTabPaneRateLimiting" role="tabpanel" class="tab-pane">
                                 <div class="well well-sm form-horizontal settings-section" id="divSettingsGeneralRateLimiting">
-                                    <h4 class="settings-section-title">Anfragen pro Minute (QPM)</h4>
-                                    <p class="settings-section-desc">Begrenzt die Anfragen je Client-Subnetz. Für einen öffentlichen Resolver ist das der wichtigste Schutz gegen Missbrauch für Amplification-Angriffe. Gezählt wird der Mittelwert über das Stichprobenfenster; kurze Spitzen sind also erlaubt. Gebremste Clients erscheinen in der Übersicht orange markiert.</p>
+                                    <h4 class="settings-section-title">Anfragen pro Sekunde (QPS)</h4>
+                                    <p class="settings-section-desc">Begrenzt die Anfragen je Client-Subnetz mit einem Token-Bucket, wie bei dnsdist. Für einen öffentlichen Resolver ist das der wichtigste Schutz gegen Missbrauch für Amplification-Angriffe. Jede Anfrage verbraucht ein Token, pro Sekunde kommen so viele Tokens nach, wie das Limit erlaubt. Gebremste Clients erscheinen in der Übersicht orange markiert und werden im Log gemeldet.</p>
                                 <div class="form-group">
                                     <label class="col-sm-3 control-label">Limits für IPv4</label>
                                     <div class="col-sm-6">
@@ -1953,15 +2026,15 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
                                             <thead>
                                                 <tr>
                                                     <th style="width: 110px;">IPv4-Präfix</th>
-                                                    <th>UDP-Limit</th>
-                                                    <th>TCP-Limit</th>
-                                                    <th style="width: 84px;"><button type="button" class="btn btn-default btn-xs" onclick="addQpmPrefixLimitsIPv4Row('', '', '');">Hinzufügen</button></th>
+                                                    <th>UDP (Anfragen/s)</th>
+                                                    <th>TCP (Anfragen/s)</th>
+                                                    <th style="width: 84px;"><button type="button" class="btn btn-default btn-xs" onclick="addQpsPrefixLimitsIPv4Row('', '', '');">Hinzufügen</button></th>
                                                 </tr>
                                             </thead>
-                                            <tbody id="tableQpmPrefixLimitsIPv4"></tbody>
+                                            <tbody id="tableQpsPrefixLimitsIPv4"></tbody>
                                         </table>
                                     </div>
-                                    <div class="col-sm-offset-3 col-sm-8 help-block-text">Maximale Anfragen je Minute für ein IPv4-Subnetz der angegebenen Präfixlänge, getrennt nach UDP und TCP. <code>0</code> bedeutet unbegrenzt. Das TCP-Limit gilt auch für DoT, DoH und DoQ.</div>
+                                    <div class="col-sm-offset-3 col-sm-8 help-block-text">Maximale Anfragen je Sekunde für ein IPv4-Subnetz der angegebenen Präfixlänge, getrennt nach UDP und TCP. <code>0</code> bedeutet unbegrenzt. Das TCP-Limit gilt auch für DoT, DoH und DoQ. Empfohlen: <code>/32</code> mit 100 und 400, <code>/24</code> mit 1000 und 4000.</div>
                                 </div>
 
                                 <div class="form-group">
@@ -1971,37 +2044,37 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
                                             <thead>
                                                 <tr>
                                                     <th style="width: 110px;">IPv6-Präfix</th>
-                                                    <th>UDP-Limit</th>
-                                                    <th>TCP-Limit</th>
-                                                    <th style="width: 84px;"><button type="button" class="btn btn-default btn-xs" onclick="addQpmPrefixLimitsIPv6Row('', '', '');">Hinzufügen</button></th>
+                                                    <th>UDP (Anfragen/s)</th>
+                                                    <th>TCP (Anfragen/s)</th>
+                                                    <th style="width: 84px;"><button type="button" class="btn btn-default btn-xs" onclick="addQpsPrefixLimitsIPv6Row('', '', '');">Hinzufügen</button></th>
                                                 </tr>
                                             </thead>
-                                            <tbody id="tableQpmPrefixLimitsIPv6"></tbody>
+                                            <tbody id="tableQpsPrefixLimitsIPv6"></tbody>
                                         </table>
                                     </div>
-                                    <div class="col-sm-offset-3 col-sm-8 help-block-text">Wie oben, für IPv6-Subnetze.</div>
+                                    <div class="col-sm-offset-3 col-sm-8 help-block-text">Wie oben, für IPv6-Subnetze. Empfohlen: <code>/64</code> mit 100 und 400, <code>/56</code> mit 1000 und 4000.</div>
                                 </div>
 
                                 <div class="form-group">
-                                    <label for="txtQpmLimitSampleMinutes" class="col-sm-3 control-label">Stichprobenfenster</label>
+                                    <label for="txtRateLimitBurstSeconds" class="col-sm-3 control-label">Burst</label>
                                     <div class="col-sm-8">
-                                        <input type="number" class="form-control" id="txtQpmLimitSampleMinutes" placeholder="Minuten" style="width: 100px; display: inline;"> <span class="unit">Minuten (1–60, Standard 5)</span>
+                                        <input type="number" class="form-control" id="txtRateLimitBurstSeconds" placeholder="Sekunden" style="width: 100px; display: inline;"> <span class="unit">Sekunden (1–60, Standard 5)</span>
                                     </div>
-                                    <div class="col-sm-offset-3 col-sm-8 help-block-text">Zeitraum der letzten Stunde, über den der Durchschnitt gebildet wird.</div>
+                                    <div class="col-sm-offset-3 col-sm-8 help-block-text">Ein Client darf kurzzeitig so viele Anfragen senden, wie das Limit in dieser Zeit erlaubt, etwa beim Laden einer Webseite mit vielen Domains. Danach gilt das Limit pro Sekunde.</div>
                                 </div>
 
                                 <div class="form-group">
-                                    <label for="txtQpmLimitUdpTruncation" class="col-sm-3 control-label">Anteil TC-Antworten</label>
+                                    <label for="txtRateLimitUdpTruncation" class="col-sm-3 control-label">Anteil TC-Antworten</label>
                                     <div class="col-sm-8">
-                                        <input type="number" class="form-control" id="txtQpmLimitUdpTruncation" placeholder="%" style="width: 100px; display: inline;"> <span class="unit">% (0–100, Standard 50)</span>
+                                        <input type="number" class="form-control" id="txtRateLimitUdpTruncation" placeholder="%" style="width: 100px; display: inline;"> <span class="unit">% (0–100, Standard 50)</span>
                                     </div>
                                     <div class="col-sm-offset-3 col-sm-8 help-block-text">Anteil der gebremsten UDP-Anfragen, die mit gesetztem TC-Bit beantwortet statt verworfen werden. Echte Clients wiederholen die Anfrage dann über TCP; gefälschte Absender bekommen so keine verstärkte Antwort.</div>
                                 </div>
 
                                 <div class="form-group">
-                                    <label for="txtQpmLimitBypassList" class="col-sm-3 control-label">Ausnahmen</label>
+                                    <label for="txtRateLimitBypassList" class="col-sm-3 control-label">Ausnahmen</label>
                                     <div class="col-sm-6">
-                                        <textarea id="txtQpmLimitBypassList" class="form-control" rows="4" spellcheck="false"></textarea>
+                                        <textarea id="txtRateLimitBypassList" class="form-control" rows="4" spellcheck="false"></textarea>
                                     </div>
                                     <div class="col-sm-offset-3 col-sm-8 help-block-text">IP-Adressen oder Netze, eine pro Zeile, die nie begrenzt werden. Loopback-Adressen sind immer ausgenommen.</div>
                                 </div>
@@ -2062,15 +2135,23 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
                                     <div class="col-sm-6">
                                         <input type="text" class="form-control" id="txtDnsTlsCertificatePath" placeholder="Pfad auf dem Server" maxlength="255">
                                     </div>
-                                    <div class="col-sm-offset-3 col-sm-8 help-block-text">Pfad zu einer PKCS#12-Datei (.pfx/.p12) mit privatem Schlüssel, absolut oder relativ zum Konfigurationsordner. Das Zertifikat wird automatisch neu geladen, sobald sich die Datei ändert. Ohne Zertifikat bleiben DoT, DoH und DoQ inaktiv.</div>
+                                    <div class="col-sm-offset-3 col-sm-8 help-block-text">PEM-Zertifikat mit Zwischenzertifikaten, etwa <code>fullchain.pem</code> von Let's Encrypt, oder eine PKCS#12-Datei (.pfx/.p12). Absolut oder relativ zum Konfigurationsordner. Zertifikat und Schlüssel werden automatisch neu geladen, sobald sich eine der Dateien ändert, auch hinter Symlinks. Ohne Zertifikat bleiben DoT, DoH und DoQ inaktiv.</div>
                                 </div>
 
                                 <div class="form-group">
-                                    <label for="txtDnsTlsCertificatePassword" class="col-sm-3 control-label">Zertifikatspasswort</label>
+                                    <label for="txtDnsTlsCertificateKeyPath" class="col-sm-3 control-label">Privater Schlüssel</label>
+                                    <div class="col-sm-6">
+                                        <input type="text" class="form-control" id="txtDnsTlsCertificateKeyPath" placeholder="z. B. privkey.pem" maxlength="255">
+                                    </div>
+                                    <div class="col-sm-offset-3 col-sm-8 help-block-text">Nur für PEM: Pfad zur Schlüsseldatei. Leer lassen, wenn der Schlüssel in der Zertifikatsdatei steht oder eine PKCS#12-Datei verwendet wird.</div>
+                                </div>
+
+                                <div class="form-group">
+                                    <label for="txtDnsTlsCertificatePassword" class="col-sm-3 control-label">Passwort</label>
                                     <div class="col-sm-6">
                                         <input type="password" class="form-control" id="txtDnsTlsCertificatePassword" placeholder="Passwort" maxlength="255">
                                     </div>
-
+                                    <div class="col-sm-offset-3 col-sm-8 help-block-text">Für PKCS#12-Dateien oder verschlüsselte PEM-Schlüssel, sonst leer lassen.</div>
                                 </div>
 
                                 <div class="form-group">
@@ -2084,8 +2165,34 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
                                 </div>
 
                                 <div class="settings-note"><b>Hinweis:</b> Client-Konfiguration: DoT <code id="lblDoTHost">tls-certificate-domain:853</code>, DoQ <code id="lblDoQHost">tls-certificate-domain:853</code>, DoH <code>https://<span id="lblDoHsHost">tls-certificate-domain</span>/dns-query</code>.</div>
-                                <div class="settings-note"><b>Hinweis:</b> PEM-Zertifikate lassen sich so umwandeln: <code>openssl pkcs12 -export -out "example.com.pfx" -inkey "privkey.pem" -in "cert.pem" -certfile "chain.pem"</code></div>
+                                <div class="settings-note"><b>Hinweis:</b> Der Dienstbenutzer braucht Leserechte auf Zertifikat und Schlüssel. Für Let's Encrypt eignet sich ein Deploy-Hook, der die Dateien nach jeder Erneuerung kopiert: <code>certbot renew --deploy-hook 'install -o zenitiumdns -g zenitiumdns -m 0644 "$RENEWED_LINEAGE/fullchain.pem" /etc/zenitiumdns/fullchain.pem; install -o zenitiumdns -g zenitiumdns -m 0600 "$RENEWED_LINEAGE/privkey.pem" /etc/zenitiumdns/privkey.pem'</code></div>
+                                <div class="settings-note"><b>0-RTT:</b> TLS Early Data (0-RTT) bietet der TLS- und QUIC-Stack von .NET serverseitig nicht an, deshalb gibt es dafür keine Einstellung. Für DNS-over-HTTPS lässt sich 0-RTT mit einem vorgeschalteten Reverse Proxy nutzen, etwa nginx mit <code>ssl_early_data on;</code>, der an DNS-over-HTTP weiterleitet (siehe „Hinter einem Reverse Proxy“). DNS-Anfragen sind wiederholbar, daher ist 0-RTT dafür unkritisch.</div>
 
+                                </div>
+
+                                <div class="well well-sm form-horizontal settings-section">
+                                    <h4 class="settings-section-title">Automatische Erkennung (DDR)</h4>
+                                    <p class="settings-section-desc">Mit Discovery of Designated Resolvers (RFC 9462) erfahren Clients wie Windows 11, iOS und macOS, dass dieser Resolver auch verschlüsselt erreichbar ist, und wechseln selbstständig auf DoH, DoT oder DoQ. Die Einträge für <code>_dns.resolver.arpa</code> werden automatisch aus den aktivierten Diensten, ihren Ports und dem Namen im TLS-Zertifikat erzeugt.</p>
+                                <div class="form-group">
+                                    <label class="col-sm-3 control-label">DDR</label>
+                                    <div class="col-sm-8">
+                                        <div class="checkbox">
+                                            <label><input id="chkEnableDdr" type="checkbox"> Verschlüsselte Dienste per DDR ankündigen</label>
+                                        </div>
+                                        <div class="checkbox">
+                                            <label><input id="chkDdrOnlyUnencrypted" type="checkbox"> Nur über unverschlüsseltes DNS (Do53) beantworten</label>
+                                        </div>
+                                        <div class="option-help">Die Ankündigung erhalten dann nur Clients, die über UDP oder TCP auf Port 53 fragen, auch hinter einem PROXY-Protokoll-Load-Balancer. Über DoT, DoH und DoQ wird <code>_dns.resolver.arpa</code> wie jede andere lokal bediente Domain mit NXDOMAIN beantwortet.</div>
+                                        <div class="option-help">Clients prüfen, ob das TLS-Zertifikat die IP-Adresse enthält, über die sie diesen Resolver unverschlüsselt erreichen. Ohne IP-Adresse im Zertifikat nutzen viele Clients die Ankündigung nicht. Feste Adressen unter Netzwerk werden als Adresshinweise mitgesendet.</div>
+                                    </div>
+                                </div>
+
+                                <div class="form-group">
+                                    <label class="col-sm-3 control-label">Aktuelle Einträge</label>
+                                    <div class="col-sm-8">
+                                        <pre id="preDdrRecords" style="white-space: pre-wrap; margin: 0;"></pre>
+                                    </div>
+                                </div>
                                 </div>
 
                                 <div class="well well-sm form-horizontal settings-section">
@@ -2228,15 +2335,23 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
                                     <div class="col-sm-6">
                                         <input type="text" class="form-control" id="txtWebServiceTlsCertificatePath" placeholder="Pfad auf dem Server" maxlength="255">
                                     </div>
-                                    <div class="col-sm-offset-3 col-sm-8 help-block-text">PKCS#12-Datei (.pfx/.p12) mit privatem Schlüssel, absolut oder relativ zum Konfigurationsordner. Wird bei Änderung automatisch neu geladen.</div>
+                                    <div class="col-sm-offset-3 col-sm-8 help-block-text">PEM-Zertifikat wie <code>fullchain.pem</code> oder PKCS#12-Datei (.pfx/.p12), absolut oder relativ zum Konfigurationsordner. Wird bei Änderung automatisch neu geladen.</div>
                                 </div>
 
                                 <div class="form-group">
-                                    <label for="txtWebServiceTlsCertificatePassword" class="col-sm-3 control-label">Zertifikatspasswort</label>
+                                    <label for="txtWebServiceTlsCertificateKeyPath" class="col-sm-3 control-label">Privater Schlüssel</label>
+                                    <div class="col-sm-6">
+                                        <input type="text" class="form-control" id="txtWebServiceTlsCertificateKeyPath" placeholder="z. B. privkey.pem" maxlength="255">
+                                    </div>
+                                    <div class="col-sm-offset-3 col-sm-8 help-block-text">Nur für PEM, leer lassen bei PKCS#12 oder wenn der Schlüssel in der Zertifikatsdatei steht.</div>
+                                </div>
+
+                                <div class="form-group">
+                                    <label for="txtWebServiceTlsCertificatePassword" class="col-sm-3 control-label">Passwort</label>
                                     <div class="col-sm-6">
                                         <input type="password" class="form-control" id="txtWebServiceTlsCertificatePassword" placeholder="Passwort" maxlength="255">
                                     </div>
-
+                                    <div class="col-sm-offset-3 col-sm-8 help-block-text">Für PKCS#12-Dateien oder verschlüsselte PEM-Schlüssel.</div>
                                 </div>
                                 </div>
 

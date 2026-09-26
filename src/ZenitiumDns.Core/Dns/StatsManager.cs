@@ -1599,26 +1599,6 @@ namespace ZenitiumDns.Core.Dns
             }
         }
 
-        public Dictionary<NetworkAddress, ValueTuple<long, long>> GetLatestClientSubnetStats(int minutes, IEnumerable<int> ipv4Prefixes, IEnumerable<int> ipv6Prefixes)
-        {
-            StatCounter totalStatCounter = new StatCounter();
-            totalStatCounter.Lock();
-
-            DateTime lastHourDateTime = DateTime.UtcNow.AddMinutes(1 - minutes);
-            lastHourDateTime = new DateTime(lastHourDateTime.Year, lastHourDateTime.Month, lastHourDateTime.Day, lastHourDateTime.Hour, lastHourDateTime.Minute, 0, DateTimeKind.Utc);
-
-            for (int minute = 0; minute < minutes; minute++)
-            {
-                DateTime lastDateTime = lastHourDateTime.AddMinutes(minute);
-
-                StatCounter statCounter = _lastHourStatCounters[lastDateTime.Minute];
-                if (statCounter is not null)
-                    totalStatCounter.Merge(statCounter, false, true);
-            }
-
-            return totalStatCounter.GetClientSubnetStats(ipv4Prefixes, ipv6Prefixes);
-        }
-
         #endregion
 
         #region properties

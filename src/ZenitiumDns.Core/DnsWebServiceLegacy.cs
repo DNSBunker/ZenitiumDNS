@@ -112,7 +112,7 @@ namespace ZenitiumDns.Core
                 _dnsServer.EDnsClientSubnetIPv6PrefixLength = 56;
                 _dnsServer.EDnsClientSubnetIpv4Override = null;
                 _dnsServer.EDnsClientSubnetIpv6Override = null;
-                _dnsServer.QpmLimitBypassList = null;
+                _dnsServer.RateLimitBypassList = null;
 
                 if (_dnsServer.EnableDnsOverUdpProxy || _dnsServer.EnableDnsOverTcpProxy || _dnsServer.EnableDnsOverHttp)
                 {
@@ -344,7 +344,7 @@ namespace ZenitiumDns.Core
                         for (int i = 0; i < count; i++)
                             qpmPrefixLimitsIPv4.Add(bR.ReadInt32(), (bR.ReadInt32(), bR.ReadInt32()));
 
-                        _dnsServer.QpmPrefixLimitsIPv4 = qpmPrefixLimitsIPv4;
+                        _dnsServer.LegacyQpmPrefixLimitsIPv4 = qpmPrefixLimitsIPv4;
                     }
 
                     {
@@ -354,38 +354,37 @@ namespace ZenitiumDns.Core
                         for (int i = 0; i < count; i++)
                             qpmPrefixLimitsIPv6.Add(bR.ReadInt32(), (bR.ReadInt32(), bR.ReadInt32()));
 
-                        _dnsServer.QpmPrefixLimitsIPv6 = qpmPrefixLimitsIPv6;
+                        _dnsServer.LegacyQpmPrefixLimitsIPv6 = qpmPrefixLimitsIPv6;
                     }
 
-                    _dnsServer.QpmLimitSampleMinutes = bR.ReadInt32();
-                    _dnsServer.QpmLimitUdpTruncationPercentage = bR.ReadInt32();
+                    _ = bR.ReadInt32();
+                    _dnsServer.RateLimitUdpTruncationPercentage = bR.ReadInt32();
                 }
                 else
                 {
                     int qpmLimitRequests = bR.ReadInt32();
                     _ = bR.ReadInt32();
-                    int qpmLimitSampleMinutes = bR.ReadInt32();
+                    _ = bR.ReadInt32();
                     int qpmLimitIPv4PrefixLength = bR.ReadInt32();
                     int qpmLimitIPv6PrefixLength = bR.ReadInt32();
 
-                    _dnsServer.QpmPrefixLimitsIPv4 = new Dictionary<int, (int, int)>()
+                    _dnsServer.LegacyQpmPrefixLimitsIPv4 = new Dictionary<int, (int, int)>()
                     {
                         { qpmLimitIPv4PrefixLength, (qpmLimitRequests, qpmLimitRequests) }
                     };
 
-                    _dnsServer.QpmPrefixLimitsIPv6 = new Dictionary<int, (int, int)>()
+                    _dnsServer.LegacyQpmPrefixLimitsIPv6 = new Dictionary<int, (int, int)>()
                     {
                         { qpmLimitIPv6PrefixLength, (qpmLimitRequests, qpmLimitRequests) }
                     };
 
-                    _dnsServer.QpmLimitSampleMinutes = qpmLimitSampleMinutes;
-                    _dnsServer.QpmLimitUdpTruncationPercentage = 0;
+                    _dnsServer.RateLimitUdpTruncationPercentage = 0;
                 }
 
                 if (version >= 34)
-                    _dnsServer.QpmLimitBypassList = AuthZoneInfo.ReadNetworkAddressesFrom(bR);
+                    _dnsServer.RateLimitBypassList = AuthZoneInfo.ReadNetworkAddressesFrom(bR);
                 else
-                    _dnsServer.QpmLimitBypassList = null;
+                    _dnsServer.RateLimitBypassList = null;
 
                 _dnsServer.ClientTimeout = bR.ReadInt32();
                 if (version < 34)
@@ -910,59 +909,57 @@ namespace ZenitiumDns.Core
             {
                 int qpmLimitRequests = bR.ReadInt32();
                 _ = bR.ReadInt32();
-                int qpmLimitSampleMinutes = bR.ReadInt32();
+                _ = bR.ReadInt32();
                 int qpmLimitIPv4PrefixLength = bR.ReadInt32();
                 int qpmLimitIPv6PrefixLength = bR.ReadInt32();
 
-                _dnsServer.QpmPrefixLimitsIPv4 = new Dictionary<int, (int, int)>()
+                _dnsServer.LegacyQpmPrefixLimitsIPv4 = new Dictionary<int, (int, int)>()
                 {
                     { qpmLimitIPv4PrefixLength, (qpmLimitRequests, qpmLimitRequests) }
                 };
 
-                _dnsServer.QpmPrefixLimitsIPv6 = new Dictionary<int, (int, int)>()
+                _dnsServer.LegacyQpmPrefixLimitsIPv6 = new Dictionary<int, (int, int)>()
                 {
                     { qpmLimitIPv6PrefixLength, (qpmLimitRequests, qpmLimitRequests) }
                 };
 
-                _dnsServer.QpmLimitSampleMinutes = qpmLimitSampleMinutes;
-                _dnsServer.QpmLimitUdpTruncationPercentage = 0;
+                _dnsServer.RateLimitUdpTruncationPercentage = 0;
             }
             else if (version >= 17)
             {
                 int qpmLimitRequests = bR.ReadInt32();
-                int qpmLimitSampleMinutes = bR.ReadInt32();
+                _ = bR.ReadInt32();
                 _ = bR.ReadInt32();
 
-                _dnsServer.QpmPrefixLimitsIPv4 = new Dictionary<int, (int, int)>()
+                _dnsServer.LegacyQpmPrefixLimitsIPv4 = new Dictionary<int, (int, int)>()
                 {
                     { 24, (qpmLimitRequests, qpmLimitRequests) }
                 };
 
-                _dnsServer.QpmPrefixLimitsIPv6 = new Dictionary<int, (int, int)>()
+                _dnsServer.LegacyQpmPrefixLimitsIPv6 = new Dictionary<int, (int, int)>()
                 {
                     { 56, (qpmLimitRequests, qpmLimitRequests) }
                 };
 
-                _dnsServer.QpmLimitSampleMinutes = qpmLimitSampleMinutes;
-                _dnsServer.QpmLimitUdpTruncationPercentage = 0;
+                _dnsServer.RateLimitUdpTruncationPercentage = 0;
             }
             else
             {
-                _dnsServer.QpmPrefixLimitsIPv4 = new Dictionary<int, (int, int)>()
+                _dnsServer.LegacyQpmPrefixLimitsIPv4 = new Dictionary<int, (int, int)>()
                 {
                     { 32, (600, 600) },
                     { 24, (6000, 6000) }
                 };
 
-                _dnsServer.QpmPrefixLimitsIPv6 = new Dictionary<int, (int, int)>()
+                _dnsServer.LegacyQpmPrefixLimitsIPv6 = new Dictionary<int, (int, int)>()
                 {
                     { 128, (600, 600) },
                     { 64, (1200, 1200) },
                     { 56, (6000, 6000) }
                 };
 
-                _dnsServer.QpmLimitSampleMinutes = 5;
-                _dnsServer.QpmLimitUdpTruncationPercentage = 50;
+                _ = 5;
+                _dnsServer.RateLimitUdpTruncationPercentage = 50;
             }
 
             if (version >= 13)

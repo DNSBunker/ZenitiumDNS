@@ -1677,6 +1677,14 @@ namespace ZenitiumLibrary.Net.Dns
                         }
                     }
 
+                    if ((question.ZoneCut is not null) && ((lastException is DnsClientNoResponseException) || (lastException is SocketException) || (lastException is IOException)) && context.CanProceedWithResolution() && !(question.Name.Equals(question.MinimizedName, StringComparison.OrdinalIgnoreCase) && (question.Type == question.MinimizedType)))
+                    {
+                        question.ZoneCut = null;
+                        nameServerIndex = 0;
+                        lastException = null;
+                        continue;
+                    }
+
                     if (resolverStack.Count == 0)
                     {
                         if (lastResponse is not null)
@@ -4436,6 +4444,7 @@ namespace ZenitiumLibrary.Net.Dns
                     DateTime successTime = default;
 
                     bool protocolWasSwitched = false;
+                    bool startedWithUdp = server.Protocol == DnsTransportProtocol.Udp;
                     try
                     {
                         bool retryRequest;
@@ -4461,7 +4470,7 @@ namespace ZenitiumLibrary.Net.Dns
                                 }
                             }
 
-                            await using (DnsClientConnection connection = DnsClientConnection.GetConnection(server, proxy))
+                            await using (DnsClientConnection connection = startedWithUdp && (server.Protocol == DnsTransportProtocol.Tcp) ? new TcpClientConnection(server, proxy) : DnsClientConnection.GetConnection(server, proxy))
                             {
                                 try
                                 {

@@ -1,204 +1,276 @@
 [
 	{
-		"name": "Default",
+		"group": "Multi – eine Stufe wählen",
+		"name": "HaGeZi Multi PRO + Threat Intelligence Feeds (empfohlen)",
 		"urls": [
-			"https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts"
+			"https://hagezi-mirror.dnsbunker.org/wildcard/pro-onlydomains.txt",
+			"https://hagezi-mirror.dnsbunker.org/wildcard/tif-onlydomains.txt"
 		]
 	},
 	{
-		"name": "Steven Black [adware + malware]",
+		"group": "Multi – eine Stufe wählen",
+		"name": "HaGeZi Multi LIGHT – Grundschutz, kaum Fehlblockierungen",
 		"urls": [
-			"https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts"
+			"https://hagezi-mirror.dnsbunker.org/wildcard/light-onlydomains.txt"
 		]
 	},
 	{
-		"name": "Steven Black [adware + malware + fakenews]",
+		"group": "Multi – eine Stufe wählen",
+		"name": "HaGeZi Multi NORMAL – ausgewogener Schutz",
 		"urls": [
-			"https://raw.githubusercontent.com/StevenBlack/hosts/master/alternates/fakenews/hosts"
+			"https://hagezi-mirror.dnsbunker.org/wildcard/multi-onlydomains.txt"
 		]
 	},
 	{
-		"name": "Steven Black [adware + malware + gambling]",
+		"group": "Multi – eine Stufe wählen",
+		"name": "HaGeZi Multi PRO – erweiterter Schutz",
 		"urls": [
-			"https://raw.githubusercontent.com/StevenBlack/hosts/master/alternates/gambling/hosts"
+			"https://hagezi-mirror.dnsbunker.org/wildcard/pro-onlydomains.txt"
 		]
 	},
 	{
-		"name": "Steven Black [adware + malware + porn]",
+		"group": "Multi – eine Stufe wählen",
+		"name": "HaGeZi Multi PRO mini – wie PRO, kleinere Datei",
 		"urls": [
-			"https://raw.githubusercontent.com/StevenBlack/hosts/master/alternates/porn/hosts"
+			"https://hagezi-mirror.dnsbunker.org/wildcard/pro.mini-onlydomains.txt"
 		]
 	},
 	{
-		"name": "Steven Black [adware + malware + social]",
+		"group": "Multi – eine Stufe wählen",
+		"name": "HaGeZi Multi PRO++ – maximaler Schutz, gelegentlich zu streng",
 		"urls": [
-			"https://raw.githubusercontent.com/StevenBlack/hosts/master/alternates/social/hosts"
+			"https://hagezi-mirror.dnsbunker.org/wildcard/pro.plus-onlydomains.txt"
 		]
 	},
 	{
-		"name": "Steven Black [adware + malware + fakenews + gambling]",
+		"group": "Multi – eine Stufe wählen",
+		"name": "HaGeZi Multi PRO++ mini – wie PRO++, kleinere Datei",
 		"urls": [
-			"https://raw.githubusercontent.com/StevenBlack/hosts/master/alternates/fakenews-gambling/hosts"
+			"https://hagezi-mirror.dnsbunker.org/wildcard/pro.plus.mini-onlydomains.txt"
 		]
 	},
 	{
-		"name": "Steven Black [adware + malware + fakenews + porn]",
+		"group": "Multi – eine Stufe wählen",
+		"name": "HaGeZi Multi ULTIMATE – aggressiv, einzelne Seiten können brechen",
 		"urls": [
-			"https://raw.githubusercontent.com/StevenBlack/hosts/master/alternates/fakenews-porn/hosts"
+			"https://hagezi-mirror.dnsbunker.org/wildcard/ultimate-onlydomains.txt"
 		]
 	},
 	{
-		"name": "Steven Black [adware + malware + fakenews + social]",
+		"group": "Multi – eine Stufe wählen",
+		"name": "HaGeZi Multi ULTIMATE mini – wie ULTIMATE, kleinere Datei",
 		"urls": [
-			"https://raw.githubusercontent.com/StevenBlack/hosts/master/alternates/fakenews-social/hosts"
+			"https://hagezi-mirror.dnsbunker.org/wildcard/ultimate.mini-onlydomains.txt"
 		]
 	},
 	{
-		"name": "Steven Black [adware + malware + gambling + porn]",
+		"group": "Bedrohungen und Missbrauch",
+		"name": "HaGeZi Threat Intelligence Feeds – Phishing, Malware, Scam",
 		"urls": [
-			"https://raw.githubusercontent.com/StevenBlack/hosts/master/alternates/gambling-porn/hosts"
+			"https://hagezi-mirror.dnsbunker.org/wildcard/tif-onlydomains.txt"
 		]
 	},
 	{
-		"name": "Steven Black [adware + malware + gambling + social]",
+		"group": "Bedrohungen und Missbrauch",
+		"name": "HaGeZi Threat Intelligence Feeds medium",
 		"urls": [
-			"https://raw.githubusercontent.com/StevenBlack/hosts/master/alternates/gambling-social/hosts"
+			"https://hagezi-mirror.dnsbunker.org/wildcard/tif.medium-onlydomains.txt"
 		]
 	},
 	{
-		"name": "Steven Black [adware + malware + porn + social]",
+		"group": "Bedrohungen und Missbrauch",
+		"name": "HaGeZi Threat Intelligence Feeds mini",
 		"urls": [
-			"https://raw.githubusercontent.com/StevenBlack/hosts/master/alternates/porn-social/hosts"
+			"https://hagezi-mirror.dnsbunker.org/wildcard/tif.mini-onlydomains.txt"
 		]
 	},
 	{
-		"name": "Steven Black [adware + malware + fakenews + gambling + porn]",
+		"group": "Bedrohungen und Missbrauch",
+		"name": "HaGeZi Fake – Fake-Shops, Fake-Streaming, Abo-Fallen",
 		"urls": [
-			"https://raw.githubusercontent.com/StevenBlack/hosts/master/alternates/fakenews-gambling-porn/hosts"
+			"https://hagezi-mirror.dnsbunker.org/wildcard/fake-onlydomains.txt"
 		]
 	},
 	{
-		"name": "Steven Black [adware + malware + fakenews + gambling + social]",
+		"group": "Bedrohungen und Missbrauch",
+		"name": "HaGeZi Pop-Up Ads – lästige und schädliche Pop-ups",
 		"urls": [
-			"https://raw.githubusercontent.com/StevenBlack/hosts/master/alternates/fakenews-gambling-social/hosts"
+			"https://hagezi-mirror.dnsbunker.org/wildcard/popupads-onlydomains.txt"
 		]
 	},
 	{
-		"name": "Steven Black [adware + malware + fakenews + porn + social]",
+		"group": "Bedrohungen und Missbrauch",
+		"name": "HaGeZi Dynamic DNS – häufig für Phishing missbraucht",
 		"urls": [
-			"https://raw.githubusercontent.com/StevenBlack/hosts/master/alternates/fakenews-porn-social/hosts"
+			"https://hagezi-mirror.dnsbunker.org/wildcard/dyndns-onlydomains.txt"
 		]
 	},
 	{
-		"name": "Steven Black [adware + malware + gambling + porn + social]",
+		"group": "Bedrohungen und Missbrauch",
+		"name": "HaGeZi Badware Hoster – Hoster mit viel Schadsoftware",
 		"urls": [
-			"https://raw.githubusercontent.com/StevenBlack/hosts/master/alternates/gambling-porn-social/hosts"
+			"https://hagezi-mirror.dnsbunker.org/wildcard/hoster-onlydomains.txt"
 		]
 	},
 	{
-		"name": "Steven Black [adware + malware + fakenews + gambling + porn + social]",
+		"group": "Bedrohungen und Missbrauch",
+		"name": "HaGeZi Spam-TLDs – Top-Level-Domains mit überwiegend Spam",
 		"urls": [
-			"https://raw.githubusercontent.com/StevenBlack/hosts/master/alternates/fakenews-gambling-porn-social/hosts"
+			"https://hagezi-mirror.dnsbunker.org/wildcard/spam-tlds-onlydomains.txt"
 		]
 	},
 	{
-		"name": "OISD Big [Domains (Wildcards)]",
+		"group": "Bedrohungen und Missbrauch",
+		"name": "HaGeZi URL-Shortener – Kurzlinkdienste wie bit.ly",
 		"urls": [
-			"https://big.oisd.nl/domainswild2"
+			"https://hagezi-mirror.dnsbunker.org/wildcard/urlshortener-onlydomains.txt"
 		]
 	},
 	{
-		"name": "OISD NSFW [Domains (Wildcards)]",
+		"group": "Umgehung verhindern",
+		"name": "HaGeZi DoH/VPN/TOR/Proxy-Umgehung",
 		"urls": [
-			"https://nsfw.oisd.nl/domainswild2"
+			"https://hagezi-mirror.dnsbunker.org/wildcard/doh-vpn-proxy-bypass-onlydomains.txt"
 		]
 	},
 	{
-		"name": "HaGeZi [Multi Light - light protection]",
+		"group": "Umgehung verhindern",
+		"name": "HaGeZi verschlüsselte DNS-Server (DoH/DoT)",
 		"urls": [
-			"https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@latest/wildcard/light-onlydomains.txt"
+			"https://hagezi-mirror.dnsbunker.org/wildcard/doh-onlydomains.txt"
 		]
 	},
 	{
-		"name": "HaGeZi [Multi Normal - all-round protection]",
+		"group": "Umgehung verhindern",
+		"name": "HaGeZi Suchmaschinen ohne SafeSearch",
 		"urls": [
-			"https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@latest/wildcard/multi-onlydomains.txt"
+			"https://hagezi-mirror.dnsbunker.org/wildcard/nosafesearch-onlydomains.txt"
 		]
 	},
 	{
-		"name": "HaGeZi [Multi PRO - extended protection]",
+		"group": "Inhalte",
+		"name": "HaGeZi NSFW – Inhalte für Erwachsene",
 		"urls": [
-			"https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@latest/wildcard/pro-onlydomains.txt"
+			"https://hagezi-mirror.dnsbunker.org/wildcard/nsfw-onlydomains.txt"
 		]
 	},
 	{
-		"name": "HaGeZi [Multi PRO++ - maximum protection (more aggressive)]",
+		"group": "Inhalte",
+		"name": "HaGeZi Gambling – Glücksspiel",
 		"urls": [
-			"https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@latest/wildcard/pro.plus-onlydomains.txt"
+			"https://hagezi-mirror.dnsbunker.org/wildcard/gambling-onlydomains.txt"
 		]
 	},
 	{
-		"name": "HaGeZi [Multi ULTIMATE - aggressive protection]",
+		"group": "Inhalte",
+		"name": "HaGeZi Gambling medium",
 		"urls": [
-			"https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@latest/wildcard/ultimate-onlydomains.txt"
+			"https://hagezi-mirror.dnsbunker.org/wildcard/gambling.medium-onlydomains.txt"
 		]
 	},
 	{
-		"name": "HaGeZi [Threat Intelligence Feeds - phishing, malware, scam and other harmful domains]",
+		"group": "Inhalte",
+		"name": "HaGeZi Gambling mini",
 		"urls": [
-			"https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@latest/wildcard/tif-onlydomains.txt"
+			"https://hagezi-mirror.dnsbunker.org/wildcard/gambling.mini-onlydomains.txt"
 		]
 	},
 	{
-		"name": "HaGeZi Newly Registered Domains (NRD) - 7 days",
+		"group": "Inhalte",
+		"name": "HaGeZi Anti-Piracy – illegale Streaming- und Download-Seiten",
 		"urls": [
-			"https://cdn.jsdelivr.net/gh/hagezi/nrd@latest/domains/nrd7.txt"
+			"https://hagezi-mirror.dnsbunker.org/wildcard/anti.piracy-onlydomains.txt"
 		]
 	},
 	{
-		"name": "HaGeZi Newly Registered Domains (NRD) - 14 days",
+		"group": "Inhalte",
+		"name": "HaGeZi Social Networks",
 		"urls": [
-			"https://cdn.jsdelivr.net/gh/hagezi/nrd@latest/domains/nrd7.txt",
-			"https://cdn.jsdelivr.net/gh/hagezi/nrd@latest/domains/nrd14-8.txt"
+			"https://hagezi-mirror.dnsbunker.org/wildcard/social-onlydomains.txt"
 		]
 	},
 	{
-		"name": "HaGeZi Newly Registered Domains (NRD) - 21 days",
+		"group": "Tracking durch Geräte und Apps",
+		"name": "HaGeZi Native Tracker Amazon",
 		"urls": [
-			"https://cdn.jsdelivr.net/gh/hagezi/nrd@latest/domains/nrd7.txt",
-			"https://cdn.jsdelivr.net/gh/hagezi/nrd@latest/domains/nrd14-8.txt",
-			"https://cdn.jsdelivr.net/gh/hagezi/nrd@latest/domains/nrd21-15.txt"
+			"https://hagezi-mirror.dnsbunker.org/wildcard/native.amazon-onlydomains.txt"
 		]
 	},
 	{
-		"name": "HaGeZi Newly Registered Domains (NRD) - 28 days",
+		"group": "Tracking durch Geräte und Apps",
+		"name": "HaGeZi Native Tracker Apple",
 		"urls": [
-			"https://cdn.jsdelivr.net/gh/hagezi/nrd@latest/domains/nrd7.txt",
-			"https://cdn.jsdelivr.net/gh/hagezi/nrd@latest/domains/nrd14-8.txt",
-			"https://cdn.jsdelivr.net/gh/hagezi/nrd@latest/domains/nrd21-15.txt",
-			"https://cdn.jsdelivr.net/gh/hagezi/nrd@latest/domains/nrd28-22.txt"
+			"https://hagezi-mirror.dnsbunker.org/wildcard/native.apple-onlydomains.txt"
 		]
 	},
 	{
-		"name": "HaGeZi Newly Registered Domains (NRD) - 35 days",
+		"group": "Tracking durch Geräte und Apps",
+		"name": "HaGeZi Native Tracker Huawei",
 		"urls": [
-			"https://cdn.jsdelivr.net/gh/hagezi/nrd@latest/domains/nrd7.txt",
-			"https://cdn.jsdelivr.net/gh/hagezi/nrd@latest/domains/nrd14-8.txt",
-			"https://cdn.jsdelivr.net/gh/hagezi/nrd@latest/domains/nrd21-15.txt",
-			"https://cdn.jsdelivr.net/gh/hagezi/nrd@latest/domains/nrd28-22.txt",
-			"https://cdn.jsdelivr.net/gh/hagezi/nrd@latest/domains/nrd35-29.txt"
+			"https://hagezi-mirror.dnsbunker.org/wildcard/native.huawei-onlydomains.txt"
 		]
 	},
 	{
-		"name": "Shreshta - Newly Registered Domains (past week) Community Feed",
+		"group": "Tracking durch Geräte und Apps",
+		"name": "HaGeZi Native Tracker LG webOS",
 		"urls": [
-			"https://shreshtait.com/newly-registered-domains/nrd-1w"
+			"https://hagezi-mirror.dnsbunker.org/wildcard/native.lgwebos-onlydomains.txt"
 		]
 	},
 	{
-		"name": "Shreshta - Newly Registered Domains (past month) Community Feed",
+		"group": "Tracking durch Geräte und Apps",
+		"name": "HaGeZi Native Tracker OPPO/Realme",
 		"urls": [
-			"https://shreshtait.com/newly-registered-domains/nrd-1m"
+			"https://hagezi-mirror.dnsbunker.org/wildcard/native.oppo-realme-onlydomains.txt"
+		]
+	},
+	{
+		"group": "Tracking durch Geräte und Apps",
+		"name": "HaGeZi Native Tracker Roku",
+		"urls": [
+			"https://hagezi-mirror.dnsbunker.org/wildcard/native.roku-onlydomains.txt"
+		]
+	},
+	{
+		"group": "Tracking durch Geräte und Apps",
+		"name": "HaGeZi Native Tracker Samsung",
+		"urls": [
+			"https://hagezi-mirror.dnsbunker.org/wildcard/native.samsung-onlydomains.txt"
+		]
+	},
+	{
+		"group": "Tracking durch Geräte und Apps",
+		"name": "HaGeZi Native Tracker TikTok",
+		"urls": [
+			"https://hagezi-mirror.dnsbunker.org/wildcard/native.tiktok-onlydomains.txt"
+		]
+	},
+	{
+		"group": "Tracking durch Geräte und Apps",
+		"name": "HaGeZi Native Tracker TikTok (erweitert)",
+		"urls": [
+			"https://hagezi-mirror.dnsbunker.org/wildcard/native.tiktok.extended-onlydomains.txt"
+		]
+	},
+	{
+		"group": "Tracking durch Geräte und Apps",
+		"name": "HaGeZi Native Tracker Vivo",
+		"urls": [
+			"https://hagezi-mirror.dnsbunker.org/wildcard/native.vivo-onlydomains.txt"
+		]
+	},
+	{
+		"group": "Tracking durch Geräte und Apps",
+		"name": "HaGeZi Native Tracker Windows/Office",
+		"urls": [
+			"https://hagezi-mirror.dnsbunker.org/wildcard/native.winoffice-onlydomains.txt"
+		]
+	},
+	{
+		"group": "Tracking durch Geräte und Apps",
+		"name": "HaGeZi Native Tracker Xiaomi",
+		"urls": [
+			"https://hagezi-mirror.dnsbunker.org/wildcard/native.xiaomi-onlydomains.txt"
 		]
 	}
 ]

@@ -3,7 +3,7 @@ READ ME
 
 This folder contains JSON formatted files that are used by the web app to fetch various lists. The JSON files that end with "-builtin" are the ones that are shipped as a part of the software package and are expected to be overwritten when you update the software.
 
-You can override these built-in lists by creating your own custom lists. To do this, create a new JSON file with the exact same name except, replace "-builtin" with "-custom" in the name. Use the same JSON format as the built-in list in your custom list to add items. When a custom list is available, the web app will always prefer it.
+You can override these built-in lists by creating your own custom lists. To do this, create a new JSON file with the exact same name except, replace "-builtin" with "-custom" in the name. Use the same JSON format as the built-in list in your custom list to add items. When a custom list is available, the web app will always prefer it. The block list quick selection is limited to the HaGeZi lists from the build mirror and cannot be overridden.
 
 For example, if you wish to have a custom list of servers listed for DNS Client, copy the "dnsclient-server-list-builtin.json" file as "dnsclient-server-list-custom.json" and edit it to have the desired list of servers.
 

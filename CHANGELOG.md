@@ -1,5 +1,36 @@
 # ZenitiumDNS Änderungsprotokoll
 
+## ZenitiumDNS 15.5.1 (Paket 15.5.1-2)
+Veröffentlicht: 26. September 2026
+
+### Schutz für den öffentlichen Betrieb
+- Die Ratenbegrenzung arbeitet in Anfragen pro Sekunde mit einem Token-Bucket je Client-Subnetz (GCRA, wie bei dnsdist). Ein einstellbarer Burst (Standard 5 Sekunden) lässt kurze Spitzen etwa beim Laden einer Webseite zu. Neue Standardwerte: IPv4 `/32` 100 und 400, `/24` 1000 und 4000, IPv6 `/64` 100 und 400, `/56` 1000 und 4000 Anfragen pro Sekunde für UDP und TCP. Bestehende Limits werden umgerechnet, die bisherigen Standardwerte durch die neuen ersetzt. Beginn und Ende einer Drosselung stehen im Log.
+- Neue Client-Sperrlisten im Anfragefilter: Listen wie IPsum oder Spamhaus DROP werden automatisch geladen und aktualisiert. Anfragen gesperrter Adressen werden über UDP verworfen, bevor sie ausgewertet werden, TCP-, DoT-, DoQ- und DoH-Verbindungen werden sofort getrennt. Die Suche läuft über sortierte Adressbereiche. Neue Metriken `client_blocklist_drops_total` und `client_blocklist_ranges`.
+
+### Blockierung
+- Eigener Blockierungstext für den Extended DNS Error und den TXT-Bericht mit den Platzhaltern `{domain}`, `{list}` und `{source}`.
+- Eigene TTL für negatives Caching: NXDOMAIN- und NODATA-Blockierantworten tragen einen SOA-Eintrag mit dieser TTL und diesem MINIMUM (Standard 300 Sekunden).
+- Behoben: Das SOA-MINIMUM der Blockierantworten fiel nach jedem Neustart auf 30 Sekunden zurück, bis die Einstellung einmal geändert wurde.
+- Die Schnellauswahl der Blocklisten enthält nur noch die Listen von HaGeZi im Format für diesen Server, geladen vom Build-Mirror `hagezi-mirror.dnsbunker.org`. Das Standardintervall für die Aktualisierung beträgt 8 Stunden.
+- Blocklisten brauchen rund die Hälfte des Arbeitsspeichers: 2,5 Millionen Domains (HaGeZi PRO und TIF) belegen etwa 200 statt 395 MB. Die Suche läuft ohne Speicherallokation. Gemessen auf 20 Kernen: rund 913.000 Anfragen/s für erlaubte und 852.000 Anfragen/s für blockierte Namen, ohne Listen 919.000 Anfragen/s. Das Neuladen dauert 1,1 Sekunden.
+
+### Verschlüsselte Protokolle
+- TLS-Zertifikate im PEM-Format, etwa `fullchain.pem` und `privkey.pem` von Let's Encrypt, auch für die Weboberfläche. Zwischenzertifikate werden mitgesendet, verschlüsselte Schlüssel im PKCS#8-Format unterstützt. Zertifikat und Schlüssel werden auch nach einer Erneuerung über Symlinks automatisch neu geladen.
+- DDR (RFC 9462) ist eingebaut: Der Server beantwortet `_dns.resolver.arpa` SVCB mit den aktivierten verschlüsselten Diensten, ihren Ports und dem Namen im Zertifikat. Wahlweise nur über unverschlüsseltes DNS (Standard). Die erzeugten Einträge stehen in den Einstellungen.
+- 0-RTT (TLS Early Data) bietet der TLS- und QUIC-Stack von .NET serverseitig nicht an. Die Einstellungen erklären, wie sich 0-RTT für DoH über einen vorgeschalteten Reverse Proxy nutzen lässt.
+
+### Selbsttest
+- Neuer Bereich „Selbsttest“: Er prüft lauschende Dienste, die Auflösung der Root-Zone samt DNSSEC-Validierung, IPv6, Zertifikate, Admin-Passwort, Erreichbarkeit der Weboberfläche, Rekursion, Ratenbegrenzung, Anfragefilter, Block- und Client-Sperrlisten, Apps, Systemzeit, Arbeitsspeicher, UDP-Puffer, Dateilimit und freien Speicherplatz. Schwere Probleme erscheinen zusätzlich auf der Übersicht. Neuer API-Aufruf `api/selftest/run`.
+
+### Resolver
+- Behoben: Autoritative Server wie die von Cloudflare beantworten nur eine Anfrage pro TCP-Verbindung. Wiederverwendete Verbindungen liefen deshalb in Timeouts, und große Antworten wie DNSKEY-Sätze mit ML-DSA-Signaturen scheiterten. Der TCP-Rückfall nach abgeschnittenen UDP-Antworten nutzt jetzt eigene Verbindungen, und Server ohne Verbindungswiederverwendung werden erkannt.
+- Die QNAME-Minimierung fragt eine Zone erneut mit dem vollen Namen, wenn keiner ihrer Nameserver auf die minimierte Anfrage antwortet.
+- Behoben: Mit „IPv6 bevorzugen“ ohne funktionierende IPv6-Anbindung scheiterten Downloads von Blocklisten und Apps nach 100 Sekunden. Downloads nutzen jetzt den tatsächlich verfügbaren IPv6-Modus und wechseln nach 5 Sekunden zur nächsten Adresse.
+
+### Weitere Änderungen
+- Konfigurationsformat Version 9 für die DNS-Einstellungen und Version 5 für die Weboberfläche.
+- Die API-Dokumentation beschreibt die neuen Einstellungen und Aufrufe.
+
 ## ZenitiumDNS 15.5.1
 Veröffentlicht: 26. September 2026
 

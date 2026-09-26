@@ -59,11 +59,17 @@ sudo systemctl restart zenitiumdns
 
 ## TLS-Zertifikate
 
-Der Dienst hat nur Lesezugriff auf `/etc/zenitiumdns` und den Programmordner. Lege Zertifikatsdateien (pfx) in `/etc/zenitiumdns` ab und mache sie für den Benutzer `zenitiumdns` lesbar:
+ZenitiumDNS liest PEM-Zertifikate direkt, etwa `fullchain.pem` und `privkey.pem` von Let's Encrypt, eine Umwandlung in PKCS#12 ist nicht nötig. PKCS#12-Dateien (`.pfx`, `.p12`) funktionieren weiterhin. Zertifikat und Schlüssel werden nach einer Änderung innerhalb einer Minute automatisch neu geladen.
+
+Der Dienst läuft als Benutzer `zenitiumdns` und darf `/etc/letsencrypt/live` nicht lesen. Am einfachsten kopiert ein Deploy-Hook von certbot die Dateien nach jeder Erneuerung in den Konfigurationsordner:
 
 ```
-sudo chown zenitiumdns:zenitiumdns /etc/zenitiumdns/cert.pfx
+sudo certbot certonly --standalone -d dns.example.org --deploy-hook 'install -o zenitiumdns -g zenitiumdns -m 0644 "$RENEWED_LINEAGE/fullchain.pem" /etc/zenitiumdns/fullchain.pem; install -o zenitiumdns -g zenitiumdns -m 0600 "$RENEWED_LINEAGE/privkey.pem" /etc/zenitiumdns/privkey.pem'
 ```
+
+Anschließend unter Einstellungen > Verschlüsselte Protokolle als TLS-Zertifikat `fullchain.pem` und als privaten Schlüssel `privkey.pem` eintragen, beides relativ zum Konfigurationsordner. Für die Weboberfläche gilt dasselbe unter Einstellungen > Weboberfläche. Verschlüsselte Schlüssel müssen im PKCS#8-Format vorliegen (`BEGIN ENCRYPTED PRIVATE KEY`).
+
+Damit Windows 11, iOS und macOS per DDR automatisch auf DoH, DoT oder DoQ wechseln, sollte das Zertifikat zusätzlich die IP-Adressen des Servers enthalten. Let's Encrypt stellt solche Zertifikate nicht aus. Der Selbsttest zeigt an, ob das Zertifikat IP-Adressen enthält.
 
 ## Überwachung
 

@@ -3013,3 +3013,143 @@ tr.rate-limited .top-name {
     .rule-hits:empty {
         display: none;
     }
+
+.status-danger {
+    background-color: var(--bad-soft);
+    border-color: transparent;
+    color: var(--ink);
+}
+
+    .status-danger .fa {
+        color: var(--bad);
+    }
+
+.dashboard-health {
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+    margin: 0 0 16px 0;
+    padding: 14px 16px;
+    border-radius: var(--r-surface);
+    background-color: var(--bad-soft);
+    border: 1px solid var(--bad);
+    color: var(--ink);
+}
+
+    .dashboard-health .dashboard-health-icon {
+        color: var(--bad);
+        font-size: 20px;
+        line-height: 22px;
+    }
+
+    .dashboard-health .dashboard-health-title {
+        font-family: var(--font-display);
+        font-weight: 600;
+        font-size: 15px;
+        margin-bottom: 4px;
+    }
+
+    .dashboard-health ul {
+        margin: 0 0 6px 0;
+        padding-left: 18px;
+    }
+
+    .dashboard-health li {
+        margin: 2px 0;
+    }
+
+.selftest-summary {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    margin: 0 0 18px 0;
+}
+
+.selftest-time {
+    color: var(--ink-3);
+    font-size: 12.5px;
+    margin-left: 6px;
+}
+
+.selftest-group {
+    margin: 0 0 20px 0;
+}
+
+.selftest-group-title {
+    font-family: var(--font-display);
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--ink-2);
+    margin: 0 0 8px 0;
+}
+
+.selftest-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    background-color: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--r-surface);
+    overflow: hidden;
+}
+
+.selftest-item {
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+    padding: 12px 16px;
+    border-top: 1px solid var(--line);
+}
+
+    .selftest-item:first-child {
+        border-top: 0;
+    }
+
+.selftest-icon {
+    font-size: 16px;
+    line-height: 20px;
+    color: var(--ink-3);
+}
+
+.selftest-ok .selftest-icon {
+    color: var(--ok);
+}
+
+.selftest-info .selftest-icon {
+    color: var(--info);
+}
+
+.selftest-warning .selftest-icon {
+    color: var(--warn);
+}
+
+.selftest-error {
+    background-color: var(--bad-soft);
+}
+
+    .selftest-error .selftest-icon {
+        color: var(--bad);
+    }
+
+.selftest-body {
+    min-width: 0;
+}
+
+.selftest-title {
+    font-weight: 600;
+    color: var(--ink);
+}
+
+.selftest-state {
+    font-weight: 500;
+    font-size: 12px;
+    color: var(--ink-3);
+    margin-left: 4px;
+}
+
+.selftest-message {
+    color: var(--ink-2);
+    margin-top: 2px;
+    overflow-wrap: anywhere;
+}

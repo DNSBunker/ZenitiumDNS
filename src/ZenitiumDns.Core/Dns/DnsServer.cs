@@ -162,22 +162,16 @@ namespace ZenitiumDns.Core.Dns
         NetworkAddress _eDnsClientSubnetIpv4Override;
         NetworkAddress _eDnsClientSubnetIpv6Override;
 
-        IReadOnlyDictionary<int, (int, int)> _qpmPrefixLimitsIPv4 = new Dictionary<int, (int, int)>()
-        {
-            { 32, (600, 600) },
-            { 24, (6000, 6000) }
-        };
-
-        IReadOnlyDictionary<int, (int, int)> _qpmPrefixLimitsIPv6 = new Dictionary<int, (int, int)>()
-        {
-            { 128, (600, 600) },
-            { 64, (1200, 1200) },
-            { 56, (6000, 6000) }
-        };
-
-        int _qpmLimitSampleMinutes = 5;
-        int _qpmLimitUdpTruncationPercentage = 50;
-        IReadOnlyCollection<NetworkAddress> _qpmLimitBypassList;
+        IReadOnlyDictionary<int, (int, int)> _qpsPrefixLimitsIPv4 = GetDefaultQpsPrefixLimitsIPv4();
+        IReadOnlyDictionary<int, (int, int)> _qpsPrefixLimitsIPv6 = GetDefaultQpsPrefixLimitsIPv6();
+        int _rateLimitBurstSeconds = DEFAULT_RATE_LIMIT_BURST_SECONDS;
+        int _rateLimitUdpTruncationPercentage = 50;
+        IReadOnlyCollection<NetworkAddress> _rateLimitBypassList;
+        readonly ClientRateLimiter _rateLimiter = new ClientRateLimiter();
+        readonly ClientBlockListManager _clientBlockListManager;
+        const int DEFAULT_RATE_LIMIT_BURST_SECONDS = 5;
+        const string DDR_DOMAIN = "_dns.resolver.arpa";
+        const uint DDR_RECORD_TTL = 3600;
 
         int _clientTimeout = 2000;
         int _tcpSendTimeout = 10000;
@@ -210,6 +204,10 @@ namespace ZenitiumDns.Core.Dns
         IReadOnlyCollection<NetworkAccessControl> _dnsReverseProxyNetworkACL;
         string _dnsTlsCertificatePath;
         string _dnsTlsCertificatePassword;
+        string _dnsTlsCertificateKeyPath;
+        bool _enableDdr = true;
+        bool _ddrOnlyUnencrypted = true;
+        X509Certificate2 _dnsTlsCertificate;
         string _dnsOverHttpRealIpHeader = "X-Real-IP";
 
         Timer _tlsCertificateUpdateTimer;
@@ -259,6 +257,8 @@ namespace ZenitiumDns.Core.Dns
         IReadOnlyCollection<NetworkAddress> _blockingBypassList;
         DnsServerBlockingType _blockingType = DnsServerBlockingType.NxDomain;
         uint _blockingAnswerTtl = 30;
+        uint _blockingNegativeTtl = 300;
+        string _blockingReportText;
         IReadOnlyCollection<DnsARecordData> _customBlockingARecords = [];
         IReadOnlyCollection<DnsAAAARecordData> _customBlockingAAAARecords = [];
 
@@ -272,16 +272,13 @@ namespace ZenitiumDns.Core.Dns
         LogManager _resolverLog;
         LogManager _queryLog;
 
-        Timer _qpmLimitSamplingTimer;
+        Timer _rateLimitMaintenanceTimer;
 
         Timer _ipv6ProbeTimer;
         readonly Lock _ipv6ProbeTimerLock = new Lock();
         const int IPV6_PROBE_TIMER_INTERVAL = 120000;
-        readonly Lock _qpmLimitSamplingTimerLock = new Lock();
-        const int QPM_LIMIT_SAMPLING_TIMER_INTERVAL = 10000;
-        IReadOnlyDictionary<NetworkAddress, ValueTuple<long, long>> _qpmLimitClientSubnetStats;
-        volatile bool _qpmLimitExceededUdp;
-        volatile bool _qpmLimitExceededTcp;
+        readonly Lock _rateLimitMaintenanceTimerLock = new Lock();
+        const int RATE_LIMIT_MAINTENANCE_TIMER_INTERVAL = 10000;
 
         readonly IndependentTaskScheduler _queryTaskScheduler = new IndependentTaskScheduler(threadName: "QueryThreadPool");
 
@@ -349,6 +346,9 @@ namespace ZenitiumDns.Core.Dns
             _dnsCacheSkipDnsApps = new ResolverDnsCache(this, true);
 
             _statsManager = new StatsManager(this);
+            _clientBlockListManager = new ClientBlockListManager(this);
+
+            ApplyRateLimits();
 
             if (_saveCacheToDisk)
             {
@@ -412,6 +412,7 @@ namespace ZenitiumDns.Core.Dns
             _dnsApplicationManager?.Dispose();
 
             _statsManager?.Dispose();
+            _clientBlockListManager?.Dispose();
 
             _resolverTaskPool?.Dispose();
 
@@ -585,7 +586,7 @@ namespace ZenitiumDns.Core.Dns
             BinaryReader bR = new BinaryReader(s);
 
             int version = bR.ReadByte();
-            if ((version < 1) || (version > 8))
+            if ((version < 1) || (version > 9))
                 throw new InvalidDataException("DNS Server config version not supported.");
 
             string serverDomain = s.ReadShortString();
@@ -703,29 +704,29 @@ namespace ZenitiumDns.Core.Dns
                 _eDnsClientSubnetIpv6Override = null;
 
             {
-                int count = bR.ReadByte();
-                Dictionary<int, (int, int)> qpmPrefixLimitsIPv4 = new Dictionary<int, (int, int)>(count);
+                Dictionary<int, (int, int)> prefixLimitsIPv4 = ReadPrefixLimits(bR);
+                Dictionary<int, (int, int)> prefixLimitsIPv6 = ReadPrefixLimits(bR);
+                int burstSeconds = bR.ReadInt32();
 
-                for (int i = 0; i < count; i++)
-                    qpmPrefixLimitsIPv4.Add(bR.ReadInt32(), (bR.ReadInt32(), bR.ReadInt32()));
+                if (version >= 9)
+                {
+                    _qpsPrefixLimitsIPv4 = prefixLimitsIPv4;
+                    _qpsPrefixLimitsIPv6 = prefixLimitsIPv6;
+                    _rateLimitBurstSeconds = burstSeconds;
+                }
+                else
+                {
+                    _qpsPrefixLimitsIPv4 = ConvertLegacyQpmPrefixLimits(prefixLimitsIPv4, false);
+                    _qpsPrefixLimitsIPv6 = ConvertLegacyQpmPrefixLimits(prefixLimitsIPv6, true);
+                    _rateLimitBurstSeconds = DEFAULT_RATE_LIMIT_BURST_SECONDS;
+                }
 
-                _qpmPrefixLimitsIPv4 = qpmPrefixLimitsIPv4;
+                ApplyRateLimits();
             }
 
-            {
-                int count = bR.ReadByte();
-                Dictionary<int, (int, int)> qpmPrefixLimitsIPv6 = new Dictionary<int, (int, int)>(count);
+            _rateLimitUdpTruncationPercentage = bR.ReadInt32();
 
-                for (int i = 0; i < count; i++)
-                    qpmPrefixLimitsIPv6.Add(bR.ReadInt32(), (bR.ReadInt32(), bR.ReadInt32()));
-
-                _qpmPrefixLimitsIPv6 = qpmPrefixLimitsIPv6;
-            }
-
-            _qpmLimitSampleMinutes = bR.ReadInt32();
-            _qpmLimitUdpTruncationPercentage = bR.ReadInt32();
-
-            _qpmLimitBypassList = AuthZoneInfo.ReadNetworkAddressesFrom(bR);
+            _rateLimitBypassList = AuthZoneInfo.ReadNetworkAddressesFrom(bR);
 
             _clientTimeout = bR.ReadInt32();
             _tcpSendTimeout = bR.ReadInt32();
@@ -857,26 +858,6 @@ namespace ZenitiumDns.Core.Dns
 
             if (_dnsTlsCertificatePath.Length == 0)
                 _dnsTlsCertificatePath = null;
-
-            if (_dnsTlsCertificatePath is null)
-            {
-                StopTlsCertificateUpdateTimer();
-            }
-            else
-            {
-                string dnsTlsCertificateAbsolutePath = ConvertToAbsolutePath(_dnsTlsCertificatePath);
-
-                try
-                {
-                    LoadDnsTlsCertificate(dnsTlsCertificateAbsolutePath, _dnsTlsCertificatePassword);
-                }
-                catch (Exception ex)
-                {
-                    _log.Write("DNS Server encountered an error while loading DNS Server TLS certificate: " + dnsTlsCertificateAbsolutePath, ex);
-                }
-
-                StartTlsCertificateUpdateTimer();
-            }
 
             string dnsOverHttpRealIpHeader = s.ReadShortString();
             _dnsOverHttpRealIpHeader = dnsOverHttpRealIpHeader;
@@ -1100,6 +1081,58 @@ namespace ZenitiumDns.Core.Dns
                 _requestFilterRefuseOnly = false;
                 DnsClient.PostQuantumDowngradeProtection = true;
             }
+
+            if (version >= 9)
+            {
+                string blockingReportText = s.ReadShortString();
+                _blockingReportText = blockingReportText.Length == 0 ? null : blockingReportText;
+                _blockingNegativeTtl = bR.ReadUInt32();
+
+                string dnsTlsCertificateKeyPath = s.ReadShortString();
+                _dnsTlsCertificateKeyPath = dnsTlsCertificateKeyPath.Length == 0 ? null : dnsTlsCertificateKeyPath;
+                _enableDdr = bR.ReadBoolean();
+                _ddrOnlyUnencrypted = bR.ReadBoolean();
+
+                int count = bR.ReadByte();
+                Uri[] clientBlockListUrls = new Uri[count];
+
+                for (int i = 0; i < count; i++)
+                    clientBlockListUrls[i] = new Uri(s.ReadShortString());
+
+                _clientBlockListManager.UpdateIntervalHours = bR.ReadInt32();
+                _clientBlockListManager.ListUrls = clientBlockListUrls;
+            }
+            else
+            {
+                _blockingReportText = null;
+                _blockingNegativeTtl = _blockingAnswerTtl;
+                _dnsTlsCertificateKeyPath = null;
+                _enableDdr = true;
+                _ddrOnlyUnencrypted = true;
+            }
+
+            if (_dnsTlsCertificatePath is null)
+            {
+                StopTlsCertificateUpdateTimer();
+            }
+            else
+            {
+                string dnsTlsCertificateAbsolutePath = ConvertToAbsolutePath(_dnsTlsCertificatePath);
+
+                try
+                {
+                    LoadDnsTlsCertificate(dnsTlsCertificateAbsolutePath, _dnsTlsCertificatePassword, ConvertToAbsolutePath(_dnsTlsCertificateKeyPath));
+                }
+                catch (Exception ex)
+                {
+                    _log.Write("DNS Server encountered an error while loading DNS Server TLS certificate: " + dnsTlsCertificateAbsolutePath, ex);
+                }
+
+                StartTlsCertificateUpdateTimer();
+            }
+
+            _blockedZoneManager.UpdateServerDomain();
+            _blockListZoneManager.UpdateServerDomain();
         }
 
         private void WriteConfigTo(Stream s)
@@ -1107,7 +1140,7 @@ namespace ZenitiumDns.Core.Dns
             BinaryWriter bW = new BinaryWriter(s);
 
             bW.Write(Encoding.ASCII.GetBytes("DC"));
-            bW.Write((byte)8);
+            bW.Write((byte)9);
 
             s.WriteShortString(_serverDomain);
 
@@ -1177,42 +1210,13 @@ namespace ZenitiumDns.Core.Dns
                 _eDnsClientSubnetIpv6Override.WriteTo(bW);
             }
 
-            if (_qpmPrefixLimitsIPv4.Count == 0)
-            {
-                bW.Write((byte)0);
-            }
-            else
-            {
-                bW.Write(Convert.ToByte(_qpmPrefixLimitsIPv4.Count));
+            WritePrefixLimits(bW, _qpsPrefixLimitsIPv4);
+            WritePrefixLimits(bW, _qpsPrefixLimitsIPv6);
 
-                foreach (KeyValuePair<int, (int, int)> qpmPrefixLimit in _qpmPrefixLimitsIPv4)
-                {
-                    bW.Write(qpmPrefixLimit.Key);
-                    bW.Write(qpmPrefixLimit.Value.Item1);
-                    bW.Write(qpmPrefixLimit.Value.Item2);
-                }
-            }
+            bW.Write(_rateLimitBurstSeconds);
+            bW.Write(_rateLimitUdpTruncationPercentage);
 
-            if (_qpmPrefixLimitsIPv6.Count == 0)
-            {
-                bW.Write((byte)0);
-            }
-            else
-            {
-                bW.Write(Convert.ToByte(_qpmPrefixLimitsIPv6.Count));
-
-                foreach (KeyValuePair<int, (int, int)> qpmPrefixLimit in _qpmPrefixLimitsIPv6)
-                {
-                    bW.Write(qpmPrefixLimit.Key);
-                    bW.Write(qpmPrefixLimit.Value.Item1);
-                    bW.Write(qpmPrefixLimit.Value.Item2);
-                }
-            }
-
-            bW.Write(_qpmLimitSampleMinutes);
-            bW.Write(_qpmLimitUdpTruncationPercentage);
-
-            AuthZoneInfo.WriteNetworkAddressesTo(_qpmLimitBypassList, bW);
+            AuthZoneInfo.WriteNetworkAddressesTo(_rateLimitBypassList, bW);
 
             bW.Write(_clientTimeout);
             bW.Write(_tcpSendTimeout);
@@ -1374,6 +1378,20 @@ namespace ZenitiumDns.Core.Dns
             bW.Write(_requestFilterEdnsVersion);
             bW.Write(_requestFilterRefuseOnly);
             bW.Write(DnsClient.PostQuantumDowngradeProtection);
+
+            s.WriteShortString(_blockingReportText ?? string.Empty);
+            bW.Write(_blockingNegativeTtl);
+
+            s.WriteShortString(_dnsTlsCertificateKeyPath ?? string.Empty);
+            bW.Write(_enableDdr);
+            bW.Write(_ddrOnlyUnencrypted);
+
+            bW.Write(Convert.ToByte(_clientBlockListManager.ListUrls.Count));
+
+            foreach (Uri listUrl in _clientBlockListManager.ListUrls)
+                s.WriteShortString(listUrl.AbsoluteUri);
+
+            bW.Write(_clientBlockListManager.UpdateIntervalHours);
         }
 
         #endregion
@@ -1392,10 +1410,11 @@ namespace ZenitiumDns.Core.Dns
 
                         try
                         {
-                            FileInfo fileInfo = new FileInfo(dnsTlsCertificatePath);
+                            string dnsTlsCertificateKeyPath = ConvertToAbsolutePath(_dnsTlsCertificateKeyPath);
+                            DateTime lastModifiedOn = TlsCertificateFile.GetLastWriteTimeUtc(dnsTlsCertificatePath, dnsTlsCertificateKeyPath);
 
-                            if (fileInfo.Exists && (fileInfo.LastWriteTimeUtc != _dnsTlsCertificateLastModifiedOn))
-                                LoadDnsTlsCertificate(dnsTlsCertificatePath, _dnsTlsCertificatePassword);
+                            if ((lastModifiedOn != DateTime.MinValue) && (lastModifiedOn != _dnsTlsCertificateLastModifiedOn))
+                                LoadDnsTlsCertificate(dnsTlsCertificatePath, _dnsTlsCertificatePassword, dnsTlsCertificateKeyPath);
                         }
                         catch (Exception ex)
                         {
@@ -1416,39 +1435,9 @@ namespace ZenitiumDns.Core.Dns
             }
         }
 
-        private void LoadDnsTlsCertificate(string tlsCertificatePath, string tlsCertificatePassword)
+        private void LoadDnsTlsCertificate(string tlsCertificatePath, string tlsCertificatePassword, string tlsCertificateKeyPath)
         {
-            FileInfo fileInfo = new FileInfo(tlsCertificatePath);
-
-            if (!fileInfo.Exists)
-                throw new ArgumentException("DNS Server TLS certificate file does not exists: " + tlsCertificatePath);
-
-            switch (Path.GetExtension(tlsCertificatePath).ToLowerInvariant())
-            {
-                case ".pfx":
-                case ".p12":
-                    break;
-
-                default:
-                    throw new ArgumentException("DNS Server TLS certificate file must be PKCS #12 formatted with .pfx or .p12 extension: " + tlsCertificatePath);
-            }
-
-            X509Certificate2Collection certificateCollection = X509CertificateLoader.LoadPkcs12CollectionFromFile(tlsCertificatePath, tlsCertificatePassword, X509KeyStorageFlags.PersistKeySet);
-            X509Certificate2 serverCertificate = null;
-
-            foreach (X509Certificate2 certificate in certificateCollection)
-            {
-                if (certificate.HasPrivateKey)
-                {
-                    serverCertificate = certificate;
-                    break;
-                }
-            }
-
-            if (serverCertificate is null)
-                throw new ArgumentException("DNS Server TLS certificate file must contain a certificate with private key.");
-
-            SslStreamCertificateContext certificateContext = SslStreamCertificateContext.Create(serverCertificate, certificateCollection, false);
+            SslStreamCertificateContext certificateContext = TlsCertificateFile.Load(tlsCertificatePath, tlsCertificateKeyPath, tlsCertificatePassword, out X509Certificate2 serverCertificate);
 
             _dotSslServerAuthenticationOptions = new SslServerAuthenticationOptions()
             {
@@ -1477,7 +1466,8 @@ namespace ZenitiumDns.Core.Dns
                 ServerCertificateContext = certificateContext,
             };
 
-            _dnsTlsCertificateLastModifiedOn = fileInfo.LastWriteTimeUtc;
+            _dnsTlsCertificate = serverCertificate;
+            _dnsTlsCertificateLastModifiedOn = TlsCertificateFile.GetLastWriteTimeUtc(tlsCertificatePath, tlsCertificateKeyPath);
 
             _log.Write("DNS Server TLS certificate was loaded: " + tlsCertificatePath);
         }
@@ -1488,13 +1478,15 @@ namespace ZenitiumDns.Core.Dns
             _doqSslServerAuthenticationOptions = null;
             _dohSslServerAuthenticationOptions = null;
 
+            _dnsTlsCertificate = null;
             _dnsTlsCertificatePath = null;
             _dnsTlsCertificatePassword = null;
+            _dnsTlsCertificateKeyPath = null;
 
             StopTlsCertificateUpdateTimer();
         }
 
-        public void SetDnsTlsCertificate(string dnsTlsCertificatePath, string dnsTlsCertificatePassword = null, bool throwException = false)
+        public void SetDnsTlsCertificate(string dnsTlsCertificatePath, string dnsTlsCertificatePassword = null, bool throwException = false, string dnsTlsCertificateKeyPath = null)
         {
             if (string.IsNullOrEmpty(dnsTlsCertificatePath))
                 throw new ArgumentNullException(nameof(dnsTlsCertificatePath), "DNS optional protocols TLS certificate path cannot be null or empty.");
@@ -1505,17 +1497,24 @@ namespace ZenitiumDns.Core.Dns
             if (dnsTlsCertificatePassword?.Length > 255)
                 throw new ArgumentException("DNS optional protocols TLS certificate password length cannot exceed 255 characters.", nameof(dnsTlsCertificatePassword));
 
+            if (dnsTlsCertificateKeyPath?.Length > 255)
+                throw new ArgumentException("DNS optional protocols TLS private key path length cannot exceed 255 characters.", nameof(dnsTlsCertificateKeyPath));
+
+            if (string.IsNullOrEmpty(dnsTlsCertificateKeyPath))
+                dnsTlsCertificateKeyPath = null;
+
             dnsTlsCertificatePath = ConvertToAbsolutePath(dnsTlsCertificatePath);
+            string dnsTlsCertificateKeyAbsolutePath = ConvertToAbsolutePath(dnsTlsCertificateKeyPath);
 
             if (throwException)
             {
-                LoadDnsTlsCertificate(dnsTlsCertificatePath, dnsTlsCertificatePassword);
+                LoadDnsTlsCertificate(dnsTlsCertificatePath, dnsTlsCertificatePassword, dnsTlsCertificateKeyAbsolutePath);
             }
             else
             {
                 try
                 {
-                    LoadDnsTlsCertificate(dnsTlsCertificatePath, dnsTlsCertificatePassword);
+                    LoadDnsTlsCertificate(dnsTlsCertificatePath, dnsTlsCertificatePassword, dnsTlsCertificateKeyAbsolutePath);
                 }
                 catch (Exception ex)
                 {
@@ -1525,6 +1524,7 @@ namespace ZenitiumDns.Core.Dns
 
             _dnsTlsCertificatePath = ConvertToRelativePath(dnsTlsCertificatePath);
             _dnsTlsCertificatePassword = dnsTlsCertificatePassword;
+            _dnsTlsCertificateKeyPath = dnsTlsCertificateKeyAbsolutePath is null ? null : ConvertToRelativePath(dnsTlsCertificateKeyAbsolutePath);
 
             StartTlsCertificateUpdateTimer();
         }
@@ -1800,9 +1800,12 @@ namespace ZenitiumDns.Core.Dns
                                 }
                             }
 
-                            if (HasQpmLimitExceeded(remoteEP.Address, DnsTransportProtocol.Udp))
+                            if (IsClientBlocked(remoteEP.Address))
+                                continue;
+
+                            if (IsRateLimited(remoteEP.Address, DnsTransportProtocol.Udp))
                             {
-                                if (SendQpmLimitExceededTruncationResponse())
+                                if (SendRateLimitedTruncationResponse())
                                 {
                                     sendTruncationResponse = true;
                                 }
@@ -2030,6 +2033,12 @@ namespace ZenitiumDns.Core.Dns
                 {
                     Socket socket = await tcpListener.AcceptAsync();
 
+                    if ((socket.RemoteEndPoint is IPEndPoint acceptedEP) && IsClientBlocked(acceptedEP.Address))
+                    {
+                        socket.Dispose();
+                        continue;
+                    }
+
                     _ = ProcessConnectionAsync(socket, protocol);
                 }
             }
@@ -2184,7 +2193,10 @@ namespace ZenitiumDns.Core.Dns
                         }
                     }
 
-                    if (HasQpmLimitExceeded(remoteEP.Address, DnsTransportProtocol.Tcp))
+                    if (IsClientBlocked(remoteEP.Address))
+                        break;
+
+                    if (IsRateLimited(remoteEP.Address, DnsTransportProtocol.Tcp))
                     {
                         _statsManager.QueueUpdate(null, remoteEP, protocol, null, true);
                         break;
@@ -2313,7 +2325,10 @@ namespace ZenitiumDns.Core.Dns
 
                 while (true)
                 {
-                    if (HasQpmLimitExceeded(quicConnection.RemoteEndPoint.Address, DnsTransportProtocol.Tcp))
+                    if (IsClientBlocked(quicConnection.RemoteEndPoint.Address))
+                        break;
+
+                    if (IsRateLimited(quicConnection.RemoteEndPoint.Address, DnsTransportProtocol.Tcp))
                     {
                         _statsManager.QueueUpdate(null, quicConnection.RemoteEndPoint, DnsTransportProtocol.Quic, null, true);
                         break;
@@ -2456,7 +2471,13 @@ namespace ZenitiumDns.Core.Dns
                     }
                 }
 
-                if (HasQpmLimitExceeded(remoteEP.Address, DnsTransportProtocol.Tcp))
+                if (IsClientBlocked(remoteEP.Address))
+                {
+                    context.Abort();
+                    return;
+                }
+
+                if (IsRateLimited(remoteEP.Address, DnsTransportProtocol.Tcp))
                 {
                     _statsManager.QueueUpdate(null, remoteEP, DnsTransportProtocol.Https, null, true);
 
@@ -2988,6 +3009,9 @@ namespace ZenitiumDns.Core.Dns
 
         internal async ValueTask<DnsDatagram> AuthoritativeQueryAsync(DnsDatagram request, DnsTransportProtocol protocol, bool isRecursionAllowed, bool skipDnsAppAuthoritativeRequestHandlers, IPEndPoint remoteEP = null)
         {
+            if (_enableDdr && isRecursionAllowed && (request.Question.Count > 0) && request.Question[0].Name.Equals(DDR_DOMAIN, StringComparison.OrdinalIgnoreCase) && (!_ddrOnlyUnencrypted || IsUnencryptedProtocol(protocol)))
+                return GetDdrResponse(request);
+
             DnsDatagram authResponse;
 
             if (remoteEP is null)
@@ -3682,7 +3706,7 @@ namespace ZenitiumDns.Core.Dns
                     {
                         string blockedDomain = GetBlockedDomain();
 
-                        IReadOnlyList<DnsResourceRecord> answer = [new DnsResourceRecord(question.Name, DnsResourceRecordType.TXT, question.Class, _blockingAnswerTtl, new DnsTXTRecordData("source=blocked-zone; domain=" + blockedDomain))];
+                        IReadOnlyList<DnsResourceRecord> answer = [new DnsResourceRecord(question.Name, DnsResourceRecordType.TXT, question.Class, _blockingAnswerTtl, new DnsTXTRecordData(GetBlockingReportText("blocked-zone", blockedDomain, null)))];
 
                         return new DnsDatagram(request.Identifier, true, DnsOpcode.StandardQuery, false, false, request.RecursionDesired, false, false, false, DnsResponseCode.NoError, request.Question, answer) { Tag = ResponseTypeTags.Blocked };
                     }
@@ -3694,7 +3718,7 @@ namespace ZenitiumDns.Core.Dns
                         if (_allowTxtBlockingReport && (request.EDNS is not null))
                         {
                             blockedDomain = GetBlockedDomain();
-                            options = [new EDnsOption(EDnsOptionCode.EXTENDED_DNS_ERROR, new EDnsExtendedDnsErrorOptionData(EDnsExtendedDnsErrorCode.Blocked, "source=blocked-zone; domain=" + blockedDomain))];
+                            options = [new EDnsOption(EDnsOptionCode.EXTENDED_DNS_ERROR, new EDnsExtendedDnsErrorOptionData(EDnsExtendedDnsErrorCode.Blocked, GetBlockingReportText("blocked-zone", blockedDomain, null)))];
                         }
 
                         IReadOnlyCollection<DnsARecordData> aRecords;
@@ -3720,7 +3744,7 @@ namespace ZenitiumDns.Core.Dns
                                 if (parentDomain is null)
                                     parentDomain = string.Empty;
 
-                                return new DnsDatagram(request.Identifier, true, DnsOpcode.StandardQuery, false, false, request.RecursionDesired, !_allowTxtBlockingReport, false, false, DnsResponseCode.NxDomain, request.Question, null, [new DnsResourceRecord(parentDomain, DnsResourceRecordType.SOA, question.Class, _blockingAnswerTtl, _blockedZoneManager.DnsSOARecord)], null, request.EDNS is null ? ushort.MinValue : _udpPayloadSize, EDnsHeaderFlags.None, options) { Tag = ResponseTypeTags.Blocked };
+                                return new DnsDatagram(request.Identifier, true, DnsOpcode.StandardQuery, false, false, request.RecursionDesired, !_allowTxtBlockingReport, false, false, DnsResponseCode.NxDomain, request.Question, null, [new DnsResourceRecord(parentDomain, DnsResourceRecordType.SOA, question.Class, _blockingNegativeTtl, _blockedZoneManager.DnsSOARecord)], null, request.EDNS is null ? ushort.MinValue : _udpPayloadSize, EDnsHeaderFlags.None, options) { Tag = ResponseTypeTags.Blocked };
 
                             default:
                                 throw new InvalidOperationException();
@@ -4956,14 +4980,298 @@ namespace ZenitiumDns.Core.Dns
             }
         }
 
-        private bool IsQpmLimitBypassed(IPAddress remoteIP)
+        private static Dictionary<int, (int, int)> GetDefaultQpsPrefixLimitsIPv4()
+        {
+            return new Dictionary<int, (int, int)>()
+            {
+                { 32, (100, 400) },
+                { 24, (1000, 4000) }
+            };
+        }
+
+        private static Dictionary<int, (int, int)> GetDefaultQpsPrefixLimitsIPv6()
+        {
+            return new Dictionary<int, (int, int)>()
+            {
+                { 64, (100, 400) },
+                { 56, (1000, 4000) }
+            };
+        }
+
+        private static bool HasSameEntries(IReadOnlyDictionary<int, (int, int)> x, IReadOnlyDictionary<int, (int, int)> y)
+        {
+            if (x.Count != y.Count)
+                return false;
+
+            foreach (KeyValuePair<int, (int, int)> entry in x)
+            {
+                if (!y.TryGetValue(entry.Key, out (int, int) value) || (value != entry.Value))
+                    return false;
+            }
+
+            return true;
+        }
+
+        private static Dictionary<int, (int, int)> ConvertQpmToQps(IReadOnlyDictionary<int, (int, int)> qpmPrefixLimits)
+        {
+            static int Convert(int qpm)
+            {
+                if (qpm <= 0)
+                    return 0;
+
+                return (int)Math.Min(int.MaxValue, ((long)qpm + 59) / 60);
+            }
+
+            Dictionary<int, (int, int)> qpsPrefixLimits = new Dictionary<int, (int, int)>(qpmPrefixLimits.Count);
+
+            foreach (KeyValuePair<int, (int, int)> qpmPrefixLimit in qpmPrefixLimits)
+                qpsPrefixLimits[qpmPrefixLimit.Key] = (Convert(qpmPrefixLimit.Value.Item1), Convert(qpmPrefixLimit.Value.Item2));
+
+            return qpsPrefixLimits;
+        }
+
+        internal static IReadOnlyDictionary<int, (int, int)> ConvertLegacyQpmPrefixLimits(IReadOnlyDictionary<int, (int, int)> qpmPrefixLimits, bool ipv6)
+        {
+            if (ipv6)
+            {
+                if (HasSameEntries(qpmPrefixLimits, new Dictionary<int, (int, int)>() { { 128, (600, 600) }, { 64, (1200, 1200) }, { 56, (6000, 6000) } }))
+                    return GetDefaultQpsPrefixLimitsIPv6();
+            }
+            else
+            {
+                if (HasSameEntries(qpmPrefixLimits, new Dictionary<int, (int, int)>() { { 32, (600, 600) }, { 24, (6000, 6000) } }))
+                    return GetDefaultQpsPrefixLimitsIPv4();
+            }
+
+            return ConvertQpmToQps(qpmPrefixLimits);
+        }
+
+        private static Dictionary<int, (int, int)> ReadPrefixLimits(BinaryReader bR)
+        {
+            int count = bR.ReadByte();
+            Dictionary<int, (int, int)> prefixLimits = new Dictionary<int, (int, int)>(count);
+
+            for (int i = 0; i < count; i++)
+                prefixLimits[bR.ReadInt32()] = (bR.ReadInt32(), bR.ReadInt32());
+
+            return prefixLimits;
+        }
+
+        private static void WritePrefixLimits(BinaryWriter bW, IReadOnlyDictionary<int, (int, int)> prefixLimits)
+        {
+            bW.Write(Convert.ToByte(prefixLimits.Count));
+
+            foreach (KeyValuePair<int, (int, int)> prefixLimit in prefixLimits)
+            {
+                bW.Write(prefixLimit.Key);
+                bW.Write(prefixLimit.Value.Item1);
+                bW.Write(prefixLimit.Value.Item2);
+            }
+        }
+
+        private void ApplyRateLimits()
+        {
+            _rateLimiter.Configure(_qpsPrefixLimitsIPv4, _qpsPrefixLimitsIPv6, _rateLimitBurstSeconds);
+        }
+
+        private string GetDdrTargetName()
+        {
+            X509Certificate2 certificate = _dnsTlsCertificate;
+            if (certificate is null)
+                return _serverDomain;
+
+            try
+            {
+                if (certificate.MatchesHostname(_serverDomain))
+                    return _serverDomain;
+
+                foreach (X509Extension extension in certificate.Extensions)
+                {
+                    if (extension.Oid?.Value != "2.5.29.17")
+                        continue;
+
+                    X509SubjectAlternativeNameExtension sanExtension = new X509SubjectAlternativeNameExtension(extension.RawData, extension.Critical);
+
+                    foreach (string dnsName in sanExtension.EnumerateDnsNames())
+                    {
+                        if (!dnsName.StartsWith('*'))
+                            return dnsName;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _log.Write(ex);
+            }
+
+            return _serverDomain;
+        }
+
+        public IReadOnlyList<DnsResourceRecord> GetDdrRecords(string ownerName = DDR_DOMAIN)
+        {
+            List<DnsResourceRecord> records = new List<DnsResourceRecord>(3);
+
+            if (_dnsTlsCertificate is null)
+                return records;
+
+            string targetName = GetDdrTargetName();
+
+            List<IPAddress> ipv4Hints = new List<IPAddress>();
+            List<IPAddress> ipv6Hints = new List<IPAddress>();
+
+            foreach (IPEndPoint localEP in _localEndPoints)
+            {
+                IPAddress address = localEP.Address;
+
+                if (address.Equals(IPAddress.Any) || address.Equals(IPAddress.IPv6Any) || IPAddress.IsLoopback(address) || address.IsIPv6LinkLocal)
+                    continue;
+
+                if (address.AddressFamily == AddressFamily.InterNetwork)
+                {
+                    if (!ipv4Hints.Contains(address))
+                        ipv4Hints.Add(address);
+                }
+                else if (!ipv6Hints.Contains(address))
+                {
+                    ipv6Hints.Add(address);
+                }
+            }
+
+            ushort priority = 1;
+
+            void Add(List<string> alpn, int port, string dohPath)
+            {
+                Dictionary<DnsSvcParamKey, DnsSvcParamValue> svcParams = new Dictionary<DnsSvcParamKey, DnsSvcParamValue>
+                {
+                    { DnsSvcParamKey.ALPN, new DnsSvcAlpnParamValue(alpn) },
+                    { DnsSvcParamKey.Port, new DnsSvcPortParamValue((ushort)port) }
+                };
+
+                if (dohPath is not null)
+                    svcParams.Add(DnsSvcParamKey.DoHPath, new DnsSvcDoHPathParamValue(dohPath));
+
+                if (ipv4Hints.Count > 0)
+                    svcParams.Add(DnsSvcParamKey.IPv4Hint, new DnsSvcIPv4HintParamValue(ipv4Hints));
+
+                if (ipv6Hints.Count > 0)
+                    svcParams.Add(DnsSvcParamKey.IPv6Hint, new DnsSvcIPv6HintParamValue(ipv6Hints));
+
+                records.Add(new DnsResourceRecord(ownerName, DnsResourceRecordType.SVCB, DnsClass.IN, DDR_RECORD_TTL, new DnsSVCBRecordData(priority++, targetName, svcParams)));
+            }
+
+            if (_enableDnsOverHttps)
+            {
+                List<string> alpn = new List<string>(2);
+
+                if (IsHttp2Supported())
+                    alpn.Add("h2");
+
+                if (_enableDnsOverHttp3)
+                    alpn.Add("h3");
+
+                if (alpn.Count == 0)
+                    alpn.Add("http/1.1");
+
+                Add(alpn, _dnsOverHttpsPort, "/dns-query{?dns}");
+            }
+
+            if (_enableDnsOverTls)
+                Add(["dot"], _dnsOverTlsPort, null);
+
+            if (_enableDnsOverQuic && QuicListener.IsSupported)
+                Add(["doq"], _dnsOverQuicPort, null);
+
+            return records;
+        }
+
+        internal IReadOnlyList<(string, bool)> GetListenerStatus()
+        {
+            static bool HasListener(List<Socket> listeners, IPEndPoint endPoint)
+            {
+                lock (listeners)
+                {
+                    foreach (Socket listener in listeners)
+                    {
+                        try
+                        {
+                            if ((listener.LocalEndPoint is IPEndPoint localEP) && localEP.Address.Equals(endPoint.Address) && (localEP.Port == endPoint.Port))
+                                return true;
+                        }
+                        catch (ObjectDisposedException)
+                        { }
+                    }
+                }
+
+                return false;
+            }
+
+            List<(string, bool)> status = new List<(string, bool)>();
+
+            foreach (IPEndPoint localEP in _localEndPoints)
+            {
+                status.Add(("UDP " + localEP, HasListener(_udpListeners, localEP)));
+                status.Add(("TCP " + localEP, HasListener(_tcpListeners, localEP)));
+
+                if (_enableDnsOverTls && (_dotSslServerAuthenticationOptions is not null))
+                {
+                    IPEndPoint tlsEP = new IPEndPoint(localEP.Address, _dnsOverTlsPort);
+                    status.Add(("DoT " + tlsEP, HasListener(_tlsListeners, tlsEP)));
+                }
+            }
+
+            if (_enableDnsOverQuic && (_doqSslServerAuthenticationOptions is not null))
+                status.Add(("DoQ Port " + _dnsOverQuicPort, _quicListeners.Count > 0));
+
+            if (_enableDnsOverHttp || ((_enableDnsOverHttps || _enableDnsOverHttpsUnixSocket) && (_dohSslServerAuthenticationOptions is not null)))
+                status.Add(("DoH", _dohWebService is not null));
+
+            return status;
+        }
+
+        private static bool IsUnencryptedProtocol(DnsTransportProtocol protocol)
+        {
+            switch (protocol)
+            {
+                case DnsTransportProtocol.Udp:
+                case DnsTransportProtocol.Tcp:
+                case DnsTransportProtocol.UdpProxy:
+                case DnsTransportProtocol.TcpProxy:
+                    return true;
+
+                default:
+                    return false;
+            }
+        }
+
+        private DnsDatagram GetDdrResponse(DnsDatagram request)
+        {
+            DnsQuestionRecord question = request.Question[0];
+            IReadOnlyList<DnsResourceRecord> answer = null;
+            IReadOnlyList<DnsResourceRecord> authority = null;
+
+            if (question.Type == DnsResourceRecordType.SVCB)
+            {
+                IReadOnlyList<DnsResourceRecord> records = GetDdrRecords(question.Name);
+                if (records.Count > 0)
+                    answer = records;
+            }
+
+            if (answer is null)
+                authority = [new DnsResourceRecord("resolver.arpa", DnsResourceRecordType.SOA, DnsClass.IN, DDR_RECORD_TTL, new DnsSOARecordData("resolver.arpa", _defaultResponsiblePerson?.Address ?? "nobody.invalid", 1, 3600, 1200, 604800, DDR_RECORD_TTL))];
+
+            return new DnsDatagram(request.Identifier, true, DnsOpcode.StandardQuery, true, false, request.RecursionDesired, true, false, request.CheckingDisabled, DnsResponseCode.NoError, request.Question, answer, authority, null, request.EDNS is null ? ushort.MinValue : _udpPayloadSize, EDnsHeaderFlags.None) { Tag = ResponseTypeTags.Authoritative };
+        }
+
+        private bool IsRateLimitBypassed(IPAddress remoteIP)
         {
             if (IPAddress.IsLoopback(remoteIP))
                 return true;
 
-            if (_qpmLimitBypassList is not null)
+            IReadOnlyCollection<NetworkAddress> bypassList = _rateLimitBypassList;
+
+            if (bypassList is not null)
             {
-                foreach (NetworkAddress networkAddress in _qpmLimitBypassList)
+                foreach (NetworkAddress networkAddress in bypassList)
                 {
                     if (networkAddress.Contains(remoteIP))
                         return true;
@@ -4973,210 +5281,52 @@ namespace ZenitiumDns.Core.Dns
             return false;
         }
 
-        private bool HasQpmLimitExceeded(NetworkAddress clientSubnet, DnsTransportProtocol protocol, (int, int) qpmLimits, IReadOnlyDictionary<NetworkAddress, (long, long)> qpmLimitClientSubnetStats, out int qpmLimit, out int currentQpm)
+        internal bool IsClientBlocked(IPAddress remoteIP)
         {
-            qpmLimit = protocol == DnsTransportProtocol.Udp ? qpmLimits.Item1 : qpmLimits.Item2;
+            if (!_clientBlockListManager.IsEnabled || !_clientBlockListManager.Contains(remoteIP))
+                return false;
 
-            if ((qpmLimit > 0) && qpmLimitClientSubnetStats.TryGetValue(clientSubnet, out (long, long) countPerSampleTuple))
-            {
-                long countPerSample = protocol == DnsTransportProtocol.Udp ? countPerSampleTuple.Item1 : countPerSampleTuple.Item2;
+            if (IsRateLimitBypassed(remoteIP))
+                return false;
 
-                long averageCountPerMinute = countPerSample / _qpmLimitSampleMinutes;
-                if (averageCountPerMinute >= qpmLimit)
-                {
-                    currentQpm = (int)averageCountPerMinute;
-                    return true;
-                }
-            }
-
-            currentQpm = 0;
-            return false;
+            _clientBlockListManager.CountDrop();
+            return true;
         }
 
-        internal bool HasQpmLimitExceeded(IPAddress remoteIP, DnsTransportProtocol protocol)
+        internal bool IsRateLimited(IPAddress remoteIP, DnsTransportProtocol protocol)
         {
-            if (_qpmLimitClientSubnetStats is null)
+            if (!_rateLimiter.IsEnabled)
                 return false;
 
-            if (protocol == DnsTransportProtocol.Udp ? !_qpmLimitExceededUdp : !_qpmLimitExceededTcp)
+            if (IsRateLimitBypassed(remoteIP))
                 return false;
 
-            if ((_qpmPrefixLimitsIPv4.Count < 1) && (_qpmPrefixLimitsIPv6.Count < 1))
-                return false;
-
-            if (IsQpmLimitBypassed(remoteIP))
-                return false;
-
-            switch (remoteIP.AddressFamily)
-            {
-                case AddressFamily.InterNetwork:
-                    foreach (KeyValuePair<int, (int, int)> qpmPrefixLimit in _qpmPrefixLimitsIPv4)
-                    {
-                        if (HasQpmLimitExceeded(new NetworkAddress(remoteIP, (byte)qpmPrefixLimit.Key), protocol, qpmPrefixLimit.Value, _qpmLimitClientSubnetStats, out _, out _))
-                            return true;
-                    }
-
-                    break;
-
-                case AddressFamily.InterNetworkV6:
-                    foreach (KeyValuePair<int, (int, int)> qpmPrefixLimit in _qpmPrefixLimitsIPv6)
-                    {
-                        if (HasQpmLimitExceeded(new NetworkAddress(remoteIP, (byte)qpmPrefixLimit.Key), protocol, qpmPrefixLimit.Value, _qpmLimitClientSubnetStats, out _, out _))
-                            return true;
-                    }
-
-                    break;
-
-                default:
-                    throw new NotSupportedException("AddressFamily not supported.");
-            }
-
-            return false;
+            return !_rateLimiter.TryAcquire(remoteIP, protocol != DnsTransportProtocol.Udp);
         }
 
-        private bool IsAnyQpmLimitExceeded(IReadOnlyDictionary<NetworkAddress, (long, long)> qpmLimitClientSubnetStats, DnsTransportProtocol protocol)
+        internal bool IsClientRateLimited(IPAddress remoteIP)
         {
-            foreach (KeyValuePair<NetworkAddress, (long, long)> sampleEntry in qpmLimitClientSubnetStats)
-            {
-                IReadOnlyDictionary<int, (int, int)> qpmPrefixLimits;
+            if (!_rateLimiter.IsEnabled || IsRateLimitBypassed(remoteIP))
+                return false;
 
-                switch (sampleEntry.Key.AddressFamily)
-                {
-                    case AddressFamily.InterNetwork:
-                        qpmPrefixLimits = _qpmPrefixLimitsIPv4;
-                        break;
-
-                    case AddressFamily.InterNetworkV6:
-                        qpmPrefixLimits = _qpmPrefixLimitsIPv6;
-                        break;
-
-                    default:
-                        continue;
-                }
-
-                if (qpmPrefixLimits.TryGetValue(sampleEntry.Key.PrefixLength, out (int, int) qpmPrefixLimitValue) && HasQpmLimitExceeded(sampleEntry.Key, protocol, qpmPrefixLimitValue, qpmLimitClientSubnetStats, out _, out _))
-                    return true;
-            }
-
-            return false;
+            return _rateLimiter.IsLimited(remoteIP);
         }
 
-        private void QpmLimitSamplingTimerCallback(object state)
+        private void RateLimitMaintenanceTimerCallback(object state)
         {
             try
             {
-                Dictionary<NetworkAddress, (long, long)> qpmLimitClientSubnetStats = _statsManager.GetLatestClientSubnetStats(_qpmLimitSampleMinutes, _qpmPrefixLimitsIPv4.Keys, _qpmPrefixLimitsIPv6.Keys);
-
-                WriteClientSubnetRateLimitLog(_qpmLimitClientSubnetStats, qpmLimitClientSubnetStats);
-
-                _qpmLimitExceededUdp = IsAnyQpmLimitExceeded(qpmLimitClientSubnetStats, DnsTransportProtocol.Udp);
-                _qpmLimitExceededTcp = IsAnyQpmLimitExceeded(qpmLimitClientSubnetStats, DnsTransportProtocol.Tcp);
-                _qpmLimitClientSubnetStats = qpmLimitClientSubnetStats;
+                _rateLimiter.Maintain(delegate (string message) { _log.Write(message); });
             }
             catch (Exception ex)
             {
                 _log.Write(ex);
             }
-            finally
-            {
-                lock (_qpmLimitSamplingTimerLock)
-                {
-                    _qpmLimitSamplingTimer?.Change(QPM_LIMIT_SAMPLING_TIMER_INTERVAL, Timeout.Infinite);
-                }
-            }
         }
 
-        private void WriteClientSubnetRateLimitLog(IReadOnlyDictionary<NetworkAddress, (long, long)> oldQpmLimitClientSubnetStats, Dictionary<NetworkAddress, (long, long)> newQpmLimitClientSubnetStats)
+        private bool SendRateLimitedTruncationResponse()
         {
-            if (oldQpmLimitClientSubnetStats is not null)
-            {
-                foreach (KeyValuePair<NetworkAddress, (long, long)> sampleEntry in oldQpmLimitClientSubnetStats)
-                {
-                    if (IsQpmLimitBypassed(sampleEntry.Key.GetLastAddress()))
-                        continue;
-
-                    IReadOnlyDictionary<int, (int, int)> qpmPrefixLimits;
-
-                    switch (sampleEntry.Key.AddressFamily)
-                    {
-                        case AddressFamily.InterNetwork:
-                            qpmPrefixLimits = _qpmPrefixLimitsIPv4;
-                            break;
-
-                        case AddressFamily.InterNetworkV6:
-                            qpmPrefixLimits = _qpmPrefixLimitsIPv6;
-                            break;
-
-                        default:
-                            continue;
-                    }
-
-                    if (qpmPrefixLimits.TryGetValue(sampleEntry.Key.PrefixLength, out (int, int) qpmPrefixLimitValue))
-                    {
-                        if (HasQpmLimitExceeded(sampleEntry.Key, DnsTransportProtocol.Udp, qpmPrefixLimitValue, oldQpmLimitClientSubnetStats, out _, out _))
-                        {
-                            if (!HasQpmLimitExceeded(sampleEntry.Key, DnsTransportProtocol.Udp, qpmPrefixLimitValue, newQpmLimitClientSubnetStats, out int qpmLimitUdp, out int currentQpmUdp))
-                            {
-                                _log.Write("Client subnet '" + sampleEntry.Key + "' is no longer being rate limited for UDP services since current query rate (" + currentQpmUdp + " qpm) is below " + qpmLimitUdp + " qpm limit.");
-                            }
-                        }
-
-                        if (HasQpmLimitExceeded(sampleEntry.Key, DnsTransportProtocol.Tcp, qpmPrefixLimitValue, oldQpmLimitClientSubnetStats, out _, out _))
-                        {
-                            if (!HasQpmLimitExceeded(sampleEntry.Key, DnsTransportProtocol.Tcp, qpmPrefixLimitValue, newQpmLimitClientSubnetStats, out int qpmLimitTcp, out int currentQpmTcp))
-                            {
-                                _log.Write("Client subnet '" + sampleEntry.Key + "' is no longer being rate limited for TCP services since current query rate (" + currentQpmTcp + " qpm) is below " + qpmLimitTcp + " qpm limit.");
-                            }
-                        }
-                    }
-                }
-            }
-
-            foreach (KeyValuePair<NetworkAddress, (long, long)> sampleEntry in newQpmLimitClientSubnetStats)
-            {
-                if (IsQpmLimitBypassed(sampleEntry.Key.GetLastAddress()))
-                    continue;
-
-                IReadOnlyDictionary<int, (int, int)> qpmPrefixLimits;
-
-                switch (sampleEntry.Key.AddressFamily)
-                {
-                    case AddressFamily.InterNetwork:
-                        qpmPrefixLimits = _qpmPrefixLimitsIPv4;
-                        break;
-
-                    case AddressFamily.InterNetworkV6:
-                        qpmPrefixLimits = _qpmPrefixLimitsIPv6;
-                        break;
-
-                    default:
-                        continue;
-                }
-
-                if (qpmPrefixLimits.TryGetValue(sampleEntry.Key.PrefixLength, out (int, int) qpmPrefixLimitValue))
-                {
-                    if (HasQpmLimitExceeded(sampleEntry.Key, DnsTransportProtocol.Udp, qpmPrefixLimitValue, newQpmLimitClientSubnetStats, out int qpmLimitUdp, out int currentQpmUdp))
-                    {
-                        if ((oldQpmLimitClientSubnetStats is null) || !HasQpmLimitExceeded(sampleEntry.Key, DnsTransportProtocol.Udp, qpmPrefixLimitValue, oldQpmLimitClientSubnetStats, out _, out _))
-                        {
-                            _log.Write("Client subnet '" + sampleEntry.Key + "' is being rate limited for UDP services till the current query rate (" + currentQpmUdp + " qpm) falls below " + qpmLimitUdp + " qpm limit.");
-                        }
-                    }
-
-                    if (HasQpmLimitExceeded(sampleEntry.Key, DnsTransportProtocol.Tcp, qpmPrefixLimitValue, newQpmLimitClientSubnetStats, out int qpmLimitTcp, out int currentQpmTcp))
-                    {
-                        if ((oldQpmLimitClientSubnetStats is null) || !HasQpmLimitExceeded(sampleEntry.Key, DnsTransportProtocol.Tcp, qpmPrefixLimitValue, oldQpmLimitClientSubnetStats, out _, out _))
-                        {
-                            _log.Write("Client subnet '" + sampleEntry.Key + "' is being rate limited for TCP services till the current query rate (" + currentQpmTcp + " qpm) falls below " + qpmLimitTcp + " qpm limit.");
-                        }
-                    }
-                }
-            }
-        }
-
-        private bool SendQpmLimitExceededTruncationResponse()
-        {
-            switch (_qpmLimitUdpTruncationPercentage)
+            switch (_rateLimitUdpTruncationPercentage)
             {
                 case 0:
                     return false;
@@ -5185,28 +5335,7 @@ namespace ZenitiumDns.Core.Dns
                     return true;
 
                 default:
-                    int p = RandomNumberGenerator.GetInt32(100);
-                    return p < _qpmLimitUdpTruncationPercentage;
-            }
-        }
-
-        private void ResetQpsLimitTimer()
-        {
-            if ((_qpmPrefixLimitsIPv4.Count < 1) && (_qpmPrefixLimitsIPv6.Count < 1))
-            {
-                lock (_qpmLimitSamplingTimerLock)
-                {
-                    _qpmLimitSamplingTimer?.Change(Timeout.Infinite, Timeout.Infinite);
-
-                    _qpmLimitClientSubnetStats = null;
-                }
-            }
-            else if (_state == ServiceState.Running)
-            {
-                lock (_qpmLimitSamplingTimerLock)
-                {
-                    _qpmLimitSamplingTimer?.Change(1000, Timeout.Infinite);
-                }
+                    return RandomNumberGenerator.GetInt32(100) < _rateLimitUdpTruncationPercentage;
             }
         }
 
@@ -5759,7 +5888,10 @@ namespace ZenitiumDns.Core.Dns
             if (_enableDnsOverHttp || _enableDnsOverHttpUnixSocket || ((_enableDnsOverHttps || _enableDnsOverHttpsUnixSocket) && (_dohSslServerAuthenticationOptions is not null)))
                 await StartDoHAsync(throwIfBindFails);
 
-            _qpmLimitSamplingTimer = new Timer(QpmLimitSamplingTimerCallback, null, Timeout.Infinite, Timeout.Infinite);
+            lock (_rateLimitMaintenanceTimerLock)
+            {
+                _rateLimitMaintenanceTimer = new Timer(RateLimitMaintenanceTimerCallback, null, RATE_LIMIT_MAINTENANCE_TIMER_INTERVAL, RATE_LIMIT_MAINTENANCE_TIMER_INTERVAL);
+            }
 
             lock (_ipv6ProbeTimerLock)
             {
@@ -5769,7 +5901,6 @@ namespace ZenitiumDns.Core.Dns
             _state = ServiceState.Running;
 
             UpdateThisServer();
-            ResetQpsLimitTimer();
         }
 
         public async Task StopAsync()
@@ -5788,12 +5919,12 @@ namespace ZenitiumDns.Core.Dns
                 }
             }
 
-            lock (_qpmLimitSamplingTimerLock)
+            lock (_rateLimitMaintenanceTimerLock)
             {
-                if (_qpmLimitSamplingTimer is not null)
+                if (_rateLimitMaintenanceTimer is not null)
                 {
-                    _qpmLimitSamplingTimer.Dispose();
-                    _qpmLimitSamplingTimer = null;
+                    _rateLimitMaintenanceTimer.Dispose();
+                    _rateLimitMaintenanceTimer = null;
                 }
             }
 
@@ -6180,105 +6311,100 @@ namespace ZenitiumDns.Core.Dns
             }
         }
 
-        public IReadOnlyDictionary<int, (int, int)> QpmPrefixLimitsIPv4
+        public IReadOnlyDictionary<int, (int, int)> QpsPrefixLimitsIPv4
         {
-            get { return _qpmPrefixLimitsIPv4; }
+            get { return _qpsPrefixLimitsIPv4; }
             set
             {
-                if (value is null)
-                {
-                    _qpmPrefixLimitsIPv4 = new Dictionary<int, (int, int)>();
-                }
-                else if (value.Count > byte.MaxValue)
-                {
-                    throw new ArgumentOutOfRangeException(nameof(QpmPrefixLimitsIPv4), "QPM Prefix Limits for IPv4 cannot have more than 255 entries.");
-                }
-                else
-                {
-                    foreach (KeyValuePair<int, (int, int)> qpmPrefixLimit in value)
-                    {
-                        if ((qpmPrefixLimit.Key < 0) || (qpmPrefixLimit.Key > 32))
-                            throw new ArgumentOutOfRangeException(nameof(QpmPrefixLimitsIPv4), "QPM limit IPv4 prefix valid range is between 0 and 32.");
-
-                        if ((qpmPrefixLimit.Value.Item1 < 0) || (qpmPrefixLimit.Value.Item2 < 0))
-                            throw new ArgumentOutOfRangeException(nameof(QpmPrefixLimitsIPv4), "QPM limit value cannot be less than 0.");
-                    }
-
-                    _qpmPrefixLimitsIPv4 = value;
-                }
-
-                ResetQpsLimitTimer();
+                _qpsPrefixLimitsIPv4 = ValidatePrefixLimits(value, 32, nameof(QpsPrefixLimitsIPv4));
+                ApplyRateLimits();
             }
         }
 
-        public IReadOnlyDictionary<int, (int, int)> QpmPrefixLimitsIPv6
+        public IReadOnlyDictionary<int, (int, int)> QpsPrefixLimitsIPv6
         {
-            get { return _qpmPrefixLimitsIPv6; }
+            get { return _qpsPrefixLimitsIPv6; }
             set
             {
-                if (value is null)
-                {
-                    _qpmPrefixLimitsIPv6 = new Dictionary<int, (int, int)>();
-                }
-                else if (value.Count > byte.MaxValue)
-                {
-                    throw new ArgumentOutOfRangeException(nameof(QpmPrefixLimitsIPv6), "QPM Prefix Limits for IPv6 cannot have more than 255 entries.");
-                }
-                else
-                {
-                    foreach (KeyValuePair<int, (int, int)> qpmPrefixLimit in value)
-                    {
-                        if ((qpmPrefixLimit.Key < 0) || (qpmPrefixLimit.Key > 128))
-                            throw new ArgumentOutOfRangeException(nameof(QpmPrefixLimitsIPv6), "QPM limit IPv6 prefix valid range is between 0 and 128.");
-
-                        if ((qpmPrefixLimit.Value.Item1 < 0) || (qpmPrefixLimit.Value.Item2 < 0))
-                            throw new ArgumentOutOfRangeException(nameof(QpmPrefixLimitsIPv6), "QPM limit value cannot be less than 0.");
-                    }
-
-                    _qpmPrefixLimitsIPv6 = value;
-                }
-
-                ResetQpsLimitTimer();
+                _qpsPrefixLimitsIPv6 = ValidatePrefixLimits(value, 128, nameof(QpsPrefixLimitsIPv6));
+                ApplyRateLimits();
             }
         }
 
-        public int QpmLimitSampleMinutes
+        private static IReadOnlyDictionary<int, (int, int)> ValidatePrefixLimits(IReadOnlyDictionary<int, (int, int)> value, int maxPrefix, string paramName)
         {
-            get { return _qpmLimitSampleMinutes; }
+            if (value is null)
+                return new Dictionary<int, (int, int)>();
+
+            if (value.Count > byte.MaxValue)
+                throw new ArgumentOutOfRangeException(paramName, "Rate limit prefixes cannot have more than 255 entries.");
+
+            foreach (KeyValuePair<int, (int, int)> prefixLimit in value)
+            {
+                if ((prefixLimit.Key < 0) || (prefixLimit.Key > maxPrefix))
+                    throw new ArgumentOutOfRangeException(paramName, "Rate limit prefix valid range is between 0 and " + maxPrefix + ".");
+
+                if ((prefixLimit.Value.Item1 < 0) || (prefixLimit.Value.Item2 < 0))
+                    throw new ArgumentOutOfRangeException(paramName, "Rate limit value cannot be less than 0.");
+            }
+
+            return value;
+        }
+
+        public int RateLimitBurstSeconds
+        {
+            get { return _rateLimitBurstSeconds; }
             set
             {
                 if ((value < 1) || (value > 60))
-                    throw new ArgumentOutOfRangeException(nameof(QpmLimitSampleMinutes), "Valid range is between 1 and 60 minutes.");
+                    throw new ArgumentOutOfRangeException(nameof(RateLimitBurstSeconds), "Valid range is between 1 and 60 seconds.");
 
-                _qpmLimitSampleMinutes = value;
+                _rateLimitBurstSeconds = value;
+                ApplyRateLimits();
             }
         }
 
-        public int QpmLimitUdpTruncationPercentage
+        public int RateLimitUdpTruncationPercentage
         {
-            get { return _qpmLimitUdpTruncationPercentage; }
+            get { return _rateLimitUdpTruncationPercentage; }
             set
             {
                 if ((value < 0) || (value > 100))
-                    throw new ArgumentOutOfRangeException(nameof(QpmLimitUdpTruncationPercentage), "Percentage value valid range is between 0 and 100.");
+                    throw new ArgumentOutOfRangeException(nameof(RateLimitUdpTruncationPercentage), "Percentage value valid range is between 0 and 100.");
 
-                _qpmLimitUdpTruncationPercentage = value;
+                _rateLimitUdpTruncationPercentage = value;
             }
         }
 
-        public IReadOnlyCollection<NetworkAddress> QpmLimitBypassList
+        public IReadOnlyCollection<NetworkAddress> RateLimitBypassList
         {
-            get { return _qpmLimitBypassList; }
+            get { return _rateLimitBypassList; }
             set
             {
                 if ((value is null) || (value.Count == 0))
-                    _qpmLimitBypassList = null;
+                    _rateLimitBypassList = null;
                 else if (value.Count > byte.MaxValue)
-                    throw new ArgumentOutOfRangeException(nameof(QpmLimitBypassList), "Networks cannot have more than 255 entries.");
+                    throw new ArgumentOutOfRangeException(nameof(RateLimitBypassList), "Networks cannot have more than 255 entries.");
                 else
-                    _qpmLimitBypassList = value;
+                    _rateLimitBypassList = value;
             }
         }
+
+        internal IReadOnlyDictionary<int, (int, int)> LegacyQpmPrefixLimitsIPv4
+        {
+            set { QpsPrefixLimitsIPv4 = ConvertLegacyQpmPrefixLimits(value, false); }
+        }
+
+        internal IReadOnlyDictionary<int, (int, int)> LegacyQpmPrefixLimitsIPv6
+        {
+            set { QpsPrefixLimitsIPv6 = ConvertLegacyQpmPrefixLimits(value, true); }
+        }
+
+        internal ClientBlockListManager ClientBlockListManager
+        { get { return _clientBlockListManager; } }
+
+        public int RateLimitTrackedClients
+        { get { return _rateLimiter.TrackedClients; } }
 
         public int ClientTimeout
         {
@@ -6613,6 +6739,24 @@ namespace ZenitiumDns.Core.Dns
         public string DnsTlsCertificatePassword
         { get { return _dnsTlsCertificatePassword; } }
 
+        public string DnsTlsCertificateKeyPath
+        { get { return _dnsTlsCertificateKeyPath; } }
+
+        public X509Certificate2 DnsTlsCertificate
+        { get { return _dnsTlsCertificate; } }
+
+        public bool EnableDdr
+        {
+            get { return _enableDdr; }
+            set { _enableDdr = value; }
+        }
+
+        public bool DdrOnlyUnencrypted
+        {
+            get { return _ddrOnlyUnencrypted; }
+            set { _ddrOnlyUnencrypted = value; }
+        }
+
         public string DnsOverHttpRealIpHeader
         {
             get { return _dnsOverHttpRealIpHeader; }
@@ -6927,16 +7071,63 @@ namespace ZenitiumDns.Core.Dns
         public uint BlockingAnswerTtl
         {
             get { return _blockingAnswerTtl; }
+            set { _blockingAnswerTtl = value; }
+        }
+
+        public uint BlockingNegativeTtl
+        {
+            get { return _blockingNegativeTtl; }
             set
             {
-                if (_blockingAnswerTtl != value)
+                if (value > 604800)
+                    throw new ArgumentOutOfRangeException(nameof(BlockingNegativeTtl), "Valid range is from 0 to 604800 seconds.");
+
+                if (_blockingNegativeTtl != value)
                 {
-                    _blockingAnswerTtl = value;
+                    _blockingNegativeTtl = value;
 
                     _blockedZoneManager.UpdateServerDomain();
                     _blockListZoneManager.UpdateServerDomain();
                 }
             }
+        }
+
+        public string BlockingReportText
+        {
+            get { return _blockingReportText; }
+            set
+            {
+                if (string.IsNullOrWhiteSpace(value))
+                {
+                    _blockingReportText = null;
+                    return;
+                }
+
+                value = value.Trim();
+
+                if (Encoding.UTF8.GetByteCount(value) > 255)
+                    throw new ArgumentOutOfRangeException(nameof(BlockingReportText), "Blocking report text cannot be longer than 255 bytes.");
+
+                _blockingReportText = value;
+            }
+        }
+
+        internal bool IsBlockingReportTextPerList
+        { get { return (_blockingReportText is null) || _blockingReportText.Contains("{list}", StringComparison.Ordinal); } }
+
+        internal string GetBlockingReportText(string source, string blockedDomain, string blockListUrl)
+        {
+            string text = _blockingReportText;
+
+            if (text is null)
+            {
+                if (blockListUrl is null)
+                    return "source=" + source + "; domain=" + blockedDomain;
+
+                return "source=" + source + "; blockListUrl=" + blockListUrl + "; domain=" + blockedDomain;
+            }
+
+            return text.Replace("{domain}", blockedDomain, StringComparison.Ordinal).Replace("{source}", source, StringComparison.Ordinal).Replace("{list}", blockListUrl ?? string.Empty, StringComparison.Ordinal);
         }
 
         public IReadOnlyCollection<DnsARecordData> CustomBlockingARecords

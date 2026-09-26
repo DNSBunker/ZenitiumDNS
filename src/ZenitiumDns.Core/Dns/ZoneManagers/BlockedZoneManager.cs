@@ -56,7 +56,7 @@ namespace ZenitiumDns.Core.Dns.ZoneManagers
 
             _zoneManager = new AuthZoneManager(_dnsServer);
 
-            _soaRecord = new DnsSOARecordDataExtended(_dnsServer.ServerDomain, _dnsServer.ResponsiblePerson.Address, 1, 14400, 3600, 604800, _dnsServer.BlockingAnswerTtl);
+            _soaRecord = new DnsSOARecordDataExtended(_dnsServer.ServerDomain, _dnsServer.ResponsiblePerson.Address, 1, 14400, 3600, 604800, _dnsServer.BlockingNegativeTtl);
             _nsRecord = new DnsNSRecordDataExtended(_dnsServer.ServerDomain);
 
             _saveTimer = new Timer(delegate (object state)
@@ -275,7 +275,7 @@ namespace ZenitiumDns.Core.Dns.ZoneManagers
 
         internal void UpdateServerDomain()
         {
-            _soaRecord.UpdatePrimaryNameServerAndMinimum(_dnsServer.ServerDomain, _dnsServer.BlockingAnswerTtl);
+            _soaRecord.UpdatePrimaryNameServerAndMinimum(_dnsServer.ServerDomain, _dnsServer.BlockingNegativeTtl);
             _nsRecord.UpdateNameServer(_dnsServer.ServerDomain);
         }
 

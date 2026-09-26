@@ -51,6 +51,7 @@ namespace ZenitiumDns.Core.Dns.Applications
         readonly string _appsPath;
 
         readonly ConcurrentDictionary<string, DnsApplication> _applications = new ConcurrentDictionary<string, DnsApplication>();
+        readonly ConcurrentDictionary<string, string> _loadErrors = new ConcurrentDictionary<string, string>();
 
         IReadOnlyList<IDnsRequestController> _dnsRequestControllers = [];
         IReadOnlyList<IDnsAuthoritativeRequestHandler> _dnsAuthoritativeRequestHandlers = [];
@@ -506,6 +507,8 @@ namespace ZenitiumDns.Core.Dns.Applications
         {
             await UnloadAllApplicationsAsync();
 
+            _loadErrors.Clear();
+
             await _opsLock.WaitAsync();
             try
             {
@@ -534,6 +537,7 @@ namespace ZenitiumDns.Core.Dns.Applications
                         }
                         catch (Exception ex)
                         {
+                            _loadErrors[Path.GetFileName(applicationFolder)] = ex.Message;
                             _dnsServer.LogManager.Write("DNS Server failed to load DNS application: " + Path.GetFileName(applicationFolder), ex);
                         }
                     }));
@@ -776,6 +780,9 @@ namespace ZenitiumDns.Core.Dns.Applications
 
         public IReadOnlyDictionary<string, DnsApplication> Applications
         { get { return _applications; } }
+
+        public IReadOnlyDictionary<string, string> LoadErrors
+        { get { return _loadErrors; } }
 
         public IReadOnlyList<IDnsRequestController> DnsRequestControllers
         { get { return _dnsRequestControllers; } }

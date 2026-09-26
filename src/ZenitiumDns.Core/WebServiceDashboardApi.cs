@@ -151,7 +151,7 @@ namespace ZenitiumDns.Core
                 foreach (DashboardStats.TopClientStats item in topClients)
                 {
                     IPAddress ip = IPAddress.Parse(item.Name);
-                    bool rateLimited = item.RateLimited || _dnsWebService._dnsServer.HasQpmLimitExceeded(ip, DnsTransportProtocol.Udp) || _dnsWebService._dnsServer.HasQpmLimitExceeded(ip, DnsTransportProtocol.Tcp);
+                    bool rateLimited = item.RateLimited || _dnsWebService._dnsServer.IsClientRateLimited(ip);
 
                     if (onlyRateLimitedClients && !rateLimited)
                         continue;
@@ -327,6 +327,9 @@ namespace ZenitiumDns.Core
 
                 jsonWriter.WriteEndObject();
 
+                jsonWriter.WriteNumber("clientBlockListDrops", _dnsWebService._dnsServer.ClientBlockListManager.Drops);
+                jsonWriter.WriteNumber("clientBlockListAddressRanges", _dnsWebService._dnsServer.ClientBlockListManager.AddressRanges);
+
                 WriteServerStatus(jsonWriter);
 
                 return Task.CompletedTask;
@@ -363,6 +366,8 @@ namespace ZenitiumDns.Core
                 foreach (RequestFilterRule rule in Enum.GetValues<RequestFilterRule>())
                     sb.Append("request_filter_matches_total{rule=\"").Append(rule.GetApiName()).Append("\"} ").Append(_dnsWebService._dnsServer.GetRequestFilterMatches(rule).ToString(CultureInfo.InvariantCulture)).Append('\n');
 
+                AppendMetric(sb, "client_blocklist_drops_total", "counter", _dnsWebService._dnsServer.ClientBlockListManager.Drops, "Queries and connections dropped because the client address is on a client block list");
+                AppendMetric(sb, "client_blocklist_ranges", "gauge", _dnsWebService._dnsServer.ClientBlockListManager.AddressRanges, "Address ranges loaded from client block lists");
                 AppendMetric(sb, "cache_entries", "gauge", _dnsWebService._dnsServer.CacheZoneManager.TotalEntries, "Number of records in the DNS cache");
                 AppendMetric(sb, "ipv6_upstream_available", "gauge", IsIPv6UpstreamAvailable() ? 1 : 0, "Whether outbound IPv6 queries to name servers are currently used (1) or suspended (0)");
 

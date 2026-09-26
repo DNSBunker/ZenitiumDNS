@@ -18,6 +18,9 @@ ZenitiumDNS ist ein Fork von [Technitium DNS Server](https://github.com/Techniti
 # Was ZenitiumDNS gegenüber dem Original bietet
 - Auf öffentliche Resolver zugeschnitten: Autoritative Zonen (Primary, Secondary, Stub, Catalog), DNSSEC-Signierung, Zonentransfers, NOTIFY, dynamische Updates, TSIG, DHCP-Server, Clustering, Windows-Dienst, Systemtray und Windows-Installer sind entfernt. Das verkleinert Angriffsfläche und Weboberfläche.
 - Anfragefilter nach dem Vorbild von dnsdist, standardmäßig aktiv: Anfragen, die auf einem öffentlichen Resolver nichts verloren haben (ANY, AXFR/IXFR, fremde Opcodes und Klassen, ohne RD-Flag, übergroß oder fehlerhaft), werden über UDP verworfen und über TCP, DoT, DoH und DoQ abgewiesen.
+- Ratenbegrenzung in Anfragen pro Sekunde mit Token-Bucket je Client-Subnetz und Client-Sperrlisten wie IPsum oder Spamhaus DROP, deren Adressen schon vor dem Auswerten der Anfrage verworfen werden.
+- Selbsttest, der Dienste, Auflösung, DNSSEC, Zertifikate, Sicherheitseinstellungen, Listen und Systemgrenzen prüft und schwere Probleme auf der Übersicht meldet.
+- PEM-Zertifikate wie `fullchain.pem` und `privkey.pem` ohne Umwandlung, automatische Ankündigung der verschlüsselten Dienste per DDR (RFC 9462).
 - DNSSEC-Validierung für den Post-Quantum-Algorithmus ML-DSA-44 mit Schutz vor Downgrades auf klassische Algorithmen.
 - Eigenständiges Debian-13-Paket mit eingebauter .NET-Laufzeit, gehärtetem systemd-Dienst, zufälligem Admin-Passwort bei der Erstinstallation und vorinstallierten, standardmäßig deaktivierten Resolver-Apps.
 - Deutschsprachige Weboberfläche mit eigenem Design: Seitenleiste, Messwertleiste mit Verläufen, Einstellungen in thematischen Bereichen, Hell-, Dunkel- und Bernstein-Modus, auch auf dem Smartphone bedienbar.
@@ -58,13 +61,14 @@ ZenitiumDNS ist ein Fork von [Technitium DNS Server](https://github.com/Techniti
 - Cache-Ansicht mit Nameserver-Statistik je Adressfamilie in der Weboberfläche.
 
 ## Schutz und Filter
-- Blockiert Werbung und Schadsoftware über eine oder mehrere Blocklisten-URLs, manuell blockierte Domains und Ausnahmen über erlaubte Domains.
+- Blockiert Werbung und Schadsoftware über eine oder mehrere Blocklisten-URLs, manuell blockierte Domains und Ausnahmen über erlaubte Domains. Die Schnellauswahl bietet die Listen von HaGeZi vom Build-Mirror, eigene Blockierungstexte und eine eigene TTL für negatives Caching sind einstellbar.
 - Erkennung von CNAME-Cloaking: Domains, die per CNAME auf blockierte Domains verweisen, werden ebenfalls blockiert.
 - Blocklisten mit regulären Ausdrücken und unterschiedlichen Listen je Client-IP-Adresse oder Subnetz über die Advanced Blocking App.
 - Schutz vor DNS-Rebinding-Angriffen mit der DNS Rebinding Protection App.
 - Anfragefilter für ungewöhnliche Anfragen mit Trefferzählern je Regel.
 - Zugriffssteuerung für die Rekursion per Netzwerk-ACL.
-- Ratenbegrenzung pro Client-Subnetz (Anfragen pro Minute) mit Ausnahmeliste.
+- Ratenbegrenzung pro Client-Subnetz in Anfragen pro Sekunde mit Burst und Ausnahmeliste.
+- Client-Sperrlisten für IP-Adressen und Netze, automatisch aktualisiert.
 
 ## Protokolle
 - Eigene Dienste für [DNS-over-TLS](https://www.rfc-editor.org/rfc/rfc7858.html), [DNS-over-HTTPS](https://www.rfc-editor.org/rfc/rfc8484.html) (HTTP/1.1, HTTP/2 und HTTP/3) und [DNS-over-QUIC](https://www.ietf.org/rfc/rfc9250.html).
@@ -99,7 +103,7 @@ ZenitiumDNS ist ein Fork von [Technitium DNS Server](https://github.com/Techniti
 Fertige Debian-13-Pakete für amd64 und arm64 gibt es unter [Releases](https://github.com/DNSBunker/ZenitiumDNS-DE/releases):
 
 ```
-sudo apt install ./zenitiumdns_15.5.1-1_amd64.deb
+sudo apt install ./zenitiumdns_15.5.1-2_amd64.deb
 ```
 
 Server mit dem [.NET 10 SDK](https://dotnet.microsoft.com/download) bauen und starten:

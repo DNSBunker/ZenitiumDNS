@@ -41,6 +41,7 @@ namespace ZenitiumDns.Core.Dns.Applications
         readonly IDnsServer _dnsServer;
         readonly string _name;
         readonly bool _enabled;
+        string _initializationError;
 
         readonly DnsApplicationAssemblyLoadContext _appContext;
 
@@ -227,6 +228,7 @@ namespace ZenitiumDns.Core.Dns.Applications
                 }
                 catch (Exception ex)
                 {
+                    _initializationError = ex.Message;
                     _dnsServer.WriteLog(ex);
                 }
             }
@@ -254,6 +256,8 @@ namespace ZenitiumDns.Core.Dns.Applications
             {
                 foreach (KeyValuePair<string, IDnsApplication> app in _dnsApplications)
                     await app.Value.InitializeAsync(_dnsServer, config);
+
+                _initializationError = null;
             }
 
             if (string.IsNullOrEmpty(config))
@@ -290,6 +294,9 @@ namespace ZenitiumDns.Core.Dns.Applications
 
         public bool Enabled
         { get { return _enabled; } }
+
+        public string InitializationError
+        { get { return _initializationError; } }
 
         public IReadOnlyDictionary<string, IDnsApplication> DnsApplications
         { get { return _dnsApplications; } }

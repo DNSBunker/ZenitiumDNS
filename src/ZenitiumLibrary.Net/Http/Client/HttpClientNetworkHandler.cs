@@ -49,6 +49,7 @@ namespace ZenitiumLibrary.Net.Http.Client
         static bool _publicIpv6Available;
         static DateTime _publicIpv6AvailableLastCheckedOn;
         const int PUBLIC_IPv6_CHECK_FREQUENCY = 300000;
+        const int CONNECT_ATTEMPT_TIMEOUT = 5000;
 
         readonly SocketsHttpHandler _innerHandler;
 
@@ -78,7 +79,7 @@ namespace ZenitiumLibrary.Net.Http.Client
 
         public static HttpClientNetworkType GetNetworkType(IPv6Mode ipv6Mode)
         {
-            switch (ipv6Mode)
+            switch (IPv6Reachability.GetEffectiveMode(ipv6Mode))
             {
                 case IPv6Mode.Enabled:
                     return HttpClientNetworkType.Default;
@@ -121,10 +122,7 @@ namespace ZenitiumLibrary.Net.Http.Client
 
             if (_proxy is null)
             {
-                socket = new Socket(SocketType.Stream, ProtocolType.Tcp);
-                socket.NoDelay = true;
-
-                await socket.ConnectAsync(dnsResult.Addresses, context.DnsEndPoint.Port, cancellationToken);
+                socket = await ConnectAsync(dnsResult.Addresses, context.DnsEndPoint.Port, cancellationToken);
             }
             else
             {
@@ -204,6 +202,41 @@ namespace ZenitiumLibrary.Net.Http.Client
             await sslStream.AuthenticateAsClientAsync(sslOptions, cancellationToken);
 
             return sslStream;
+        }
+
+        private static async Task<Socket> ConnectAsync(IReadOnlyList<IPAddress> addresses, int port, CancellationToken cancellationToken)
+        {
+            Exception lastException = null;
+
+            for (int i = 0; i < addresses.Count; i++)
+            {
+                Socket socket = new Socket(addresses[i].AddressFamily, SocketType.Stream, ProtocolType.Tcp);
+                socket.NoDelay = true;
+
+                using (CancellationTokenSource attemptCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken))
+                {
+                    if (i < addresses.Count - 1)
+                        attemptCancellation.CancelAfter(CONNECT_ATTEMPT_TIMEOUT);
+
+                    try
+                    {
+                        await socket.ConnectAsync(new IPEndPoint(addresses[i], port), attemptCancellation.Token);
+                        return socket;
+                    }
+                    catch (Exception ex) when (!cancellationToken.IsCancellationRequested && ((ex is SocketException) || (ex is OperationCanceledException)))
+                    {
+                        socket.Dispose();
+                        lastException = ex;
+                    }
+                    catch
+                    {
+                        socket.Dispose();
+                        throw;
+                    }
+                }
+            }
+
+            throw lastException ?? new SocketException((int)SocketError.HostUnreachable);
         }
 
         private async ValueTask<DnsResolutionResult> ResolveAddressesAsync(string host, int port, CancellationToken cancellationToken)

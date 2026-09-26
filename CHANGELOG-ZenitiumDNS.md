@@ -25,6 +25,13 @@ Dieses Dokument listet ausschließlich die Unterschiede zwischen dem Original-Bu
 | DNSSEC mit ML-DSA-44 (Post-Quantum) | unbekannter Algorithmus, Zone gilt als unsigniert | wird validiert, mit Downgrade-Schutz |
 | Mitgelieferte Apps | müssen einzeln installiert werden, sind danach sofort aktiv | vorinstalliert, standardmäßig deaktiviert, einzeln aktivierbar |
 | Docker | Image und Compose-Datei | entfernt |
+| Ratenbegrenzung | Durchschnitt der Anfragen pro Minute über ein Stichprobenfenster | Token-Bucket in Anfragen pro Sekunde mit Burst |
+| Client-IP-Sperrlisten | nicht vorhanden | IPsum, Spamhaus DROP u. a., Verwerfen vor dem Auswerten der Anfrage |
+| TLS-Zertifikate | nur PKCS#12 (`.pfx`) | zusätzlich PEM (`fullchain.pem`, `privkey.pem`) |
+| DDR (RFC 9462) | nur über selbst angelegte Zone | eingebaut, automatisch aus den aktiven Diensten |
+| Selbsttest | nicht vorhanden | eigener Bereich, schwere Probleme auf der Übersicht |
+| Speicher für 2,5 Mio. Blocklisten-Einträge | ca. 395 MB | ca. 200 MB |
+| TCP-Anfragen an Cloudflare-Nameserver | wiederverwendete Verbindungen laufen in Timeouts | eigene Verbindung, Wiederverwendung wird erkannt |
 
 ## Messwerte
 
@@ -74,6 +81,14 @@ Funktionstests im isolierten Netz-Namespace mit nachgebauter DNS-Hierarchie:
 ### Apps
 - Mitgelieferte Apps werden beim ersten Start deaktiviert installiert und bei Paket-Updates aktualisiert. Deinstallierte Apps bleiben entfernt.
 - Aktivieren und Deaktivieren in der Weboberfläche und über `api/apps/enable` und `api/apps/disable`.
+
+### Schutz, Blockierung und Protokolle
+- Ratenbegrenzung in Anfragen pro Sekunde (GCRA-Token-Bucket je Subnetz, Burst einstellbar), Migration bestehender QPM-Werte.
+- Client-Sperrlisten mit automatischer Aktualisierung, Verwerfen vor dem Parsen, Trennen von Stream-Verbindungen.
+- Eigener Blockierungstext mit Platzhaltern, eigene TTL für negatives Caching; das SOA-MINIMUM bleibt nach einem Neustart erhalten.
+- Blocklisten-Schnellauswahl nur mit HaGeZi-Listen vom Build-Mirror, halber Speicherbedarf der Blocklisten, allokationsfreie Suche.
+- PEM-Zertifikate mit separatem Schlüssel, eingebautes DDR, Selbsttest.
+- Resolver: Umgang mit Nameservern, die nur eine Anfrage pro TCP-Verbindung beantworten; QNAME-Rückfall bei Timeouts; Downloads mit effektivem IPv6-Modus.
 
 ### Standardwerte neuer Installationen
 - 100.000 Cache-Einträge, Blockier-TTL 300 s, Listen-Backlog 1024, TCP-Empfangs-Timeout 5 s, IPv6 für ausgehende Anfragen aktiviert, Statistik und Logs 30 Tage.
@@ -161,7 +176,7 @@ Funktionstests im isolierten Netz-Namespace mit nachgebauter DNS-Hierarchie:
 
 ## Kompatibilität
 
-- **Konfiguration:** Einstellungen, Benutzer, Conditional-Forwarder-Zonen, Blocklisten, erlaubte und blockierte Domains, Statistiken und Sicherungen von Technitium DNS Server 15.5 können übernommen werden. ZenitiumDNS speichert die DNS-Einstellungen im Format Version 8 und Zonendateien mit Zoneninformationen Version 15. Diese Dateien kann das Original nicht mehr lesen.
+- **Konfiguration:** Einstellungen, Benutzer, Conditional-Forwarder-Zonen, Blocklisten, erlaubte und blockierte Domains, Statistiken und Sicherungen von Technitium DNS Server 15.5 können übernommen werden. ZenitiumDNS speichert die DNS-Einstellungen im Format Version 9 und die Einstellungen der Weboberfläche im Format Version 5 und Zonendateien mit Zoneninformationen Version 15. Diese Dateien kann das Original nicht mehr lesen.
 - **Entfernte Zonentypen:** Zonendateien von Primary-, Secondary-, Stub-, Secondary-Forwarder- und Catalog-Zonen bleiben im Ordner `zones` liegen, werden aber beim Start übersprungen und protokolliert. Sie lassen sich bei Bedarf mit dem Original weiterverwenden.
 - **DHCP und Cluster:** DHCP-Bereichsdateien und die Cluster-Konfiguration werden ignoriert. Berechtigungen für den Bereich DHCP werden beim Laden verworfen. Eine vorhandene Gruppe „DHCP Administrators“ bleibt als gewöhnliche Gruppe ohne Sonderrechte bestehen und kann gelöscht werden.
 - **HTTP-API:** Die Aufrufe für DNSSEC, Catalog-Zonen, Zonenkonvertierung, Resync, TSIG, DHCP und Clustering sowie der Parameter `node` entfallen. `api/zones/create` akzeptiert nur noch den Typ `Forwarder`.

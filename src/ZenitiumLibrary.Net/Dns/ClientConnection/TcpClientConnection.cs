@@ -36,6 +36,9 @@ namespace ZenitiumLibrary.Net.Dns.ClientConnection
         #region variables
 
         const int ASYNC_RECEIVE_TIMEOUT = 120000;
+        const int SINGLE_QUERY_SERVER_MEMORY_MINUTES = 60;
+
+        static readonly ConcurrentDictionary<EndPoint, DateTime> _singleQueryServers = new ConcurrentDictionary<EndPoint, DateTime>();
 
         Socket _socket;
         Stream _tcpStream;
@@ -49,6 +52,7 @@ namespace ZenitiumLibrary.Net.Dns.ClientConnection
 
         bool _pooled;
         DateTime _lastQueried;
+        int _connectionQueryCount;
 
         #endregion
 
@@ -212,6 +216,7 @@ namespace ZenitiumLibrary.Net.Dns.ClientConnection
 
             _socket = socket;
             _tcpStream = await GetNetworkStreamAsync(socket, cancellationToken);
+            _connectionQueryCount = 0;
 
             _ = ReadDnsDatagramAsync(_tcpStream);
 
@@ -268,10 +273,85 @@ namespace ZenitiumLibrary.Net.Dns.ClientConnection
 
                 Stream tcpStream = await GetConnectionAsync(cancellationToken);
 
+                if ((_connectionQueryCount > 0) && (_transactions.Count <= 1) && IsSingleQueryServer())
+                {
+                    CloseConnection(tcpStream);
+                    tcpStream = await GetConnectionAsync(cancellationToken);
+                }
+
+                _connectionQueryCount++;
+                transaction.Stream = tcpStream;
+                transaction.ConnectionQueryIndex = _connectionQueryCount;
+
                 await request.WriteToTcpAsync(tcpStream, _sendBuffer, CancellationToken.None);
                 tcpStream.Flush();
 
                 return true;
+            }
+            finally
+            {
+                _sendRequestSemaphore.Release();
+            }
+        }
+
+        private EndPoint GetServerKey()
+        {
+            return (EndPoint)_server.IPEndPoint ?? _server.EndPoint;
+        }
+
+        private bool IsSingleQueryServer()
+        {
+            EndPoint key = GetServerKey();
+            if (key is null)
+                return false;
+
+            if (!_singleQueryServers.TryGetValue(key, out DateTime expiresOn))
+                return false;
+
+            if (expiresOn > DateTime.UtcNow)
+                return true;
+
+            _singleQueryServers.TryRemove(key, out _);
+            return false;
+        }
+
+        private void MarkSingleQueryServer()
+        {
+            EndPoint key = GetServerKey();
+            if (key is not null)
+                _singleQueryServers[key] = DateTime.UtcNow.AddMinutes(SINGLE_QUERY_SERVER_MEMORY_MINUTES);
+        }
+
+        private void CloseConnection(Stream tcpStream)
+        {
+            if (!ReferenceEquals(tcpStream, _tcpStream))
+                return;
+
+            _tcpStream = null;
+
+            foreach (KeyValuePair<ushort, Transaction> transaction in _transactions)
+            {
+                if (ReferenceEquals(transaction.Value.Stream, tcpStream))
+                    transaction.Value.SetException(new IOException("The TCP connection to the name server was closed after it stopped responding."));
+            }
+
+            try
+            {
+                tcpStream.Dispose();
+            }
+            catch
+            { }
+        }
+
+        private async Task InvalidateConnectionAsync(Stream tcpStream)
+        {
+            if (tcpStream is null)
+                return;
+
+            await _sendRequestSemaphore.WaitAsync(CancellationToken.None);
+            try
+            {
+                CloseConnection(tcpStream);
             }
             finally
             {
@@ -332,7 +412,15 @@ namespace ZenitiumLibrary.Net.Dns.ClientConnection
                         await using (CancellationTokenRegistration ctr = cancellationToken.Register(timeoutCancellationTokenSource.Cancel))
                         {
                             if ((await Task.WhenAny(transaction.Response, Task.Delay(timeout, timeoutCancellationTokenSource.Token)) != transaction.Response) && (transaction.Response.Status != TaskStatus.RanToCompletion))
+                            {
+                                if (transaction.ConnectionQueryIndex > 1)
+                                {
+                                    MarkSingleQueryServer();
+                                    await InvalidateConnectionAsync(transaction.Stream);
+                                }
+
                                 continue;
+                            }
                         }
 
                         timeoutCancellationTokenSource.Cancel();
@@ -394,6 +482,9 @@ namespace ZenitiumLibrary.Net.Dns.ClientConnection
 
             DnsDatagram _firstResponse;
             DnsDatagram _lastResponse;
+
+            public Stream Stream;
+            public int ConnectionQueryIndex;
 
             #endregion
 

@@ -22,6 +22,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Net;
 using System.Net.Http;
+using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
@@ -48,8 +49,7 @@ namespace ZenitiumDns.Core.Dns.ZoneManagers
 
         IReadOnlyList<string> _blockListUrls = [];
 
-        Dictionary<string, object> _allowListZone = new Dictionary<string, object>();
-        Dictionary<string, List<Uri>> _blockListZone = new Dictionary<string, List<Uri>>();
+        ListZone _listZone = ListZone.Empty;
 
         DnsSOARecordData _soaRecord;
         DnsNSRecordData _nsRecord;
@@ -59,7 +59,7 @@ namespace ZenitiumDns.Core.Dns.ZoneManagers
 
         Timer _blockListUpdateTimer;
         DateTime _blockListLastUpdatedOn;
-        int _blockListUpdateIntervalHours = 24;
+        int _blockListUpdateIntervalHours = 8;
         const int BLOCK_LIST_UPDATE_TIMER_INITIAL_INTERVAL = 5000;
         const int BLOCK_LIST_UPDATE_TIMER_PERIODIC_INTERVAL = 900000;
 
@@ -299,7 +299,7 @@ namespace ZenitiumDns.Core.Dns.ZoneManagers
 
         internal void UpdateServerDomain()
         {
-            _soaRecord = new DnsSOARecordData(_dnsServer.ServerDomain, _dnsServer.ResponsiblePerson.Address, 1, 14400, 3600, 604800, _dnsServer.BlockingAnswerTtl);
+            _soaRecord = new DnsSOARecordData(_dnsServer.ServerDomain, _dnsServer.ResponsiblePerson.Address, 1, 14400, 3600, 604800, _dnsServer.BlockingNegativeTtl);
             _nsRecord = new DnsNSRecordData(_dnsServer.ServerDomain);
         }
 
@@ -477,21 +477,32 @@ namespace ZenitiumDns.Core.Dns.ZoneManagers
             return domains;
         }
 
-        private List<Uri> IsZoneBlocked(string domain, out string blockedDomain)
+        private static int ToLowerDomain(string domain, Span<char> buffer)
         {
-            domain = domain.ToLowerInvariant();
+            return domain.AsSpan().ToLowerInvariant(buffer);
+        }
 
-            do
+        private IReadOnlyList<Uri> IsZoneBlocked(string domain, out string blockedDomain)
+        {
+            ListZone listZone = _listZone;
+
+            Span<char> buffer = domain.Length <= 256 ? stackalloc char[domain.Length] : new char[domain.Length];
+            ReadOnlySpan<char> current = buffer.Slice(0, ToLowerDomain(domain, buffer));
+
+            while (true)
             {
-                if (_blockListZone.TryGetValue(domain, out List<Uri> blockLists))
+                if (listZone.BlockLookup.TryGetValue(current, out string zone, out int combination))
                 {
-                    blockedDomain = domain;
-                    return blockLists;
+                    blockedDomain = zone;
+                    return listZone.BlockListCombinations[combination];
                 }
 
-                domain = AuthZoneManager.GetParentZone(domain);
+                int i = current.IndexOf('.');
+                if (i < 0)
+                    break;
+
+                current = current.Slice(i + 1);
             }
-            while (domain is not null);
 
             blockedDomain = null;
             return null;
@@ -499,18 +510,22 @@ namespace ZenitiumDns.Core.Dns.ZoneManagers
 
         private bool IsZoneAllowed(string domain)
         {
-            domain = domain.ToLowerInvariant();
+            ListZone listZone = _listZone;
 
-            do
+            Span<char> buffer = domain.Length <= 256 ? stackalloc char[domain.Length] : new char[domain.Length];
+            ReadOnlySpan<char> current = buffer.Slice(0, ToLowerDomain(domain, buffer));
+
+            while (true)
             {
-                if (_allowListZone.TryGetValue(domain, out _))
+                if (listZone.AllowLookup.Contains(current))
                     return true;
 
-                domain = AuthZoneManager.GetParentZone(domain);
-            }
-            while (domain is not null);
+                int i = current.IndexOf('.');
+                if (i < 0)
+                    return false;
 
-            return false;
+                current = current.Slice(i + 1);
+            }
         }
 
         private void ApplyBlockListUrls(IReadOnlyList<string> blockListUrls)
@@ -550,8 +565,7 @@ namespace ZenitiumDns.Core.Dns.ZoneManagers
 
         private void Flush()
         {
-            _allowListZone = new Dictionary<string, object>();
-            _blockListZone = new Dictionary<string, List<Uri>>();
+            _listZone = ListZone.Empty;
         }
 
         private async Task<bool> UpdateBlockListsAsync(bool forceReload)
@@ -789,43 +803,58 @@ namespace ZenitiumDns.Core.Dns.ZoneManagers
                 }
             }
 
-            Dictionary<string, object> allowListZone = new Dictionary<string, object>(totalAllowedDomains);
+            HashSet<string> allowListZone = new HashSet<string>(totalAllowedDomains);
 
             foreach (KeyValuePair<Uri, Queue<string>> allowListQueue in allowListQueues)
             {
                 Queue<string> queue = allowListQueue.Value;
 
                 while (queue.Count > 0)
-                {
-                    string domain = queue.Dequeue();
-
-                    allowListZone.TryAdd(domain, null);
-                }
+                    allowListZone.Add(queue.Dequeue());
             }
 
-            Dictionary<string, List<Uri>> blockListZone = new Dictionary<string, List<Uri>>(totalBlockedDomains);
+            Dictionary<string, int> blockListZone = new Dictionary<string, int>(totalBlockedDomains);
+            List<Uri[]> combinations = new List<Uri[]>();
+            Dictionary<(int, int), int> extendedCombinations = new Dictionary<(int, int), int>();
+            int listIndex = 0;
 
             foreach (KeyValuePair<Uri, Queue<string>> blockListQueue in blockListQueues)
             {
                 Queue<string> queue = blockListQueue.Value;
+                Uri listUrl = blockListQueue.Key;
+                int singleCombination = -1;
 
                 while (queue.Count > 0)
                 {
-                    string domain = queue.Dequeue();
+                    ref int combination = ref CollectionsMarshal.GetValueRefOrAddDefault(blockListZone, queue.Dequeue(), out bool exists);
 
-                    if (!blockListZone.TryGetValue(domain, out List<Uri> blockLists))
+                    if (!exists)
                     {
-                        blockLists = new List<Uri>(2);
-                        blockListZone.Add(domain, blockLists);
-                    }
+                        if (singleCombination < 0)
+                        {
+                            singleCombination = combinations.Count;
+                            combinations.Add([listUrl]);
+                        }
 
-                    if (!blockLists.Contains(blockListQueue.Key))
-                        blockLists.Add(blockListQueue.Key);
+                        combination = singleCombination;
+                    }
+                    else if (Array.IndexOf(combinations[combination], listUrl) < 0)
+                    {
+                        if (!extendedCombinations.TryGetValue((combination, listIndex), out int extendedCombination))
+                        {
+                            extendedCombination = combinations.Count;
+                            combinations.Add([.. combinations[combination], listUrl]);
+                            extendedCombinations.Add((combination, listIndex), extendedCombination);
+                        }
+
+                        combination = extendedCombination;
+                    }
                 }
+
+                listIndex++;
             }
 
-            _allowListZone = allowListZone;
-            _blockListZone = blockListZone;
+            _listZone = new ListZone(allowListZone, blockListZone, combinations.ToArray());
 
             _dnsServer.LogManager.Write("DNS Server block list zone was loaded successfully.");
         }
@@ -836,7 +865,7 @@ namespace ZenitiumDns.Core.Dns.ZoneManagers
 
         public bool IsAllowed(DnsDatagram request)
         {
-            if (_allowListZone.Count < 1)
+            if (_listZone.AllowZone.Count < 1)
                 return false;
 
             return IsZoneAllowed(request.Question[0].Name);
@@ -844,21 +873,21 @@ namespace ZenitiumDns.Core.Dns.ZoneManagers
 
         public DnsDatagram Query(DnsDatagram request)
         {
-            if (_blockListZone.Count < 1)
+            if (_listZone.BlockZone.Count < 1)
                 return null;
 
             DnsQuestionRecord question = request.Question[0];
 
-            List<Uri> blockLists = IsZoneBlocked(question.Name, out string blockedDomain);
+            IReadOnlyList<Uri> blockLists = IsZoneBlocked(question.Name, out string blockedDomain);
             if (blockLists is null)
                 return null;
 
             if (_dnsServer.AllowTxtBlockingReport && (question.Type == DnsResourceRecordType.TXT))
             {
-                DnsResourceRecord[] answer = new DnsResourceRecord[blockLists.Count];
+                DnsResourceRecord[] answer = new DnsResourceRecord[_dnsServer.IsBlockingReportTextPerList ? blockLists.Count : 1];
 
                 for (int i = 0; i < answer.Length; i++)
-                    answer[i] = new DnsResourceRecord(question.Name, DnsResourceRecordType.TXT, question.Class, _dnsServer.BlockingAnswerTtl, new DnsTXTRecordData("source=block-list-zone; blockListUrl=" + blockLists[i].AbsoluteUri + "; domain=" + blockedDomain));
+                    answer[i] = new DnsResourceRecord(question.Name, DnsResourceRecordType.TXT, question.Class, _dnsServer.BlockingAnswerTtl, new DnsTXTRecordData(_dnsServer.GetBlockingReportText("block-list-zone", blockedDomain, blockLists[i].AbsoluteUri)));
 
                 return new DnsDatagram(request.Identifier, true, DnsOpcode.StandardQuery, false, false, request.RecursionDesired, false, false, false, DnsResponseCode.NoError, request.Question, answer);
             }
@@ -868,10 +897,10 @@ namespace ZenitiumDns.Core.Dns.ZoneManagers
 
                 if (_dnsServer.AllowTxtBlockingReport && (request.EDNS is not null))
                 {
-                    options = new EDnsOption[blockLists.Count];
+                    options = new EDnsOption[_dnsServer.IsBlockingReportTextPerList ? blockLists.Count : 1];
 
                     for (int i = 0; i < options.Length; i++)
-                        options[i] = new EDnsOption(EDnsOptionCode.EXTENDED_DNS_ERROR, new EDnsExtendedDnsErrorOptionData(EDnsExtendedDnsErrorCode.Blocked, "source=block-list-zone; blockListUrl=" + blockLists[i].AbsoluteUri + "; domain=" + blockedDomain));
+                        options[i] = new EDnsOption(EDnsOptionCode.EXTENDED_DNS_ERROR, new EDnsExtendedDnsErrorOptionData(EDnsExtendedDnsErrorCode.Blocked, _dnsServer.GetBlockingReportText("block-list-zone", blockedDomain, blockLists[i].AbsoluteUri)));
                 }
 
                 IReadOnlyCollection<DnsARecordData> aRecords;
@@ -894,7 +923,7 @@ namespace ZenitiumDns.Core.Dns.ZoneManagers
                         if (parentDomain is null)
                             parentDomain = string.Empty;
 
-                        return new DnsDatagram(request.Identifier, true, DnsOpcode.StandardQuery, false, false, request.RecursionDesired, !_dnsServer.AllowTxtBlockingReport, false, false, DnsResponseCode.NxDomain, request.Question, null, [new DnsResourceRecord(parentDomain, DnsResourceRecordType.SOA, question.Class, _dnsServer.BlockingAnswerTtl, _soaRecord)], null, request.EDNS is null ? ushort.MinValue : _dnsServer.UdpPayloadSize, EDnsHeaderFlags.None, options);
+                        return new DnsDatagram(request.Identifier, true, DnsOpcode.StandardQuery, false, false, request.RecursionDesired, !_dnsServer.AllowTxtBlockingReport, false, false, DnsResponseCode.NxDomain, request.Question, null, [new DnsResourceRecord(parentDomain, DnsResourceRecordType.SOA, question.Class, _dnsServer.BlockingNegativeTtl, _soaRecord)], null, request.EDNS is null ? ushort.MinValue : _dnsServer.UdpPayloadSize, EDnsHeaderFlags.None, options);
 
                     default:
                         throw new InvalidOperationException();
@@ -919,7 +948,7 @@ namespace ZenitiumDns.Core.Dns.ZoneManagers
                             }
                             else
                             {
-                                authority = [new DnsResourceRecord(blockedDomain, DnsResourceRecordType.SOA, question.Class, _dnsServer.BlockingAnswerTtl, _soaRecord)];
+                                authority = [new DnsResourceRecord(blockedDomain, DnsResourceRecordType.SOA, question.Class, _dnsServer.BlockingNegativeTtl, _soaRecord)];
                             }
                         }
                         break;
@@ -938,7 +967,7 @@ namespace ZenitiumDns.Core.Dns.ZoneManagers
                             }
                             else
                             {
-                                authority = [new DnsResourceRecord(blockedDomain, DnsResourceRecordType.SOA, question.Class, _dnsServer.BlockingAnswerTtl, _soaRecord)];
+                                authority = [new DnsResourceRecord(blockedDomain, DnsResourceRecordType.SOA, question.Class, _dnsServer.BlockingNegativeTtl, _soaRecord)];
                             }
                         }
                         break;
@@ -947,16 +976,16 @@ namespace ZenitiumDns.Core.Dns.ZoneManagers
                         if (question.Name.Equals(blockedDomain, StringComparison.OrdinalIgnoreCase))
                             answer = [new DnsResourceRecord(blockedDomain, DnsResourceRecordType.NS, question.Class, _dnsServer.BlockingAnswerTtl, _nsRecord)];
                         else
-                            authority = [new DnsResourceRecord(blockedDomain, DnsResourceRecordType.SOA, question.Class, _dnsServer.BlockingAnswerTtl, _soaRecord)];
+                            authority = [new DnsResourceRecord(blockedDomain, DnsResourceRecordType.SOA, question.Class, _dnsServer.BlockingNegativeTtl, _soaRecord)];
 
                         break;
 
                     case DnsResourceRecordType.SOA:
-                        answer = [new DnsResourceRecord(blockedDomain, DnsResourceRecordType.SOA, question.Class, _dnsServer.BlockingAnswerTtl, _soaRecord)];
+                        answer = [new DnsResourceRecord(blockedDomain, DnsResourceRecordType.SOA, question.Class, _dnsServer.BlockingNegativeTtl, _soaRecord)];
                         break;
 
                     default:
-                        authority = [new DnsResourceRecord(blockedDomain, DnsResourceRecordType.SOA, question.Class, _dnsServer.BlockingAnswerTtl, _soaRecord)];
+                        authority = [new DnsResourceRecord(blockedDomain, DnsResourceRecordType.SOA, question.Class, _dnsServer.BlockingNegativeTtl, _soaRecord)];
                         break;
                 }
 
@@ -1100,11 +1129,31 @@ namespace ZenitiumDns.Core.Dns.ZoneManagers
         { get { return _temporaryDisableBlockingTill; } }
 
         public int TotalZonesAllowed
-        { get { return _allowListZone.Count; } }
+        { get { return _listZone.AllowZone.Count; } }
 
         public int TotalZonesBlocked
-        { get { return _blockListZone.Count; } }
+        { get { return _listZone.BlockZone.Count; } }
 
         #endregion
+
+        sealed class ListZone
+        {
+            public static readonly ListZone Empty = new ListZone(new HashSet<string>(), new Dictionary<string, int>(), []);
+
+            public readonly HashSet<string> AllowZone;
+            public readonly HashSet<string>.AlternateLookup<ReadOnlySpan<char>> AllowLookup;
+            public readonly Dictionary<string, int> BlockZone;
+            public readonly Dictionary<string, int>.AlternateLookup<ReadOnlySpan<char>> BlockLookup;
+            public readonly Uri[][] BlockListCombinations;
+
+            public ListZone(HashSet<string> allowZone, Dictionary<string, int> blockZone, Uri[][] blockListCombinations)
+            {
+                AllowZone = allowZone;
+                AllowLookup = allowZone.GetAlternateLookup<ReadOnlySpan<char>>();
+                BlockZone = blockZone;
+                BlockLookup = blockZone.GetAlternateLookup<ReadOnlySpan<char>>();
+                BlockListCombinations = blockListCombinations;
+            }
+        }
     }
 }
