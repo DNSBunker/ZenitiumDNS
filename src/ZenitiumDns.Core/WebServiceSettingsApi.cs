@@ -1,6 +1,7 @@
 ﻿/*
 Technitium DNS Server
 Copyright (C) 2026  Shreyas Zare (shreyas@technitium.com)
+Copyright (C) 2026  xRuffKez
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -309,6 +310,9 @@ namespace ZenitiumDns.Core
 
                 jsonWriter.WriteBoolean("enableDdr", _dnsWebService._dnsServer.EnableDdr);
                 jsonWriter.WriteBoolean("ddrOnlyUnencrypted", _dnsWebService._dnsServer.DdrOnlyUnencrypted);
+                jsonWriter.WriteBoolean("ddrProxyDoh", _dnsWebService._dnsServer.DdrProxyDoh);
+                jsonWriter.WriteNumber("ddrProxyDohPort", _dnsWebService._dnsServer.DdrProxyDohPort);
+                jsonWriter.WriteBoolean("ddrProxyDohHttp3", _dnsWebService._dnsServer.DdrProxyDohHttp3);
                 jsonWriter.WriteString("do53Mode", _dnsWebService._dnsServer.Do53Mode.ToString());
                 jsonWriter.WriteString("eDnsPaddingMode", _dnsWebService._dnsServer.EDnsPaddingMode.ToString());
                 jsonWriter.WriteStartArray("ddrRecords");
@@ -546,6 +550,10 @@ namespace ZenitiumDns.Core
 
                     if (!effectiveEnableDdr && ((effectiveDo53Mode == DnsServerDo53Mode.DdrOnlyDrop) || (effectiveDo53Mode == DnsServerDo53Mode.DdrOnlyRefused)))
                         throw new DnsWebServiceException("Do53 can be restricted to DDR only when DDR is enabled.");
+
+                    string ddrProxyDohPortValue = request.QueryOrForm("ddrProxyDohPort");
+                    if ((ddrProxyDohPortValue is not null) && (!ushort.TryParse(ddrProxyDohPortValue, out ushort ddrProxyDohPortCheck) || (ddrProxyDohPortCheck == 0)))
+                        throw new DnsWebServiceException("DoH port for DDR must be between 1 and 65535.");
                 }
 
                 try
@@ -1196,6 +1204,15 @@ namespace ZenitiumDns.Core
 
                         if (request.TryGetQueryOrForm("ddrOnlyUnencrypted", bool.Parse, out bool ddrOnlyUnencrypted))
                             _dnsWebService._dnsServer.DdrOnlyUnencrypted = ddrOnlyUnencrypted;
+
+                        if (request.TryGetQueryOrForm("ddrProxyDoh", bool.Parse, out bool ddrProxyDoh))
+                            _dnsWebService._dnsServer.DdrProxyDoh = ddrProxyDoh;
+
+                        if (request.TryGetQueryOrForm("ddrProxyDohPort", ushort.Parse, out ushort ddrProxyDohPort))
+                            _dnsWebService._dnsServer.DdrProxyDohPort = ddrProxyDohPort;
+
+                        if (request.TryGetQueryOrForm("ddrProxyDohHttp3", bool.Parse, out bool ddrProxyDohHttp3))
+                            _dnsWebService._dnsServer.DdrProxyDohHttp3 = ddrProxyDohHttp3;
 
                         if (request.TryGetQueryOrFormEnum("do53Mode", out DnsServerDo53Mode do53Mode))
                         {

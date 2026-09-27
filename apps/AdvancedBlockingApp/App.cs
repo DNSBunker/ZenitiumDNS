@@ -1,6 +1,7 @@
 ﻿/*
 Technitium DNS Server
 Copyright (C) 2026  Shreyas Zare (shreyas@technitium.com)
+Copyright (C) 2026  xRuffKez
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -363,7 +364,7 @@ namespace AdvancedBlocking
                 delegate (string localEP, JsonElement jsonGroup)
                 {
                     if (!EndPointExtensions.TryParse(localEP, out EndPoint ep))
-                        throw new InvalidOperationException("Local end point group map contains an invalid end point: " + localEP);
+                        throw new InvalidOperationException("Die Zuordnung lokaler Endpunkt zu Gruppe enthält einen ungültigen Endpunkt: " + localEP);
 
                     return new Tuple<EndPoint, string>(ep, jsonGroup.GetString() ?? "");
                 },
@@ -375,7 +376,7 @@ namespace AdvancedBlocking
             _networkGroupMap = jsonConfig.ReadObjectAsMap("networkGroupMap", delegate (string network, JsonElement jsonGroup)
             {
                 if (!NetworkAddress.TryParse(network, out NetworkAddress networkAddress))
-                    throw new InvalidOperationException("Network group map contains an invalid network address: " + network);
+                    throw new InvalidOperationException("Die Zuordnung Netz zu Gruppe enthält eine ungültige Netzadresse: " + network);
 
                 return new Tuple<NetworkAddress, string>(networkAddress, jsonGroup.GetString() ?? "");
             });
@@ -707,7 +708,7 @@ namespace AdvancedBlocking
         #region properties
 
         public string Description
-        { get { return "Blocks domain names using block lists and regex block lists. Supports creating groups based on client's IP address or subnet to enforce different block lists and regex block lists for each group."; } }
+        { get { return "Blockiert Domains anhand von Blocklisten und Listen mit regulären Ausdrücken. Für Client-IP-Adressen oder Subnetze lassen sich Gruppen mit jeweils eigenen Listen anlegen."; } }
 
         #endregion
 
@@ -789,7 +790,7 @@ namespace AdvancedBlocking
                         break;
 
                     default:
-                        throw new InvalidDataException("Unexpected URL format: " + jsonUrl.ValueKind);
+                        throw new InvalidDataException("Unerwartetes URL-Format: " + jsonUrl.ValueKind);
                 }
             }
 

@@ -1,6 +1,7 @@
 ﻿/*
 Technitium DNS Server
 Copyright (C) 2026  Shreyas Zare (shreyas@technitium.com)
+Copyright (C) 2026  xRuffKez
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -219,6 +220,7 @@ namespace ZenitiumDns.Core
 
                 jsonWriter.WriteBoolean("dnssecValidation", dnsServer.DnssecValidation);
                 jsonWriter.WriteBoolean("forwarding", (dnsServer.Forwarders is not null) && (dnsServer.Forwarders.Count > 0));
+                jsonWriter.WriteBoolean("localRootZone", dnsServer.IanaDataManager.IsRootZoneActive);
 
                 jsonWriter.WriteEndObject();
             }
@@ -388,11 +390,22 @@ namespace ZenitiumDns.Core
                 if (context.Request.GetQueryOrForm("reset", bool.Parse, false))
                     IPv6Reachability.Reset();
 
-                await _dnsWebService._dnsServer.ProbeIPv6UpstreamAsync();
+                bool probeSucceeded = await _dnsWebService._dnsServer.ProbeIPv6UpstreamAsync();
 
-                _dnsWebService._log.Write(_dnsWebService.GetRemoteEndPoint(context), "[" + sessionUser.Username + "] IPv6 upstream reachability was checked: " + (IPv6Reachability.IsUnavailable ? "unavailable" : "available"));
+                _dnsWebService._log.Write(_dnsWebService.GetRemoteEndPoint(context), "[" + sessionUser.Username + "] IPv6 upstream reachability was checked: " + (IPv6Reachability.IsUnavailable ? "unavailable" : "available") + "; root server probe " + (probeSucceeded ? "succeeded" : "failed: " + IPv6Reachability.LastProbeError));
 
-                WriteServerStatus(context.GetCurrentJsonWriter());
+                Utf8JsonWriter jsonWriter = context.GetCurrentJsonWriter();
+
+                jsonWriter.WriteBoolean("probeSucceeded", probeSucceeded);
+
+                if (!probeSucceeded && (IPv6Reachability.LastProbeError is not null))
+                    jsonWriter.WriteString("probeError", IPv6Reachability.LastProbeError);
+
+                DateTime lastSuccess = IPv6Reachability.LastSuccess;
+                if (lastSuccess != DateTime.MinValue)
+                    jsonWriter.WriteNumber("lastIPv6ResponseSecondsAgo", Math.Max(0, (long)(DateTime.UtcNow - lastSuccess).TotalSeconds));
+
+                WriteServerStatus(jsonWriter);
             }
 
             public async Task GetStatsAsync(HttpContext context)

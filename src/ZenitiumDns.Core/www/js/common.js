@@ -1,6 +1,7 @@
 ﻿/*
 Technitium DNS Server
 Copyright (C) 2026  Shreyas Zare (shreyas@technitium.com)
+Copyright (C) 2026  xRuffKez
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -342,4 +343,25 @@ function getCookie(name) {
 
 function setCookie(name, value, maxAge) {
     document.cookie = name + "=" + value + ";Max-Age=" + maxAge + ";path=/";
+}
+
+var APP_DISPLAY_NAMES = {
+    "AdvancedBlockingApp": "Erweiterte Blockierung",
+    "AdvancedForwardingApp": "Erweiterte Weiterleitung",
+    "Dns64App": "DNS64",
+    "DnsRebindingProtectionApp": "Schutz vor DNS-Rebinding",
+    "DropRequestsApp": "Anfragen verwerfen",
+    "LogExporterApp": "Protokoll-Export",
+    "NxDomainApp": "NXDOMAIN-Blockierung",
+    "QueryLogsMySqlApp": "Anfrageprotokoll (MySQL/MariaDB)",
+    "QueryLogsPostgreSqlApp": "Anfrageprotokoll (PostgreSQL)",
+    "QueryLogsSqliteApp": "Anfrageprotokoll (SQLite)",
+    "QueryLogsSqlServerApp": "Anfrageprotokoll (SQL Server)"
+};
+
+function getAppDisplayName(name) {
+    if (Object.prototype.hasOwnProperty.call(APP_DISPLAY_NAMES, name))
+        return APP_DISPLAY_NAMES[name];
+
+    return name;
 }

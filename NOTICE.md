@@ -7,6 +7,8 @@ ZenitiumDNS ist eine veränderte Fassung der folgenden Werke:
 
 Beide Werke stehen unter der GNU General Public License Version 3 oder (nach deiner Wahl) jeder späteren Version. ZenitiumDNS wird unter derselben Lizenz verbreitet. Der vollständige Lizenztext steht in der Datei [LICENSE](LICENSE). Die ursprünglichen Urheberrechts- und Lizenzhinweise in den Quelldateien wurden beibehalten.
 
+Die Änderungen und Ergänzungen von ZenitiumDNS: Copyright (C) 2026 xRuffKez. Veränderte Quelldateien tragen diesen Hinweis zusätzlich zum ursprünglichen, neu hinzugekommene Dateien einen eigenen Lizenzkopf.
+
 Der Name „Technitium“ wird hier nur verwendet, um die Herkunft dieses Werks anzugeben. ZenitiumDNS steht in keiner Verbindung zu Technitium oder dem ursprünglichen Autor und wird von ihnen nicht unterstützt.
 
 ## Mitgelieferte Schriften

@@ -4,7 +4,7 @@
 		<Version>8.1</Version>
 		<AssemblyName>DropRequestsApp</AssemblyName>
 		<RootNamespace>DropRequests</RootNamespace>
-		<Description>Drops incoming DNS requests that match list of blocked networks or blocked questions.</Description>
+		<Description>Verwirft eingehende DNS-Anfragen von gesperrten Netzen oder mit gesperrten Namen und Typen, ohne zu antworten.</Description>
 		<GeneratePackageOnBuild>false</GeneratePackageOnBuild>
 		<OutputType>Library</OutputType>
 		<Nullable>enable</Nullable>

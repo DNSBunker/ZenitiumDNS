@@ -4,7 +4,7 @@
 		<Version>8.0</Version>
 		<AssemblyName>NxDomainApp</AssemblyName>
 		<RootNamespace>NxDomain</RootNamespace>
-		<Description>Blocks configured domain names with a NX Domain response.</Description>
+		<Description>Blockiert die konfigurierten Domains mit einer NXDOMAIN-Antwort.</Description>
 		<GeneratePackageOnBuild>false</GeneratePackageOnBuild>
 		<OutputType>Library</OutputType>
 	</PropertyGroup>

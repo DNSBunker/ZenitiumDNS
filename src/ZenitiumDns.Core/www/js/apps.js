@@ -1,6 +1,7 @@
 ﻿/*
 Technitium DNS Server
 Copyright (C) 2026  Shreyas Zare (shreyas@technitium.com)
+Copyright (C) 2026  xRuffKez
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -181,7 +182,7 @@ function getAppRowHtml(app) {
     }
 
     var id = getAppRowId(name);
-    var tableHtmlRow = "<tr id=\"trApp" + id + "\"><td><div><span style=\"font-weight: bold; font-size: 16px;\">" + htmlEncode(name) + "</span><br /><span class=\"label label-primary\">Version " + htmlEncode(version) + "</span>" + (app.enabled ? " <span class=\"label label-success\">Aktiv</span>" : " <span class=\"label label-default\">Deaktiviert</span>") + "</div>";
+    var tableHtmlRow = "<tr id=\"trApp" + id + "\"><td><div><span style=\"font-weight: bold; font-size: 16px;\">" + htmlEncode(getAppDisplayName(name)) + "</span>" + (getAppDisplayName(name) == name ? "" : " <span class=\"text-muted\" style=\"font-size: 12px;\">" + htmlEncode(name) + "</span>") + "<br /><span class=\"label label-primary\">Version " + htmlEncode(version) + "</span>" + (app.enabled ? " <span class=\"label label-success\">Aktiv</span>" : " <span class=\"label label-default\">Deaktiviert</span>") + "</div>";
 
     if (app.description != null)
         tableHtmlRow += "<div style=\"margin-top: 10px;\">" + htmlEncode(app.description).replace(/\n/g, "<br />") + "</div>";
@@ -727,7 +728,7 @@ function showAppConfigModal(objBtn, appName) {
             };
 
             $("#divAppConfigAlert").html("");
-            $("#lblAppConfigName").text(appName);
+            $("#lblAppConfigName").text(getAppDisplayName(appName));
             $("#txtAppConfig").val(responseJSON.response.config == null ? "" : String(responseJSON.response.config).replace(/^﻿/, ""));
             $("#btnAppConfig").button("reset");
 

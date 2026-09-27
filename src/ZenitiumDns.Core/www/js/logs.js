@@ -1,6 +1,7 @@
 ﻿/*
 Technitium DNS Server
 Copyright (C) 2026  Shreyas Zare (shreyas@technitium.com)
+Copyright (C) 2026  xRuffKez
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -292,7 +293,7 @@ function refreshQueryLogsTab(doQueryLogs) {
 
                 for (var j = 0; j < apps[i].dnsApps.length; j++) {
                     if (apps[i].dnsApps[j].isQueryLogs) {
-                        optApps += "<option>" + htmlEncode(apps[i].name) + "</option>";
+                        optApps += "<option value=\"" + htmlEncode(apps[i].name) + "\">" + htmlEncode(getAppDisplayName(apps[i].name)) + "</option>";
 
                         if (currentAppName == null)
                             currentAppName = apps[i].name;

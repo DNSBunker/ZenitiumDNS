@@ -1,6 +1,6 @@
 # ZenitiumDNS 15.5.1 im Vergleich zu Technitium DNS Server 15.5
 
-Dieses Dokument listet ausschließlich die Unterschiede zwischen dem Original-Build **Technitium DNS Server 15.5** (veröffentlicht am 19. September 2026) und dem Build **ZenitiumDNS 15.5.1** (Stand 26. September 2026) auf. ZenitiumDNS 15.5.1 enthält außerdem alle Korrekturen aus Technitium DNS Server 15.5.1; welche davon ZenitiumDNS schon vorher hatte, steht am Ende. Die vollständige Versionsgeschichte steht in [CHANGELOG.md](CHANGELOG.md).
+Dieses Dokument listet ausschließlich die Unterschiede zwischen dem Original-Build **Technitium DNS Server 15.5** (veröffentlicht am 19. September 2026) und dem Build **ZenitiumDNS 15.5.1** (Stand 27. September 2026) auf. ZenitiumDNS 15.5.1 enthält außerdem alle Korrekturen aus Technitium DNS Server 15.5.1; welche davon ZenitiumDNS schon vorher hatte, steht am Ende. Die vollständige Versionsgeschichte steht in [CHANGELOG.md](CHANGELOG.md).
 
 ## Überblick
 
@@ -28,14 +28,14 @@ Dieses Dokument listet ausschließlich die Unterschiede zwischen dem Original-Bu
 | Ratenbegrenzung | Durchschnitt der Anfragen pro Minute über ein Stichprobenfenster | Token-Bucket in Anfragen pro Sekunde mit Burst |
 | Client-IP-Sperrlisten | nicht vorhanden | IPsum, Spamhaus DROP u. a., Verwerfen vor dem Auswerten der Anfrage |
 | TLS-Zertifikate | nur PKCS#12 (`.pfx`) | zusätzlich PEM (`fullchain.pem`, `privkey.pem`) |
-| DDR (RFC 9462) | nur über selbst angelegte Zone | eingebaut, automatisch aus den aktiven Diensten |
+| DDR (RFC 9462) | nur über selbst angelegte Zone | eingebaut, automatisch aus den aktiven Diensten, auch für DoH hinter einem Reverse Proxy |
 | Selbsttest | nicht vorhanden | eigener Bereich, schwere Probleme auf der Übersicht |
 | Speicher für 2,5 Mio. Blocklisten-Einträge | ca. 395 MB | ca. 200 MB |
 | TCP-Anfragen an Cloudflare-Nameserver | wiederverwendete Verbindungen laufen in Timeouts | eigene Verbindung, Wiederverwendung wird erkannt |
 | Lokale Root-Zone (RFC 8806) | nur als selbst angelegte Secondary-Zone | eingebaut, Root- und arpa-Zone von IANA mit ZONEMD- und Signaturprüfung, NXDOMAIN für nicht existierende TLDs ohne Root-Server |
 | Root-Vertrauensanker | nur mitgelieferte Datei | täglich von IANA, nur mit gültiger ICANN-Signatur, oder eigene Version |
 | Do53 | immer aktiv | aktiviert, nur DDR (verwerfen oder REFUSED) oder aus |
-| Apps konfigurieren | JSON-Textfeld | Formular mit deutschen Bezeichnungen, JSON für Experten |
+| Apps | englisch, Konfiguration als JSON-Textfeld | deutsche Namen, Beschreibungen und Fehlermeldungen, Formular mit deutschen Bezeichnungen, JSON für Experten |
 | Übersicht | ab 1 Stunde | ab 1 Minute, Echtzeitgraphen interner Prozesse |
 | Automatisches Eingreifen bei Speicherplatz-, Speicher- oder Dienstproblemen | nicht vorhanden | Wächter |
 | EDNS-Padding (RFC 7830, RFC 8467) | nicht vorhanden | Antworten über DoT, DoH und DoQ auf Vielfache von 468 Byte, Anfragen an verschlüsselte Forwarder auf 128 Byte |

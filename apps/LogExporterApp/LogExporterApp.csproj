@@ -5,7 +5,7 @@
 		<Version>3.1</Version>
 		<AssemblyName>LogExporterApp</AssemblyName>
 		<RootNamespace>LogExporter</RootNamespace>
-		<Description>Allows exporting query logs to third party sinks. It supports exporting to File, HTTP endpoint, and Syslog (UDP, TCP, TLS, and Local protocols).</Description>
+		<Description>Exportiert das Anfrageprotokoll an externe Ziele: in eine Datei, an einen HTTP-Endpunkt oder per Syslog (UDP, TCP, TLS oder lokal).</Description>
 		<GeneratePackageOnBuild>false</GeneratePackageOnBuild>
 		<OutputType>Library</OutputType>
 		<Nullable>enable</Nullable>

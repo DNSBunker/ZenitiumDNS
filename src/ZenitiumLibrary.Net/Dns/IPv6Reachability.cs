@@ -1,3 +1,22 @@
+/*
+ZenitiumDNS
+Copyright (C) 2026  xRuffKez
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+*/
+
 using System;
 using System.Collections.Generic;
 using System.Net;
@@ -13,6 +32,7 @@ namespace ZenitiumLibrary.Net.Dns
         #region variables
 
         const int SUCCESS_GRACE_SECONDS = 30;
+        const int PROBE_OVERRIDE_SECONDS = 30;
         const int FAILURE_WINDOW_SECONDS = 30;
         const int FAILURE_THRESHOLD = 16;
         const int DISTINCT_ADDRESS_THRESHOLD = 2;
@@ -33,7 +53,8 @@ namespace ZenitiumLibrary.Net.Dns
         static long _lastSuccessTicks;
         static long _lastConfirmationTicks;
         static long _unavailableUntilTicks;
-        static int _probing;
+        static readonly Lock _probeLock = new Lock();
+        static Task<bool> _probeTask;
         static volatile bool _enabled = true;
         static volatile bool _confirmed;
         static volatile string _lastProbeError;
@@ -57,12 +78,24 @@ namespace ZenitiumLibrary.Net.Dns
             if (!_enabled)
                 return;
 
+            if (HasRecentSuccess(PROBE_OVERRIDE_SECONDS))
+                return;
+
             bool wasAvailable = !IsUnavailable;
 
             Volatile.Write(ref _unavailableUntilTicks, DateTime.UtcNow.AddSeconds(HOLD_SECONDS).Ticks);
 
             if (wasAvailable)
                 RaiseAvailabilityChanged(false);
+        }
+
+        private static bool HasRecentSuccess(int seconds)
+        {
+            long lastSuccess = Volatile.Read(ref _lastSuccessTicks);
+            if (lastSuccess == 0)
+                return false;
+
+            return (DateTime.UtcNow.Ticks - lastSuccess) < (TimeSpan.TicksPerSecond * seconds);
         }
 
         private static void RaiseAvailabilityChanged(bool available)
@@ -79,70 +112,69 @@ namespace ZenitiumLibrary.Net.Dns
         {
             try
             {
-                if (!await ProbeServersAsync(PROBE_TIMEOUT, CancellationToken.None))
+                if (!await ProbeServersAsync(PROBE_TIMEOUT))
                     SetUnavailable();
             }
             catch
             { }
         }
 
-        private static async Task<bool> ProbeServersAsync(int timeout, CancellationToken cancellationToken)
+        private static Task<bool> ProbeServersAsync(int timeout)
+        {
+            lock (_probeLock)
+            {
+                if ((_probeTask is null) || _probeTask.IsCompleted)
+                    _probeTask = RunProbeAsync(timeout);
+
+                return _probeTask;
+            }
+        }
+
+        private static async Task<bool> RunProbeAsync(int timeout)
         {
             IReadOnlyList<NameServerAddress> rootHints = DnsClient.IPv6RootHints;
             if ((rootHints is null) || (rootHints.Count == 0))
                 return true;
 
-            if (Interlocked.Exchange(ref _probing, 1) == 1)
-                return !IsUnavailable;
+            await Task.Yield();
 
-            try
+            List<string> errors = new List<string>(PROBE_ROUNDS);
+
+            for (int round = 0; round < PROBE_ROUNDS; round++)
             {
-                List<string> errors = new List<string>(PROBE_ROUNDS);
+                if (round > 0)
+                    await Task.Delay(PROBE_ROUND_DELAY);
 
-                for (int round = 0; round < PROBE_ROUNDS; round++)
+                List<NameServerAddress> servers = new List<NameServerAddress>(rootHints);
+                servers.Shuffle();
+
+                if (servers.Count > PROBE_SERVER_COUNT)
+                    servers.RemoveRange(PROBE_SERVER_COUNT, servers.Count - PROBE_SERVER_COUNT);
+
+                DnsClient dnsClient = new DnsClient(servers);
+                dnsClient.Timeout = timeout;
+                dnsClient.Retries = PROBE_RETRIES;
+                dnsClient.Concurrency = servers.Count;
+
+                try
                 {
-                    if (round > 0)
-                        await Task.Delay(PROBE_ROUND_DELAY, cancellationToken);
-
-                    List<NameServerAddress> servers = new List<NameServerAddress>(rootHints);
-                    servers.Shuffle();
-
-                    if (servers.Count > PROBE_SERVER_COUNT)
-                        servers.RemoveRange(PROBE_SERVER_COUNT, servers.Count - PROBE_SERVER_COUNT);
-
-                    DnsClient dnsClient = new DnsClient(servers);
-                    dnsClient.Timeout = timeout;
-                    dnsClient.Retries = PROBE_RETRIES;
-                    dnsClient.Concurrency = servers.Count;
-
-                    try
-                    {
-                        await dnsClient.ResolveAsync(new DnsQuestionRecord("", DnsResourceRecordType.NS, DnsClass.IN), cancellationToken);
-                        _lastProbeError = null;
-                        return true;
-                    }
-                    catch (OperationCanceledException)
-                    {
-                        throw;
-                    }
-                    catch (DnsClientResponseValidationException)
-                    {
-                        _lastProbeError = null;
-                        return true;
-                    }
-                    catch (Exception ex)
-                    {
-                        errors.Add("round " + (round + 1) + ": " + ex.GetType().Name + ": " + ex.Message);
-                    }
+                    await dnsClient.ResolveAsync(new DnsQuestionRecord("", DnsResourceRecordType.NS, DnsClass.IN));
+                    _lastProbeError = null;
+                    return true;
                 }
+                catch (DnsClientResponseValidationException)
+                {
+                    _lastProbeError = null;
+                    return true;
+                }
+                catch (Exception ex)
+                {
+                    errors.Add("round " + (round + 1) + ": " + ex.GetType().Name + ": " + ex.Message);
+                }
+            }
 
-                _lastProbeError = string.Join(" ", errors);
-                return false;
-            }
-            finally
-            {
-                Volatile.Write(ref _probing, 0);
-            }
+            _lastProbeError = string.Join(" ", errors);
+            return false;
         }
 
         #endregion
@@ -248,7 +280,7 @@ namespace ZenitiumLibrary.Net.Dns
 
         public static async Task<bool> ProbeAsync(int timeout = PROBE_TIMEOUT, CancellationToken cancellationToken = default)
         {
-            bool reachable = await ProbeServersAsync(timeout, cancellationToken);
+            bool reachable = await ProbeServersAsync(timeout).WaitAsync(cancellationToken);
 
             if (reachable)
             {
@@ -309,6 +341,15 @@ namespace ZenitiumLibrary.Net.Dns
 
         public static string LastProbeError
         { get { return _lastProbeError; } }
+
+        public static DateTime LastSuccess
+        {
+            get
+            {
+                long ticks = Volatile.Read(ref _lastSuccessTicks);
+                return ticks == 0 ? DateTime.MinValue : new DateTime(ticks, DateTimeKind.Utc);
+            }
+        }
 
         public static DateTime UnavailableUntil
         { get { return new DateTime(Volatile.Read(ref _unavailableUntilTicks), DateTimeKind.Utc); } }

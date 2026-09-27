@@ -3,6 +3,7 @@
 <!--
 Technitium DNS Server
 Copyright (C) 2026  Shreyas Zare (shreyas@technitium.com)
+Copyright (C) 2026  xRuffKez
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -2373,6 +2374,20 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
                                         </div>
                                         <div class="option-help">Die Ankündigung erhalten dann nur Clients, die über UDP oder TCP auf Port 53 fragen, auch hinter einem PROXY-Protokoll-Load-Balancer. Über DoT, DoH und DoQ wird <code>_dns.resolver.arpa</code> wie jede andere lokal bediente Domain mit NXDOMAIN beantwortet.</div>
                                         <div class="option-help">Clients prüfen, ob das TLS-Zertifikat die IP-Adresse enthält, über die sie diesen Resolver unverschlüsselt erreichen. Ohne IP-Adresse im Zertifikat nutzen viele Clients die Ankündigung nicht. Feste Adressen unter Netzwerk werden als Adresshinweise mitgesendet.</div>
+                                    </div>
+                                </div>
+
+                                <div class="form-group">
+                                    <label class="col-sm-3 control-label">DoH über Reverse Proxy</label>
+                                    <div class="col-sm-8">
+                                        <div class="checkbox">
+                                            <label><input id="chkDdrProxyDoh" type="checkbox"> DoH eines vorgeschalteten Proxys ankündigen</label>
+                                        </div>
+                                        <div class="option-help">Für Setups, in denen z. B. Caddy oder nginx DoH mit TLS anbietet und an DNS-over-HTTP dieses Servers weiterreicht. Der Eintrag verweist auf <code>/dns-query</code> am angegebenen Port. Das Zertifikat des Proxys muss auf denselben Namen ausgestellt sein. Wird ignoriert, wenn dieser Server DoH selbst anbietet.</div>
+                                        <div style="margin-top: 6px;">
+                                            Port <input type="number" class="form-control" id="txtDdrProxyDohPort" min="1" max="65535" placeholder="443" style="width: 100px; display: inline;">
+                                            <label style="margin-left: 16px; font-weight: normal;"><input id="chkDdrProxyDohHttp3" type="checkbox"> Proxy bietet auch HTTP/3 an</label>
+                                        </div>
                                     </div>
                                 </div>
 

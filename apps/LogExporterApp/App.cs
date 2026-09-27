@@ -2,6 +2,7 @@
 Technitium DNS Server
 Copyright (C) 2026  Shreyas Zare (shreyas@technitium.com)
 Copyright (C) 2025  Zafer Balkan (zafer@zaferbalkan.com)
+Copyright (C) 2026  xRuffKez
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -99,7 +100,7 @@ namespace LogExporter
             _config = AppConfig.Deserialize(config);
 
             if (_config is null)
-                throw new DnsClientException("Invalid application configuration.");
+                throw new DnsClientException("Ungültige App-Konfiguration.");
 
             if (_config.FileTarget!.Enabled)
             {
@@ -210,7 +211,7 @@ namespace LogExporter
 
         public string Description
         {
-            get { return "Allows exporting query logs to third party sinks. It supports exporting to File, HTTP endpoint, and Syslog (UDP, TCP, TLS, and Local protocols)."; }
+            get { return "Exportiert das Anfrageprotokoll an externe Ziele: Datei, HTTP-Endpunkt oder Syslog (UDP, TCP, TLS oder lokal)."; }
         }
 
         #endregion

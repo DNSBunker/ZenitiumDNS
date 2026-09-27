@@ -1,6 +1,7 @@
 ﻿/*
 Technitium DNS Server
 Copyright (C) 2026  Shreyas Zare (shreyas@technitium.com)
+Copyright (C) 2026  xRuffKez
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -227,6 +228,9 @@ namespace ZenitiumDns.Core.Dns
         string _dnsTlsCertificateKeyPath;
         bool _enableDdr = true;
         bool _ddrOnlyUnencrypted = true;
+        bool _ddrProxyDoh;
+        ushort _ddrProxyDohPort = 443;
+        bool _ddrProxyDohHttp3 = true;
         DnsServerDo53Mode _do53Mode = DnsServerDo53Mode.Enabled;
         bool _blockFirefoxCanaryDomain;
         bool _forceChromePreflight;
@@ -626,7 +630,7 @@ namespace ZenitiumDns.Core.Dns
             BinaryReader bR = new BinaryReader(s);
 
             int version = bR.ReadByte();
-            if ((version < 1) || (version > 11))
+            if ((version < 1) || (version > 12))
                 throw new InvalidDataException("DNS Server config version not supported.");
 
             string serverDomain = s.ReadShortString();
@@ -1185,6 +1189,19 @@ namespace ZenitiumDns.Core.Dns
             else
                 _eDnsPaddingMode = DnsServerEDnsPaddingMode.WhenRequested;
 
+            if (version >= 12)
+            {
+                _ddrProxyDoh = bR.ReadBoolean();
+                _ddrProxyDohPort = bR.ReadUInt16();
+                _ddrProxyDohHttp3 = bR.ReadBoolean();
+            }
+            else
+            {
+                _ddrProxyDoh = false;
+                _ddrProxyDohPort = 443;
+                _ddrProxyDohHttp3 = true;
+            }
+
             if (_dnsTlsCertificatePath is null)
             {
                 StopTlsCertificateUpdateTimer();
@@ -1216,7 +1233,7 @@ namespace ZenitiumDns.Core.Dns
             BinaryWriter bW = new BinaryWriter(s);
 
             bW.Write(Encoding.ASCII.GetBytes("DC"));
-            bW.Write((byte)11);
+            bW.Write((byte)12);
 
             s.WriteShortString(_serverDomain);
 
@@ -1479,6 +1496,9 @@ namespace ZenitiumDns.Core.Dns
             bW.Write((byte)_ianaDataManager.ArpaZoneMode);
             bW.Write((byte)_ianaDataManager.TrustAnchorMode);
             bW.Write((byte)_eDnsPaddingMode);
+            bW.Write(_ddrProxyDoh);
+            bW.Write(_ddrProxyDohPort);
+            bW.Write(_ddrProxyDohHttp3);
         }
 
         #endregion
@@ -5289,8 +5309,9 @@ namespace ZenitiumDns.Core.Dns
         public IReadOnlyList<DnsResourceRecord> GetDdrRecords(string ownerName = DDR_DOMAIN)
         {
             List<DnsResourceRecord> records = new List<DnsResourceRecord>(3);
+            bool hasCertificate = _dnsTlsCertificate is not null;
 
-            if (_dnsTlsCertificate is null)
+            if (!hasCertificate && !_ddrProxyDoh)
                 return records;
 
             string targetName = GetDdrTargetName();
@@ -5338,7 +5359,7 @@ namespace ZenitiumDns.Core.Dns
                 records.Add(new DnsResourceRecord(ownerName, DnsResourceRecordType.SVCB, DnsClass.IN, DDR_RECORD_TTL, new DnsSVCBRecordData(priority++, targetName, svcParams)));
             }
 
-            if (_enableDnsOverHttps)
+            if (_enableDnsOverHttps && hasCertificate)
             {
                 List<string> alpn = new List<string>(2);
 
@@ -5353,11 +5374,20 @@ namespace ZenitiumDns.Core.Dns
 
                 Add(alpn, _dnsOverHttpsPort, "/dns-query{?dns}");
             }
+            else if (_ddrProxyDoh)
+            {
+                List<string> alpn = ["h2"];
 
-            if (_enableDnsOverTls)
+                if (_ddrProxyDohHttp3)
+                    alpn.Add("h3");
+
+                Add(alpn, _ddrProxyDohPort, "/dns-query{?dns}");
+            }
+
+            if (_enableDnsOverTls && hasCertificate)
                 Add(["dot"], _dnsOverTlsPort, null);
 
-            if (_enableDnsOverQuic && QuicListener.IsSupported)
+            if (_enableDnsOverQuic && hasCertificate && QuicListener.IsSupported)
                 Add(["doq"], _dnsOverQuicPort, null);
 
             return records;
@@ -7157,6 +7187,30 @@ namespace ZenitiumDns.Core.Dns
         {
             get { return _ddrOnlyUnencrypted; }
             set { _ddrOnlyUnencrypted = value; }
+        }
+
+        public bool DdrProxyDoh
+        {
+            get { return _ddrProxyDoh; }
+            set { _ddrProxyDoh = value; }
+        }
+
+        public ushort DdrProxyDohPort
+        {
+            get { return _ddrProxyDohPort; }
+            set
+            {
+                if (value == 0)
+                    throw new ArgumentOutOfRangeException(nameof(DdrProxyDohPort), "Port must be between 1 and 65535.");
+
+                _ddrProxyDohPort = value;
+            }
+        }
+
+        public bool DdrProxyDohHttp3
+        {
+            get { return _ddrProxyDohHttp3; }
+            set { _ddrProxyDohHttp3 = value; }
         }
 
         public string DnsOverHttpRealIpHeader

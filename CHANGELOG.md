@@ -1,5 +1,22 @@
 # ZenitiumDNS Änderungsprotokoll
 
+## ZenitiumDNS 15.5.1 (Paket 15.5.1-4)
+Veröffentlicht: 27. September 2026
+
+### Neu
+- DDR kann DoH eines vorgeschalteten Reverse Proxys wie Caddy oder nginx ankündigen, wenn dieser Server selbst nur DNS-over-HTTP ohne TLS anbietet. Unter Einstellungen > Protokolle > Automatische Erkennung (DDR) lassen sich öffentlicher Port und HTTP/3 einstellen. Die SVCB-Einträge für `_dns.resolver.arpa` und `_dns.<Servername>` enthalten dann `alpn=h2,h3`, den Port und `dohpath=/dns-query{?dns}` zusätzlich zu DoT und DoQ.
+- Die Apps sind auf Deutsch: Anzeigenamen wie „Erweiterte Blockierung“ oder „Anfrageprotokoll (SQLite)“, Beschreibungen, Handler-Beschreibungen und die Fehlermeldungen bei ungültiger Konfiguration. Der technische Name bleibt als Kennung daneben sichtbar. Beim Paket-Update werden die mitgelieferten Apps aktualisiert, ihre Konfiguration bleibt erhalten.
+- Die Übersicht zeigt „Rekursiv mit lokaler Root-Zone“, solange die lokale Root-Zone aktiv ist.
+
+### Behoben
+- Der Knopf „Jetzt prüfen“ für IPv6 meldete immer „IPv6 nicht erreichbar“ und zeigte „IPv6 ausgesetzt“, auch wenn IPv6 funktionierte, weil die Oberfläche die Antwort falsch auslas. Nach einem Neustart sah wieder alles normal aus. Der Knopf zeigt jetzt das Ergebnis der Prüfung der IPv6-Root-Server samt Fehlertext und wann zuletzt ein Nameserver über IPv6 geantwortet hat.
+- Eine fehlgeschlagene Prüfung der IPv6-Root-Server setzt IPv6 nicht mehr aus, solange in den letzten 30 Sekunden Nameserver über IPv6 geantwortet haben.
+- Ein Klick auf „Jetzt prüfen“ während einer laufenden Prüfung lieferte sofort den alten Stand. Jetzt wird das Ergebnis der laufenden Prüfung abgewartet.
+- Mit der Einstellung „IPv6 bevorzugen“ scheiterten auf Servern ohne funktionierendes IPv6 die ersten Anfragen nach jedem Neustart mit SERVFAIL, weil Nameserver ohne Glue-Einträge zuerst über IPv6 angefragt wurden. Bis IPv6 bestätigt ist, wird jetzt auch in diesem Modus zuerst die IPv4-Adresse aufgelöst. Auf dem Testserver wurden danach alle Domains direkt nach dem Start in 50 bis 200 ms beantwortet.
+
+### Weitere Änderungen
+- Konfigurationsformat Version 12 für die DNS-Einstellungen. Ältere Versionen von ZenitiumDNS können es nicht lesen.
+
 ## ZenitiumDNS 15.5.1 (Paket 15.5.1-3)
 Veröffentlicht: 27. September 2026
 

@@ -4,7 +4,7 @@
 		<Version>6.0</Version>
 		<AssemblyName>Dns64App</AssemblyName>
 		<RootNamespace>Dns64</RootNamespace>
-		<Description>Enables DNS64 function for both authoritative and recursive resolver responses for use by IPv6 only clients.\n\nWarning! Installing DNS64 app without having NAT64 in place will cause connectivity issues for some websites.</Description>
+		<Description>Stellt DNS64 für Antworten aus lokalen Zonen und aus der rekursiven Auflösung bereit, für Clients, die nur IPv6 haben.\n\nWarnung: Ohne NAT64 im Netz sind manche Webseiten nach dem Aktivieren nicht mehr erreichbar.</Description>
 		<GeneratePackageOnBuild>false</GeneratePackageOnBuild>
 		<OutputType>Library</OutputType>
 	</PropertyGroup>

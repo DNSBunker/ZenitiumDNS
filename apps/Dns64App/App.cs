@@ -1,6 +1,7 @@
 ﻿/*
 Technitium DNS Server
 Copyright (C) 2026  Shreyas Zare (shreyas@technitium.com)
+Copyright (C) 2026  xRuffKez
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -71,7 +72,7 @@ namespace Dns64
             _networkGroupMap = jsonConfig.ReadObjectAsMap("networkGroupMap", delegate (string network, JsonElement group)
             {
                 if (!NetworkAddress.TryParse(network, out NetworkAddress networkAddress))
-                    throw new InvalidOperationException("Network group map contains an invalid network address: " + network);
+                    throw new InvalidOperationException("Die Zuordnung Netz zu Gruppe enthält eine ungültige Netzadresse: " + network);
 
                 return new Tuple<NetworkAddress, string>(networkAddress, group.GetString());
             });
@@ -255,7 +256,7 @@ namespace Dns64
         #region properties
 
         public string Description
-        { get { return "Enables DNS64 function for both authoritative and recursive resolver responses for use by IPv6 only clients."; } }
+        { get { return "Stellt DNS64 für Antworten aus lokalen Zonen und aus der rekursiven Auflösung bereit, für Clients, die nur IPv6 haben."; } }
 
         public byte Preference
         { get { return _appPreference; } }
@@ -302,7 +303,7 @@ namespace Dns64
                                 break;
 
                             default:
-                                throw new NotSupportedException("DNS64 prefix can have only the following prefixes: 32, 40, 48, 56, 64, or 96.");
+                                throw new NotSupportedException("Das DNS64-Präfix muss eine Länge von 32, 40, 48, 56, 64 oder 96 haben.");
                         }
                     }
 
@@ -313,7 +314,7 @@ namespace Dns64
                 {
                     NetworkAddress networkAddress = NetworkAddress.Parse(strNetworkAddress);
                     if (networkAddress.Address.AddressFamily != AddressFamily.InterNetworkV6)
-                        throw new InvalidOperationException("An IPv6 network address is expected for 'excludedIpv6' array.");
+                        throw new InvalidOperationException("In 'excludedIpv6' sind nur IPv6-Netze erlaubt.");
 
                     return networkAddress;
                 });

@@ -5,7 +5,7 @@
 		<Version>4.2</Version>
 		<AssemblyName>QueryLogsMySqlApp</AssemblyName>
 		<RootNamespace>QueryLogsMySql</RootNamespace>
-		<Description>Logs all incoming DNS requests and their responses in a MySQL/MariaDB database that can be queried from the DNS Server web console.\n\nNote! You will need to create a user and grant all privileges on the database to the user so that the app will be able to access it. To do that run the following commands with the required database name and username on your mysql root prompt:\nCREATE USER 'user'@'%' IDENTIFIED BY 'password';\nGRANT ALL PRIVILEGES ON DatabaseName.* TO 'user'@'%';\n\nOnce the database is configured, edit the app's config to update the database name, connection string, and set enableLogging to true. The app will automatically create the required database schema for you and start logging queries once you save the config.</Description>
+		<Description>Schreibt alle eingehenden DNS-Anfragen und ihre Antworten in eine MySQL- oder MariaDB-Datenbank, die sich unter Protokolle in der Weboberfläche durchsuchen lässt.\n\nHinweis: Lege vorher einen Datenbankbenutzer mit allen Rechten auf die Datenbank an, zum Beispiel an der MySQL-Konsole als root mit dem gewünschten Datenbank- und Benutzernamen:\nCREATE USER 'user'@'%' IDENTIFIED BY 'password';\nGRANT ALL PRIVILEGES ON DatabaseName.* TO 'user'@'%';\n\nTrage danach in der Konfiguration der App Datenbankname und Verbindungszeichenfolge ein und schalte die Protokollierung ein. Beim Speichern legt die App das Datenbankschema selbst an und beginnt mit der Protokollierung.</Description>
 		<GeneratePackageOnBuild>false</GeneratePackageOnBuild>
 		<OutputType>Library</OutputType>
 		<Nullable>enable</Nullable>

@@ -1,6 +1,7 @@
 ﻿/*
 Technitium Library
 Copyright (C) 2026  Shreyas Zare (shreyas@technitium.com)
+Copyright (C) 2026  xRuffKez
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -1087,7 +1088,7 @@ namespace ZenitiumLibrary.Net.Dns
                                 {
                                     PushStack(currentNameServer.DomainEndPoint.Address, DnsResourceRecordType.A);
                                 }
-                                else if (!wasIPv4Attempted && (ipv6Mode == IPv6Mode.Enabled) && IPv6Reachability.IsUnconfirmed)
+                                else if (!wasIPv4Attempted && IPv6Reachability.IsUnconfirmed)
                                 {
                                     nameServers.Insert(nameServerIndex + 1, currentNameServer);
 

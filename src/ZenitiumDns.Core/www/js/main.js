@@ -1,6 +1,7 @@
 ﻿/*
 Technitium DNS Server
 Copyright (C) 2026  Shreyas Zare (shreyas@technitium.com)
+Copyright (C) 2026  xRuffKez
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -1000,12 +1001,18 @@ function probeIpv6Upstream(objBtn, reset) {
         token: sessionData.token,
         success: function (responseJSON) {
             btn.button("reset");
-            renderIpv6UpstreamStatus(responseJSON.response);
+            var r = responseJSON.response;
+            renderIpv6UpstreamStatus(r.serverStatus != null ? r.serverStatus : r);
 
-            if (responseJSON.response.ipv6UpstreamAvailable)
-                showAlert("success", "IPv6 erreichbar", "Die IPv6-Root-Server antworten. Ausgehende IPv6-Anfragen sind aktiv.");
+            var available = (r.serverStatus != null) ? r.serverStatus.ipv6UpstreamAvailable : r.ipv6UpstreamAvailable;
+            var lastResponse = (r.lastIPv6ResponseSecondsAgo == null) ? "" : " Letzte Antwort eines Nameservers über IPv6: vor " + r.lastIPv6ResponseSecondsAgo + " s.";
+
+            if (r.probeSucceeded)
+                showAlert("success", "IPv6 erreichbar", "Die IPv6-Root-Server antworten. Ausgehende IPv6-Anfragen sind aktiv." + lastResponse);
+            else if (available)
+                showAlert("warning", "IPv6 aktiv, Root-Server-Prüfung fehlgeschlagen", "Nameserver antworten über IPv6, deshalb bleibt IPv6 aktiv. Die IPv6-Root-Server waren bei der Prüfung aber nicht erreichbar: " + (r.probeError == null ? "unbekannter Fehler" : r.probeError) + lastResponse);
             else
-                showAlert("warning", "IPv6 nicht erreichbar", "Die IPv6-Root-Server antworten nicht. Ausgehende Anfragen laufen vorerst nur über IPv4.");
+                showAlert("warning", "IPv6 nicht erreichbar", "Weder die IPv6-Root-Server noch andere Nameserver antworten über IPv6. Ausgehende Anfragen laufen vorerst nur über IPv4. " + (r.probeError == null ? "" : r.probeError));
         },
         error: function () {
             btn.button("reset");
@@ -1242,6 +1249,9 @@ function loadDnsSettings(responseJSON) {
 
     $("#chkEnableDdr").prop("checked", responseJSON.response.enableDdr);
     $("#chkDdrOnlyUnencrypted").prop("checked", responseJSON.response.ddrOnlyUnencrypted);
+    $("#chkDdrProxyDoh").prop("checked", responseJSON.response.ddrProxyDoh);
+    $("#txtDdrProxyDohPort").val(responseJSON.response.ddrProxyDohPort);
+    $("#chkDdrProxyDohHttp3").prop("checked", responseJSON.response.ddrProxyDohHttp3);
 
     switch (responseJSON.response.do53Mode) {
         case "DdrOnlyDrop":
@@ -1869,7 +1879,7 @@ function saveDnsSettings(objBtn) {
     var ddrOnlyUnencrypted = $("#chkDdrOnlyUnencrypted").prop("checked");
     var do53Mode = $("input[name=rdDo53Mode]:checked").val();
 
-    formData += "&enableEDnsClientSubnetSourceAddress=" + enableEDnsClientSubnetSourceAddress + "&enableDnsOverUdpProxy=" + enableDnsOverUdpProxy + "&enableDnsOverTcpProxy=" + enableDnsOverTcpProxy + "&enableDnsOverHttp=" + enableDnsOverHttp + "&enableDnsOverHttpUnixSocket=" + enableDnsOverHttpUnixSocket + "&enableDnsOverHttpsUnixSocket=" + enableDnsOverHttpsUnixSocket + "&enableDnsOverTls=" + enableDnsOverTls + "&enableDnsOverHttps=" + enableDnsOverHttps + "&enableDnsOverHttp3=" + enableDnsOverHttp3 + "&enableDnsOverQuic=" + enableDnsOverQuic + "&enableDnsOverHttpHelpRedirect=" + enableDnsOverHttpHelpRedirect + "&dnsOverUdpProxyPort=" + dnsOverUdpProxyPort + "&dnsOverTcpProxyPort=" + dnsOverTcpProxyPort + "&dnsOverHttpPort=" + dnsOverHttpPort + "&dnsOverHttpUnixSocket=" + encodeURIComponent(dnsOverHttpUnixSocket) + "&dnsOverHttpsUnixSocket=" + encodeURIComponent(dnsOverHttpsUnixSocket) + "&dnsOverTlsPort=" + dnsOverTlsPort + "&dnsOverHttpsPort=" + dnsOverHttpsPort + "&dnsOverQuicPort=" + dnsOverQuicPort + "&dnsReverseProxyNetworkACL=" + encodeURIComponent(dnsReverseProxyNetworkACL) + "&dnsOverHttpRealIpHeader=" + encodeURIComponent(dnsOverHttpRealIpHeader) + "&dnsTlsCertificatePath=" + encodeURIComponent(dnsTlsCertificatePath) + "&dnsTlsCertificatePassword=" + encodeURIComponent(dnsTlsCertificatePassword) + "&dnsTlsCertificateKeyPath=" + encodeURIComponent(dnsTlsCertificateKeyPath) + "&enableDdr=" + enableDdr + "&ddrOnlyUnencrypted=" + ddrOnlyUnencrypted + "&do53Mode=" + do53Mode + "&eDnsPaddingMode=" + $("input[name=rdEDnsPaddingMode]:checked").val();
+    formData += "&enableEDnsClientSubnetSourceAddress=" + enableEDnsClientSubnetSourceAddress + "&enableDnsOverUdpProxy=" + enableDnsOverUdpProxy + "&enableDnsOverTcpProxy=" + enableDnsOverTcpProxy + "&enableDnsOverHttp=" + enableDnsOverHttp + "&enableDnsOverHttpUnixSocket=" + enableDnsOverHttpUnixSocket + "&enableDnsOverHttpsUnixSocket=" + enableDnsOverHttpsUnixSocket + "&enableDnsOverTls=" + enableDnsOverTls + "&enableDnsOverHttps=" + enableDnsOverHttps + "&enableDnsOverHttp3=" + enableDnsOverHttp3 + "&enableDnsOverQuic=" + enableDnsOverQuic + "&enableDnsOverHttpHelpRedirect=" + enableDnsOverHttpHelpRedirect + "&dnsOverUdpProxyPort=" + dnsOverUdpProxyPort + "&dnsOverTcpProxyPort=" + dnsOverTcpProxyPort + "&dnsOverHttpPort=" + dnsOverHttpPort + "&dnsOverHttpUnixSocket=" + encodeURIComponent(dnsOverHttpUnixSocket) + "&dnsOverHttpsUnixSocket=" + encodeURIComponent(dnsOverHttpsUnixSocket) + "&dnsOverTlsPort=" + dnsOverTlsPort + "&dnsOverHttpsPort=" + dnsOverHttpsPort + "&dnsOverQuicPort=" + dnsOverQuicPort + "&dnsReverseProxyNetworkACL=" + encodeURIComponent(dnsReverseProxyNetworkACL) + "&dnsOverHttpRealIpHeader=" + encodeURIComponent(dnsOverHttpRealIpHeader) + "&dnsTlsCertificatePath=" + encodeURIComponent(dnsTlsCertificatePath) + "&dnsTlsCertificatePassword=" + encodeURIComponent(dnsTlsCertificatePassword) + "&dnsTlsCertificateKeyPath=" + encodeURIComponent(dnsTlsCertificateKeyPath) + "&enableDdr=" + enableDdr + "&ddrOnlyUnencrypted=" + ddrOnlyUnencrypted + "&ddrProxyDoh=" + $("#chkDdrProxyDoh").prop("checked") + "&ddrProxyDohPort=" + encodeURIComponent($("#txtDdrProxyDohPort").val()) + "&ddrProxyDohHttp3=" + $("#chkDdrProxyDohHttp3").prop("checked") + "&do53Mode=" + do53Mode + "&eDnsPaddingMode=" + $("input[name=rdEDnsPaddingMode]:checked").val();
 
     var recursion = $("input[name=rdRecursion]:checked").val();
 

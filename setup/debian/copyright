@@ -5,7 +5,7 @@ Comment: ZenitiumDNS is a fork of Technitium DNS Server. See /usr/share/doc/zeni
 
 Files: *
 Copyright: 2019-2026 Shreyas Zare <shreyas@technitium.com>
-           2026 ZenitiumDNS contributors
+           2026 xRuffKez
 License: GPL-3+
 
 Files: opt/zenitiumdns/Microsoft.* opt/zenitiumdns/System.* opt/zenitiumdns/mscorlib.dll opt/zenitiumdns/netstandard.dll opt/zenitiumdns/WindowsBase.dll opt/zenitiumdns/lib* opt/zenitiumdns/createdump

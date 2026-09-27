@@ -4,7 +4,7 @@
 		<Version>5.2</Version>
 		<AssemblyName>AdvancedForwardingApp</AssemblyName>
 		<RootNamespace>AdvancedForwarding</RootNamespace>
-		<Description>Provides advanced, bulk conditional forwarding options. Supports creating groups based on client's IP address or subnet to enable different conditional forwarding configuration for each group. Supports AdGuard Upstreams config files.\n\nNote: This app works independent of the DNS server's built-in Conditional Forwarder Zones feature.</Description>
+		<Description>Leitet Anfragen für viele Domains gebündelt an eigene Forwarder weiter (bedingte Weiterleitung). Für Client-IP-Adressen oder Subnetze lassen sich Gruppen mit jeweils eigener Weiterleitung anlegen. Upstream-Dateien im AdGuard-Format werden unterstützt.\n\nHinweis: Die App arbeitet unabhängig von den eingebauten Weiterleitungszonen des Servers.</Description>
 		<GeneratePackageOnBuild>false</GeneratePackageOnBuild>
 		<OutputType>Library</OutputType>
 		<Nullable>enable</Nullable>

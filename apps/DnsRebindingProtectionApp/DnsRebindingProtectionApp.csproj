@@ -4,7 +4,7 @@
 		<Version>5.0</Version>
 		<AssemblyName>DnsRebindingProtectionApp</AssemblyName>
 		<RootNamespace>DnsRebindingProtection</RootNamespace>
-		<Description>Protects from DNS rebinding attacks using configured private domains and networks.\n\nWarning! The app will remove private IP addresses from response for domain names not hosted locally.</Description>
+		<Description>Schützt vor DNS-Rebinding-Angriffen anhand der konfigurierten privaten Domains und Netze.\n\nWarnung: Die App entfernt private IP-Adressen aus den Antworten für alle Domains, die nicht lokal verwaltet werden.</Description>
 		<GeneratePackageOnBuild>false</GeneratePackageOnBuild>
 		<OutputType>Library</OutputType>
 	</PropertyGroup>

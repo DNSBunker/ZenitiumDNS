@@ -2,6 +2,7 @@
 Technitium DNS Server
 Copyright (C) 2026  Shreyas Zare (shreyas@technitium.com)
 Copyright (C) 2025  Zafer Balkan (zafer@zaferbalkan.com)
+Copyright (C) 2026  xRuffKez
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -61,7 +62,7 @@ namespace LogExporter.Strategy
                 "tcp" => conf.WriteTo.TcpSyslog(address, port.Value, _appName, FramingType.OCTET_COUNTING, SyslogFormat.RFC5424, _facility, useTls: false).Enrich.FromLogContext().CreateLogger(),
                 "udp" => conf.WriteTo.UdpSyslog(address, port.Value, _appName, SyslogFormat.RFC5424, _facility).Enrich.FromLogContext().CreateLogger(),
                 "local" => conf.WriteTo.LocalSyslog(_appName, _facility).Enrich.FromLogContext().CreateLogger(),
-                _ => throw new NotSupportedException("Syslog protocol is not supported: " + protocol),
+                _ => throw new NotSupportedException("Dieses Syslog-Protokoll wird nicht unterstützt: " + protocol),
             };
         }
 

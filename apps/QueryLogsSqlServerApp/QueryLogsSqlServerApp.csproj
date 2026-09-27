@@ -5,7 +5,7 @@
 		<Version>3.2</Version>
 		<AssemblyName>QueryLogsSqlServerApp</AssemblyName>
 		<RootNamespace>QueryLogsSqlServer</RootNamespace>
-		<Description>Logs all incoming DNS requests and their responses in a Microsoft SQL Server database that can be queried from the DNS Server web console.\n\nNote! You will need to create a database user, edit the database user properties and enable 'dbcreator' Server Role so that the app is able to create and initialize the database. Once the database is configured, edit the app's config to update the database name, connection string and set enableLogging to true. The app will automatically create the required database schema for you and start logging queries once you save the config.</Description>
+		<Description>Schreibt alle eingehenden DNS-Anfragen und ihre Antworten in eine Microsoft-SQL-Server-Datenbank, die sich unter Protokolle in der Weboberfläche durchsuchen lässt.\n\nHinweis: Lege einen Datenbankbenutzer an und gib ihm die Serverrolle „dbcreator“, damit die App die Datenbank anlegen und einrichten kann. Trage danach in der Konfiguration der App Datenbankname und Verbindungszeichenfolge ein und schalte die Protokollierung ein. Beim Speichern legt die App das Datenbankschema selbst an und beginnt mit der Protokollierung.</Description>
 		<GeneratePackageOnBuild>false</GeneratePackageOnBuild>
 		<OutputType>Library</OutputType>
 		<Nullable>enable</Nullable>

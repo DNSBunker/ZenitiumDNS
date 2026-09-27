@@ -1,6 +1,7 @@
 ﻿/*
 Technitium DNS Server
 Copyright (C) 2026  Shreyas Zare (shreyas@technitium.com)
+Copyright (C) 2026  xRuffKez
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -199,7 +200,7 @@ namespace DropRequests
         #region properties
 
         public string Description
-        { get { return "Drops incoming DNS requests that match list of blocked networks or blocked questions."; } }
+        { get { return "Verwirft eingehende DNS-Anfragen, die zu gesperrten Netzen oder gesperrten Anfragen passen."; } }
 
         #endregion
 
@@ -226,7 +227,7 @@ namespace DropRequests
                 if (jsonQuestion.TryGetProperty("type", out JsonElement jsonType))
                 {
                     if (!Enum.TryParse(jsonType.GetString(), true, out DnsResourceRecordType type))
-                        throw new NotSupportedException("DNS record type is not supported: " + jsonType.GetString());
+                        throw new NotSupportedException("Dieser DNS-Eintragstyp wird nicht unterstützt: " + jsonType.GetString());
 
                     _type = type;
                 }

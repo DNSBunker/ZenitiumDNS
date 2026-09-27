@@ -1,6 +1,7 @@
 ﻿/*
 Technitium DNS Server
 Copyright (C) 2026  Shreyas Zare (shreyas@technitium.com)
+Copyright (C) 2026  xRuffKez
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -364,10 +365,10 @@ namespace QueryLogsSqlServer
                 _connectionString = jsonConfig.GetPropertyValue("connectionString", null);
 
                 if (_connectionString is null)
-                    throw new Exception("Please specify a valid connection string in 'connectionString' parameter.");
+                    throw new Exception("Bitte eine gültige Verbindungszeichenfolge in 'connectionString' angeben.");
 
                 if (_connectionString.Contains("Initial Catalog", StringComparison.OrdinalIgnoreCase))
-                    throw new Exception("The 'connectionString' parameter must not define 'Initial Catalog'. Configure the 'databaseName' parameter above instead.");
+                    throw new Exception("Die Verbindungszeichenfolge darf kein 'Initial Catalog' enthalten. Den Datenbanknamen stattdessen in 'databaseName' eintragen.");
 
                 if (!_connectionString.TrimEnd().EndsWith(';'))
                     _connectionString += ";";
@@ -803,7 +804,7 @@ FETCH NEXT @limit ROWS ONLY";
         #region properties
 
         public string Description
-        { get { return "Logs all incoming DNS requests and their responses in a Microsoft SQL Server database that can be queried from the DNS Server web console."; } }
+        { get { return "Schreibt alle eingehenden DNS-Anfragen und ihre Antworten in eine Microsoft-SQL-Server-Datenbank, die sich in der Weboberfläche durchsuchen lässt."; } }
 
         #endregion
 
