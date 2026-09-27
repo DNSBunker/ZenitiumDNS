@@ -595,9 +595,63 @@ namespace ZenitiumDns.Core
             }
         }
 
+        private static bool NeedsSanitizing(char c)
+        {
+            return (c < 0x20 && c != '\t') || (c >= 0x7F && c <= 0x9F) || (c == '\u2028') || (c == '\u2029');
+        }
+
+        internal static string SanitizeLogMessage(string message)
+        {
+            if (string.IsNullOrEmpty(message))
+                return message;
+
+            int i = 0;
+
+            for (; i < message.Length; i++)
+            {
+                if (NeedsSanitizing(message[i]))
+                    break;
+            }
+
+            if (i == message.Length)
+                return message;
+
+            StringBuilder sb = new StringBuilder(message.Length + 16);
+            sb.Append(message, 0, i);
+
+            for (; i < message.Length; i++)
+            {
+                char c = message[i];
+
+                if (c == '\n')
+                {
+                    sb.Append("\n  ");
+                }
+                else if ((c == '\r') && (i + 1 < message.Length) && (message[i + 1] == '\n'))
+                {
+                    sb.Append('\r');
+                }
+                else if (NeedsSanitizing(c))
+                {
+                    if (c <= 0xFF)
+                        sb.Append("\\x").Append(((int)c).ToString("X2", CultureInfo.InvariantCulture));
+                    else
+                        sb.Append("\\u").Append(((int)c).ToString("X4", CultureInfo.InvariantCulture));
+                }
+                else
+                {
+                    sb.Append(c);
+                }
+            }
+
+            return sb.ToString();
+        }
+
         private string GetLogEntry(DateTime dateTime, string message)
         {
             string logEntry;
+
+            message = SanitizeLogMessage(message);
 
             if (_useLocalTime)
             {

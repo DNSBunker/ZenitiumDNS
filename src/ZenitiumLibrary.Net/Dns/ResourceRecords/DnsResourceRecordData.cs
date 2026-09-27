@@ -66,7 +66,8 @@ namespace ZenitiumLibrary.Net.Dns.ResourceRecords
 
         internal void WriteCanonicalRecordData(Stream s)
         {
-            WriteRecordData(s, null, true);
+            if (!_emptyRData)
+                WriteRecordData(s, null, true);
         }
 
         internal abstract string ToZoneFileEntry(string originDomain = null);
@@ -111,6 +112,9 @@ namespace ZenitiumLibrary.Net.Dns.ResourceRecords
 
         public override string ToString()
         {
+            if (_emptyRData)
+                return "\\# 0";
+
             return ToZoneFileEntry();
         }
 

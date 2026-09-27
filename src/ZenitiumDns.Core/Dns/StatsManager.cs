@@ -1880,6 +1880,8 @@ namespace ZenitiumDns.Core.Dns
         {
             #region variables
 
+            const int MAX_COUNTER_ENTRIES = 200000;
+
             public readonly static StatCounter Empty = new StatCounter() { _locked = true };
 
             volatile bool _locked;
@@ -2158,10 +2160,29 @@ namespace ZenitiumDns.Core.Dns
                 _locked = true;
             }
 
+            private static Counter GetCappedCounter<T>(ConcurrentDictionary<T, Counter> dictionary, T key)
+            {
+                if (dictionary.TryGetValue(key, out Counter counter))
+                    return counter;
+
+                if (dictionary.Count >= MAX_COUNTER_ENTRIES)
+                    return null;
+
+                return dictionary.GetOrAdd(key, GetNewCounter);
+            }
+
+            private static void IncrementCapped<T>(ConcurrentDictionary<T, Counter> dictionary, T key)
+            {
+                GetCappedCounter(dictionary, key)?.Increment();
+            }
+
             private (Counter, Counter) GetOrAddClientCounters(IPAddress clientIpAddress)
             {
                 if (_clientIpAddressesUdpTcp.TryGetValue(clientIpAddress, out (Counter, Counter) counters))
                     return counters;
+
+                if (_clientIpAddressesUdpTcp.Count >= MAX_COUNTER_ENTRIES)
+                    return (new Counter(), new Counter());
 
                 counters = _clientIpAddressesUdpTcp.GetOrAdd(clientIpAddress, GetNewCounterTuple);
                 _totalClients = _clientIpAddressesUdpTcp.Count;
@@ -2206,7 +2227,7 @@ namespace ZenitiumDns.Core.Dns
                                         break;
 
                                     default:
-                                        _queryDomains.GetOrAdd(query.Name.ToLowerInvariant(), GetNewCounter).Increment();
+                                        IncrementCapped(_queryDomains, query.Name.ToLowerInvariant());
                                         break;
                                 }
                             }
@@ -2243,7 +2264,7 @@ namespace ZenitiumDns.Core.Dns
 
                         case DnsServerResponseType.Blocked:
                             if (query is not null)
-                                _queryBlockedDomains.GetOrAdd(query.Name.ToLowerInvariant(), GetNewCounter).Increment();
+                                IncrementCapped(_queryBlockedDomains, query.Name.ToLowerInvariant());
 
                             _totalBlocked++;
                             break;
@@ -2252,7 +2273,7 @@ namespace ZenitiumDns.Core.Dns
                             _totalRecursive++;
 
                             if (query is not null)
-                                _queryBlockedDomains.GetOrAdd(query.Name.ToLowerInvariant(), GetNewCounter).Increment();
+                                IncrementCapped(_queryBlockedDomains, query.Name.ToLowerInvariant());
 
                             _totalBlocked++;
                             break;
@@ -2261,7 +2282,7 @@ namespace ZenitiumDns.Core.Dns
                             _totalCached++;
 
                             if (query is not null)
-                                _queryBlockedDomains.GetOrAdd(query.Name.ToLowerInvariant(), GetNewCounter).Increment();
+                                IncrementCapped(_queryBlockedDomains, query.Name.ToLowerInvariant());
 
                             _totalBlocked++;
                             break;
@@ -2297,10 +2318,10 @@ namespace ZenitiumDns.Core.Dns
                 _totalDropped += statCounter._totalDropped;
 
                 foreach (KeyValuePair<string, Counter> queryDomain in statCounter._queryDomains)
-                    _queryDomains.GetOrAdd(queryDomain.Key, GetNewCounter).Merge(queryDomain.Value);
+                    GetCappedCounter(_queryDomains, queryDomain.Key)?.Merge(queryDomain.Value);
 
                 foreach (KeyValuePair<string, Counter> queryBlockedDomain in statCounter._queryBlockedDomains)
-                    _queryBlockedDomains.GetOrAdd(queryBlockedDomain.Key, GetNewCounter).Merge(queryBlockedDomain.Value);
+                    GetCappedCounter(_queryBlockedDomains, queryBlockedDomain.Key)?.Merge(queryBlockedDomain.Value);
 
                 foreach (KeyValuePair<DnsResourceRecordType, Counter> queryType in statCounter._queryTypes)
                     _queryTypes.GetOrAdd(queryType.Key, GetNewCounter).Merge(queryType.Value);
@@ -2310,7 +2331,14 @@ namespace ZenitiumDns.Core.Dns
 
                 foreach (KeyValuePair<IPAddress, (Counter, Counter)> clientIpAddress in statCounter._clientIpAddressesUdpTcp)
                 {
-                    (Counter, Counter) counterTuple = _clientIpAddressesUdpTcp.GetOrAdd(clientIpAddress.Key, GetNewCounterTuple);
+                    if (!_clientIpAddressesUdpTcp.TryGetValue(clientIpAddress.Key, out (Counter, Counter) counterTuple))
+                    {
+                        if (_clientIpAddressesUdpTcp.Count >= MAX_COUNTER_ENTRIES)
+                            continue;
+
+                        counterTuple = _clientIpAddressesUdpTcp.GetOrAdd(clientIpAddress.Key, GetNewCounterTuple);
+                    }
+
                     counterTuple.Item1.Merge(clientIpAddress.Value.Item1);
                     counterTuple.Item2.Merge(clientIpAddress.Value.Item2);
                 }

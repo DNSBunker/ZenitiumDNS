@@ -1358,6 +1358,7 @@ function loadDnsSettings(responseJSON) {
 
     $("#txtCachePrefetchEligibility").val(responseJSON.response.cachePrefetchEligibility);
     $("#txtCachePrefetchTrigger").val(responseJSON.response.cachePrefetchTrigger);
+    $("#txtCachePrefetchTriggerPercent").val(responseJSON.response.cachePrefetchTriggerPercent);
 
     $("#chkEnableBlocking").prop("checked", responseJSON.response.enableBlocking);
 
@@ -1988,7 +1989,7 @@ function saveDnsSettings(objBtn) {
         return;
     }
 
-    formData += "&saveCache=" + saveCache + "&serveStale=" + serveStale + "&serveStaleTtl=" + serveStaleTtl + "&serveStaleAnswerTtl=" + serveStaleAnswerTtl + "&serveStaleResetTtl=" + serveStaleResetTtl + "&serveStaleMaxWaitTime=" + serveStaleMaxWaitTime + "&cacheMaximumEntries=" + cacheMaximumEntries + "&cacheMinimumRecordTtl=" + cacheMinimumRecordTtl + "&cacheMaximumRecordTtl=" + cacheMaximumRecordTtl  + "&cacheNegativeRecordTtl=" + cacheNegativeRecordTtl + "&cacheMaximumNegativeRecordTtl=" + cacheMaximumNegativeRecordTtl + "&cacheFailureRecordTtl=" + cacheFailureRecordTtl + "&cachePrefetchEligibility=" + cachePrefetchEligibility + "&cachePrefetchTrigger=" + cachePrefetchTrigger;
+    formData += "&saveCache=" + saveCache + "&serveStale=" + serveStale + "&serveStaleTtl=" + serveStaleTtl + "&serveStaleAnswerTtl=" + serveStaleAnswerTtl + "&serveStaleResetTtl=" + serveStaleResetTtl + "&serveStaleMaxWaitTime=" + serveStaleMaxWaitTime + "&cacheMaximumEntries=" + cacheMaximumEntries + "&cacheMinimumRecordTtl=" + cacheMinimumRecordTtl + "&cacheMaximumRecordTtl=" + cacheMaximumRecordTtl  + "&cacheNegativeRecordTtl=" + cacheNegativeRecordTtl + "&cacheMaximumNegativeRecordTtl=" + cacheMaximumNegativeRecordTtl + "&cacheFailureRecordTtl=" + cacheFailureRecordTtl + "&cachePrefetchEligibility=" + cachePrefetchEligibility + "&cachePrefetchTrigger=" + cachePrefetchTrigger + "&cachePrefetchTriggerPercent=" + encodeURIComponent($("#txtCachePrefetchTriggerPercent").val());
 
     var enableBlocking = $("#chkEnableBlocking").prop("checked");
     var allowTxtBlockingReport = $("#chkAllowTxtBlockingReport").prop("checked");
@@ -2745,9 +2746,9 @@ function renderIanaData(ianaData) {
     if (ianaData == null)
         return;
 
-    $("input[name=rdRootZoneMode][value=" + ianaData.rootZone.mode + "]").prop("checked", true);
-    $("input[name=rdArpaZoneMode][value=" + ianaData.arpaZone.mode + "]").prop("checked", true);
-    $("input[name=rdTrustAnchorMode][value=" + ianaData.trustAnchors.mode + "]").prop("checked", true);
+    $("input[name=rdRootZoneMode]").filter(function () { return this.value === ianaData.rootZone.mode; }).prop("checked", true);
+    $("input[name=rdArpaZoneMode]").filter(function () { return this.value === ianaData.arpaZone.mode; }).prop("checked", true);
+    $("input[name=rdTrustAnchorMode]").filter(function () { return this.value === ianaData.trustAnchors.mode; }).prop("checked", true);
 
     $("input[name=rdRootZoneMode][value=Custom]").prop("disabled", !ianaData.rootZone.hasCustom);
     $("input[name=rdArpaZoneMode][value=Custom]").prop("disabled", !ianaData.arpaZone.hasCustom);

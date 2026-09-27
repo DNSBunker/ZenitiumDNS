@@ -40,6 +40,8 @@ Dieses Dokument listet ausschließlich die Unterschiede zwischen dem Original-Bu
 | Automatisches Eingreifen bei Speicherplatz-, Speicher- oder Dienstproblemen | nicht vorhanden | Wächter |
 | EDNS-Padding (RFC 7830, RFC 8467) | nicht vorhanden | Antworten über DoT, DoH und DoQ auf Vielfache von 468 Byte, Anfragen an verschlüsselte Forwarder auf 128 Byte |
 | Protokollierung von Client-Adressen | immer | abschaltbar |
+| Prefetch | höchstens in den letzten 9 Sekunden der TTL | ab einem einstellbaren Anteil der Rest-TTL, Standard 10 % |
+| Prüfung der Systemzeit | nicht vorhanden | Selbsttest gegen den Date-Header von IANA und NTP-Status des Kernels |
 | Prometheus-Metriken, API-Tokens | vorhanden | entfernt |
 
 ## Messwerte

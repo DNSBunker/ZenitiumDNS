@@ -362,6 +362,7 @@ namespace ZenitiumDns.Core
 
                 jsonWriter.WriteNumber("cachePrefetchEligibility", _dnsWebService._dnsServer.CachePrefetchEligibility);
                 jsonWriter.WriteNumber("cachePrefetchTrigger", _dnsWebService._dnsServer.CachePrefetchTrigger);
+                jsonWriter.WriteNumber("cachePrefetchTriggerPercent", _dnsWebService._dnsServer.CachePrefetchTriggerPercent);
 
                 jsonWriter.WriteBoolean("enableBlocking", _dnsWebService._dnsServer.EnableBlocking);
                 jsonWriter.WriteBoolean("allowTxtBlockingReport", _dnsWebService._dnsServer.AllowTxtBlockingReport);
@@ -550,6 +551,10 @@ namespace ZenitiumDns.Core
 
                     if (!effectiveEnableDdr && ((effectiveDo53Mode == DnsServerDo53Mode.DdrOnlyDrop) || (effectiveDo53Mode == DnsServerDo53Mode.DdrOnlyRefused)))
                         throw new DnsWebServiceException("Do53 can be restricted to DDR only when DDR is enabled.");
+
+                    string cachePrefetchTriggerPercentValue = request.QueryOrForm("cachePrefetchTriggerPercent");
+                    if ((cachePrefetchTriggerPercentValue is not null) && (!int.TryParse(cachePrefetchTriggerPercentValue, out int cachePrefetchTriggerPercentCheck) || (cachePrefetchTriggerPercentCheck < 0) || (cachePrefetchTriggerPercentCheck > 50)))
+                        throw new DnsWebServiceException("Cache prefetch trigger percent must be between 0 and 50.");
 
                     string ddrProxyDohPortValue = request.QueryOrForm("ddrProxyDohPort");
                     if ((ddrProxyDohPortValue is not null) && (!ushort.TryParse(ddrProxyDohPortValue, out ushort ddrProxyDohPortCheck) || (ddrProxyDohPortCheck == 0)))
@@ -1353,6 +1358,9 @@ namespace ZenitiumDns.Core
 
                         if (request.TryGetQueryOrForm("cachePrefetchTrigger", int.Parse, out int cachePrefetchTrigger))
                             _dnsWebService._dnsServer.CachePrefetchTrigger = cachePrefetchTrigger;
+
+                        if (request.TryGetQueryOrForm("cachePrefetchTriggerPercent", int.Parse, out int cachePrefetchTriggerPercent))
+                            _dnsWebService._dnsServer.CachePrefetchTriggerPercent = cachePrefetchTriggerPercent;
 
                         #endregion
 

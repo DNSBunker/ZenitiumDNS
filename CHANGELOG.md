@@ -1,5 +1,21 @@
 # ZenitiumDNS Änderungsprotokoll
 
+## ZenitiumDNS 15.5.1 (Paket 15.5.1-5)
+Veröffentlicht: 27. September 2026
+
+### Neu
+- Prefetch nach Anteil der TTL: Ein Eintrag wird erneuert, sobald bei einer Abfrage nur noch 10 % seiner ursprünglichen TTL übrig sind, bei einer TTL von einer Stunde also in den letzten 6 Minuten statt erst in den letzten 9 Sekunden. Häufig abgefragte Einträge laufen so nicht mehr ab. Einstellbar von 0 bis 50 % unter Einstellungen > Cache, 0 schaltet auf den bisherigen Sekunden-Auslöser zurück.
+- Der Selbsttest vergleicht die Systemzeit mit dem Date-Header von data.iana.org und meldet eine Abweichung ab 5 Sekunden als Warnung, ab 60 Sekunden als Fehler. Zusätzlich prüft er, ob der Kernel die Uhr per NTP synchronisiert.
+
+### Sicherheit
+- Protokoll-Injektion: Steuerzeichen aus Domainnamen, HTTP-Headern oder Fehlermeldungen konnten eigene Zeilen ins Protokoll schreiben. Sie erscheinen jetzt als `\xNN`, Zeilenumbrüche in Stacktraces werden eingerückt.
+- Die Statistik begrenzt Domains, blockierte Domains und Clients auf je 200.000 Einträge pro Zeitabschnitt. Zufällige Namen oder gefälschte Absender konnten den Arbeitsspeicher bisher unbegrenzt füllen.
+- Der DNS-Parser lehnt leere RDATA bei Typen ab, die Daten brauchen, und Mailbox-Namen mit mehr als einem `@`. Solche Pakete lösten beim Weiterverarbeiten Ausnahmen aus. Gefunden mit einem Fuzzer, danach 12 Millionen Durchläufe ohne Fehler.
+- Weboberfläche: Sitzungsdaten, Benutzertyp, App-Klassen und APL-Einträge werden vor der Ausgabe kodiert.
+
+### Weitere Änderungen
+- Konfigurationsformat Version 13 für die DNS-Einstellungen. Ältere Versionen von ZenitiumDNS können es nicht lesen.
+
 ## ZenitiumDNS 15.5.1 (Paket 15.5.1-4)
 Veröffentlicht: 27. September 2026
 

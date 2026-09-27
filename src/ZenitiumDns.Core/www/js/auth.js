@@ -691,7 +691,7 @@ function showMyProfileModal() {
                         htmlEncode(responseJSON.response.sessions[i].lastSeenUserAgent);
 
                     sessionHtmlRows += "</td><td align=\"right\"><div class=\"dropdown\"><a href=\"#\" id=\"btnMyProfileActiveSessionRowOption" + i + "\" class=\"dropdown-toggle\" data-toggle=\"dropdown\" aria-haspopup=\"true\" aria-expanded=\"true\"><span class=\"glyphicon glyphicon-option-vertical\" aria-hidden=\"true\"></span></a><ul class=\"dropdown-menu dropdown-menu-right\">";
-                    sessionHtmlRows += "<li><a href=\"#\" data-id=\"" + i + "\" data-session-type=\"" + responseJSON.response.sessions[i].type + "\" data-partial-token=\"" + responseJSON.response.sessions[i].partialToken + "\" onclick=\"deleteMySession(this); return false;\">Sitzung beenden</a></li>";
+                    sessionHtmlRows += "<li><a href=\"#\" data-id=\"" + i + "\" data-session-type=\"" + htmlEncode(responseJSON.response.sessions[i].type) + "\" data-partial-token=\"" + htmlEncode(responseJSON.response.sessions[i].partialToken) + "\" onclick=\"deleteMySession(this); return false;\">Sitzung beenden</a></li>";
                     sessionHtmlRows += "</ul></div></td></tr>";
                 }
 
@@ -863,7 +863,7 @@ function refreshAdminSessions() {
 
                 tableHtmlRows += "</td><td align=\"right\"><div class=\"dropdown\"><a href=\"#\" id=\"btnAdminSessionRowOption" + i + "\" class=\"dropdown-toggle\" data-toggle=\"dropdown\" aria-haspopup=\"true\" aria-expanded=\"true\"><span class=\"glyphicon glyphicon-option-vertical\" aria-hidden=\"true\"></span></a><ul class=\"dropdown-menu dropdown-menu-right\">";
                 tableHtmlRows += "<li><a href=\"#\" data-username=\"" + htmlEncode(responseJSON.response.sessions[i].username) + "\" onclick=\"showUserDetailsModal(this); return false;\">Benutzer anzeigen</a></li>";
-                tableHtmlRows += "<li><a href=\"#\" data-id=\"" + i + "\" data-session-type=\"" + responseJSON.response.sessions[i].type + "\" data-partial-token=\"" + responseJSON.response.sessions[i].partialToken + "\" onclick=\"deleteAdminSession(this); return false;\">Sitzung beenden</a></li>";
+                tableHtmlRows += "<li><a href=\"#\" data-id=\"" + i + "\" data-session-type=\"" + htmlEncode(responseJSON.response.sessions[i].type) + "\" data-partial-token=\"" + htmlEncode(responseJSON.response.sessions[i].partialToken) + "\" onclick=\"deleteAdminSession(this); return false;\">Sitzung beenden</a></li>";
                 tableHtmlRows += "</ul></div></td></tr>";
             }
 
@@ -992,7 +992,7 @@ function getAdminUsersRowHtml(id, user) {
 
     var tableHtmlRows = "<tr id=\"trAdminUsers" + id + "\"><td style=\"word-wrap: anywhere;\"><a href=\"#\" data-id=\"" + id + "\" data-username=\"" + htmlEncode(user.username) + "\" onclick=\"showUserDetailsModal(this); return false;\">" + htmlEncode(user.username) + "</a></td><td style=\"word-wrap: anywhere;\">" +
         htmlEncode(user.displayName) + "</td><td>" +
-        userType + "</td><td>" +
+        htmlEncode(userType) + "</td><td>" +
         totpStatus + "</td><td>" +
         status + "</td><td>" +
         htmlEncode(moment(user.recentSessionLoggedOn).local().format("DD.MM.YYYY HH:mm:ss")) + " von " + htmlEncode(user.recentSessionRemoteAddress) + "</td><td>" +
@@ -1205,7 +1205,7 @@ function showUserDetailsModal(objMenuItem) {
                     htmlEncode(responseJSON.response.sessions[i].lastSeenUserAgent);
 
                 sessionHtmlRows += "</td><td align=\"right\"><div class=\"dropdown\"><a href=\"#\" id=\"btnUserDetailsActiveSessionRowOption" + i + "\" class=\"dropdown-toggle\" data-toggle=\"dropdown\" aria-haspopup=\"true\" aria-expanded=\"true\"><span class=\"glyphicon glyphicon-option-vertical\" aria-hidden=\"true\"></span></a><ul class=\"dropdown-menu dropdown-menu-right\">";
-                sessionHtmlRows += "<li><a href=\"#\" data-id=\"" + i + "\" data-session-type=\"" + responseJSON.response.sessions[i].type + "\" data-partial-token=\"" + responseJSON.response.sessions[i].partialToken + "\" onclick=\"deleteUserSession(this); return false;\">Sitzung beenden</a></li>";
+                sessionHtmlRows += "<li><a href=\"#\" data-id=\"" + i + "\" data-session-type=\"" + htmlEncode(responseJSON.response.sessions[i].type) + "\" data-partial-token=\"" + htmlEncode(responseJSON.response.sessions[i].partialToken) + "\" onclick=\"deleteUserSession(this); return false;\">Sitzung beenden</a></li>";
                 sessionHtmlRows += "</ul></div></td></tr>";
             }
 

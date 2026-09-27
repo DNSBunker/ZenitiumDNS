@@ -518,6 +518,7 @@ namespace ZenitiumLibrary.Net.Dns
             if (maxDepth < 0)
                 throw new DnsClientException("Error while reading domain name: max depth for decompression reached");
 
+            bool isMailbox = isEmailAddress;
             int labelLength = s.ReadByte();
             if (labelLength < 0)
                 throw new EndOfStreamException();
@@ -585,7 +586,16 @@ namespace ZenitiumLibrary.Net.Dns
             if (domainPosition > 0)
                 domainPosition--;
 
-            return new string(domain.Slice(0, domainPosition));
+            ReadOnlySpan<char> result = domain.Slice(0, domainPosition);
+
+            if (isMailbox)
+            {
+                int at = result.IndexOf('@');
+                if ((at >= 0) && (result.Slice(at + 1).IndexOf('@') >= 0))
+                    throw new DnsClientException("Error while reading domain name: mailbox name cannot contain more than one '@'.");
+            }
+
+            return new string(result);
         }
 
         internal static string ToLowerInvariantAscii(string domain)

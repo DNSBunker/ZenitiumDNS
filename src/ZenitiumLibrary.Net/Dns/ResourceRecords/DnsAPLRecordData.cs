@@ -39,7 +39,7 @@ namespace ZenitiumLibrary.Net.Dns.ResourceRecords
     {
         #region variables
 
-        IReadOnlyList<APItem> _apItems;
+        IReadOnlyList<APItem> _apItems = [];
 
         #endregion
 
@@ -308,6 +308,9 @@ namespace ZenitiumLibrary.Net.Dns.ResourceRecords
 
             internal string ToZoneFileEntry()
             {
+                if (_networkAddress is null)
+                    return (_n ? "!" : "") + (ushort)_addressFamily + ":" + Convert.ToHexString(_afdPart) + "/" + _prefix;
+
                 return (_n ? "!" : "") + (ushort)_addressFamily + ":" + _networkAddress.ToString() + (_networkAddress.IsHostAddress ? "/" + _networkAddress.PrefixLength : "");
             }
 
@@ -368,7 +371,7 @@ namespace ZenitiumLibrary.Net.Dns.ResourceRecords
                 jsonWriter.WriteString("AddressFamily", _addressFamily.ToString());
                 jsonWriter.WriteNumber("Prefix", _prefix);
                 jsonWriter.WriteBoolean("Negation", _n);
-                jsonWriter.WriteString("AFDPart", _networkAddress.Address.ToString());
+                jsonWriter.WriteString("AFDPart", _networkAddress is null ? Convert.ToHexString(_afdPart) : _networkAddress.Address.ToString());
 
                 jsonWriter.WriteEndObject();
             }

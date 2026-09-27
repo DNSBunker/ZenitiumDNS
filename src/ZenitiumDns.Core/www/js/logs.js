@@ -77,7 +77,7 @@ function reloadClassPath() {
         if (appsList[i].name == appName) {
             for (var j = 0; j < appsList[i].dnsApps.length; j++) {
                 if (appsList[i].dnsApps[j].isQueryLogs)
-                    optClassPaths += "<option>" + appsList[i].dnsApps[j].classPath + "</option>";
+                    optClassPaths += "<option>" + htmlEncode(appsList[i].dnsApps[j].classPath) + "</option>";
             }
 
             break;
@@ -307,7 +307,7 @@ function refreshQueryLogsTab(doQueryLogs) {
                 if (apps[i].name == currentAppName) {
                     for (var j = 0; j < apps[i].dnsApps.length; j++) {
                         if (apps[i].dnsApps[j].isQueryLogs)
-                            optClassPaths += "<option>" + apps[i].dnsApps[j].classPath + "</option>";
+                            optClassPaths += "<option>" + htmlEncode(apps[i].dnsApps[j].classPath) + "</option>";
                     }
 
                     break;

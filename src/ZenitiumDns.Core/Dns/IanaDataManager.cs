@@ -92,6 +92,12 @@ namespace ZenitiumDns.Core.Dns
         bool _initialized;
         DateTime _lastSeed;
 
+        readonly Lock _clockLock = new Lock();
+        double _clockOffsetSeconds;
+        double _clockUncertaintySeconds;
+        DateTime _clockCheckedOn;
+        string _clockSource;
+
         #endregion
 
         #region constructor
@@ -164,6 +170,64 @@ namespace ZenitiumDns.Core.Dns
             }
         }
 
+        private void RecordClockSample(HttpResponseMessage response, DateTime sentOn, string host)
+        {
+            DateTimeOffset? date = response.Headers.Date;
+            if (!date.HasValue)
+                return;
+
+            DateTime receivedOn = DateTime.UtcNow;
+            DateTime localMidpoint = sentOn.AddTicks((receivedOn - sentOn).Ticks / 2);
+            double offset = (date.Value.UtcDateTime.AddMilliseconds(500) - localMidpoint).TotalSeconds;
+
+            lock (_clockLock)
+            {
+                _clockOffsetSeconds = offset;
+                _clockCheckedOn = receivedOn;
+                _clockSource = host;
+                _clockUncertaintySeconds = 0.5 + ((receivedOn - sentOn).TotalSeconds / 2);
+            }
+        }
+
+        public async Task MeasureClockAsync()
+        {
+            HttpClientNetworkHandler handler = new HttpClientNetworkHandler();
+            handler.Proxy = _dnsServer.Proxy;
+            handler.NetworkType = HttpClientNetworkHandler.GetNetworkType(_dnsServer.IPv6Mode);
+            handler.DnsClient = _dnsServer;
+
+            using (HttpClient http = new HttpClient(handler))
+            {
+                http.Timeout = TimeSpan.FromSeconds(10);
+                http.DefaultRequestHeaders.UserAgent.ParseAdd(USER_AGENT);
+
+                Uri uri = new Uri(TRUST_ANCHORS_URL);
+
+                using (HttpRequestMessage request = new HttpRequestMessage(HttpMethod.Head, uri))
+                {
+                    DateTime sentOn = DateTime.UtcNow;
+
+                    using (HttpResponseMessage response = await http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead))
+                    {
+                        RecordClockSample(response, sentOn, uri.Host);
+                    }
+                }
+            }
+        }
+
+        public bool TryGetClockSample(out double offsetSeconds, out double uncertaintySeconds, out DateTime checkedOn, out string source)
+        {
+            lock (_clockLock)
+            {
+                offsetSeconds = _clockOffsetSeconds;
+                uncertaintySeconds = _clockUncertaintySeconds;
+                checkedOn = _clockCheckedOn;
+                source = _clockSource;
+
+                return source is not null;
+            }
+        }
+
         private async Task<byte[]> DownloadAsync(string url, DateTime ifModifiedSince)
         {
             HttpClientNetworkHandler handler = new HttpClientNetworkHandler();
@@ -181,8 +245,12 @@ namespace ZenitiumDns.Core.Dns
                     if (ifModifiedSince != DateTime.MinValue)
                         request.Headers.IfModifiedSince = ifModifiedSince;
 
+                    DateTime sentOn = DateTime.UtcNow;
+
                     using (HttpResponseMessage response = await http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead))
                     {
+                        RecordClockSample(response, sentOn, request.RequestUri.Host);
+
                         if (response.StatusCode == HttpStatusCode.NotModified)
                             return null;
 

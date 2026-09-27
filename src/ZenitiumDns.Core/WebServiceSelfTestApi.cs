@@ -561,6 +561,38 @@ namespace ZenitiumDns.Core
                     results.Add(new SelfTestResult(group, "Status", SelfTestStatus.Ok, "Aktiv, in den letzten 24 Stunden war kein Eingriff nötig."));
             }
 
+            private async Task CheckClockOffsetAsync(List<SelfTestResult> results, string group)
+            {
+                IanaDataManager ianaDataManager = _dnsWebService._dnsServer.IanaDataManager;
+
+                if (!ianaDataManager.TryGetClockSample(out _, out _, out DateTime checkedOn, out _) || ((DateTime.UtcNow - checkedOn).TotalHours > 2))
+                {
+                    try
+                    {
+                        await ianaDataManager.MeasureClockAsync();
+                    }
+                    catch
+                    { }
+                }
+
+                if (!ianaDataManager.TryGetClockSample(out double offset, out double uncertainty, out checkedOn, out string source))
+                {
+                    results.Add(new SelfTestResult(group, "Systemzeit", SelfTestStatus.Info, "Die Abweichung der Systemzeit ließ sich nicht messen, weil kein HTTPS-Server erreichbar war. Aktuell: " + DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture) + " UTC."));
+                    return;
+                }
+
+                double absOffset = Math.Abs(offset);
+                string measured = "gemessen gegen " + source + " am " + checkedOn.ToLocalTime().ToString("dd.MM.yyyy HH:mm", CultureInfo.InvariantCulture) + ", Genauigkeit etwa ±" + Math.Ceiling(uncertainty).ToString(CultureInfo.InvariantCulture) + " s";
+                string amount = (offset > 0 ? "nach" : "vor") + " um etwa " + Math.Round(absOffset).ToString(CultureInfo.InvariantCulture) + " s";
+
+                if (absOffset <= Math.Max(5, uncertainty))
+                    results.Add(new SelfTestResult(group, "Systemzeit", SelfTestStatus.Ok, "Die Systemzeit stimmt (" + measured + ")."));
+                else if (absOffset <= 60)
+                    results.Add(new SelfTestResult(group, "Systemzeit", SelfTestStatus.Warning, "Die Systemzeit geht " + amount + " (" + measured + "). NTP-Synchronisierung prüfen, etwa mit chrony oder systemd-timesyncd."));
+                else
+                    results.Add(new SelfTestResult(group, "Systemzeit", SelfTestStatus.Error, "Die Systemzeit geht " + amount + " (" + measured + "). DNSSEC-Validierung, TLS-Zertifikate und die Prüfung der Root-Zone können scheitern. NTP einrichten, etwa mit chrony oder systemd-timesyncd."));
+            }
+
             private void CheckSystem(List<SelfTestResult> results)
             {
                 const string group = "System";
@@ -587,11 +619,11 @@ namespace ZenitiumDns.Core
                         clockStatus = "synchronized";
 
                     if (clockStatus == "synchronized")
-                        results.Add(new SelfTestResult(group, "Systemzeit", SelfTestStatus.Ok, "Die Systemzeit wird synchronisiert."));
+                        results.Add(new SelfTestResult(group, "Zeitsynchronisierung", SelfTestStatus.Ok, "Die Systemzeit wird per NTP synchronisiert."));
                     else if (clockStatus == "unsynchronized")
-                        results.Add(new SelfTestResult(group, "Systemzeit", SelfTestStatus.Error, "Die Systemzeit wird nicht synchronisiert. Weicht sie ab, scheitert die DNSSEC-Validierung. NTP einrichten, etwa mit systemd-timesyncd oder chrony."));
+                        results.Add(new SelfTestResult(group, "Zeitsynchronisierung", SelfTestStatus.Error, "Die Systemzeit wird nicht synchronisiert. Weicht sie ab, scheitern DNSSEC-Validierung, TLS-Zertifikate und die Prüfung der Root-Zone. NTP einrichten, etwa mit chrony oder systemd-timesyncd."));
                     else
-                        results.Add(new SelfTestResult(group, "Systemzeit", SelfTestStatus.Info, "Ob die Systemzeit synchronisiert wird, lässt sich aus dem Dienst heraus nicht prüfen. Aktuell: " + DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture) + " UTC."));
+                        results.Add(new SelfTestResult(group, "Zeitsynchronisierung", SelfTestStatus.Info, "Ob die Systemzeit synchronisiert wird, lässt sich aus dem Dienst heraus nicht prüfen."));
 
                     try
                     {
@@ -741,6 +773,16 @@ namespace ZenitiumDns.Core
                 Run("Filter", CheckFilters);
                 Run("Apps", CheckApps);
                 Run("Wächter", CheckWatchdog);
+
+                try
+                {
+                    await CheckClockOffsetAsync(results, "System");
+                }
+                catch (Exception ex)
+                {
+                    results.Add(new SelfTestResult("System", "Systemzeit", SelfTestStatus.Warning, "Die Prüfung ist fehlgeschlagen: " + ex.Message));
+                }
+
                 Run("System", CheckSystem);
 
                 return results;

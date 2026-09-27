@@ -1836,6 +1836,14 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
                                     </div>
                                     <div class="col-sm-offset-3 col-sm-8 help-block-text">Wird ein Eintrag abgefragt, dessen Rest-TTL unter diesem Wert liegt, startet sofort die Erneuerung im Hintergrund.</div>
                                 </div>
+
+                                <div class="form-group">
+                                    <label for="txtCachePrefetchTriggerPercent" class="col-sm-3 control-label">Auslöser in Prozent</label>
+                                    <div class="col-sm-8">
+                                        <input type="number" class="form-control" id="txtCachePrefetchTriggerPercent" min="0" max="50" placeholder="Prozent" style="width: 100px; display: inline;"> <span class="unit">% der ursprünglichen TTL (empfohlen 10, 0 = nur Sekunden-Auslöser)</span>
+                                    </div>
+                                    <div class="col-sm-offset-3 col-sm-8 help-block-text">Ein Eintrag wird erneuert, sobald bei einer Abfrage nur noch dieser Anteil seiner TTL übrig ist, bei 10 % und einer TTL von einer Stunde also in den letzten 6 Minuten. So bleiben häufig abgefragte Einträge im Cache, ohne je abzulaufen. Greift nur, solange der Prefetch mit dem Sekunden-Auslöser eingeschaltet ist.</div>
+                                </div>
                                 </div>
 
                                 <div class="well well-sm form-horizontal settings-section">

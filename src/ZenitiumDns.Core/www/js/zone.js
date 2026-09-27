@@ -113,7 +113,7 @@ $(function () {
             if (appsList[i].name == appName) {
                 for (var j = 0; j < appsList[i].dnsApps.length; j++) {
                     if (appsList[i].dnsApps[j].isAppRecordRequestHandler)
-                        optClassPaths += "<option>" + appsList[i].dnsApps[j].classPath + "</option>";
+                        optClassPaths += "<option>" + htmlEncode(appsList[i].dnsApps[j].classPath) + "</option>";
                 }
 
                 break;
@@ -1592,10 +1592,10 @@ function getZoneRecordRowHtml(index, zone, zoneType, record) {
             tableHtmlRow += "<table class=\"table\" style=\"background: transparent;\"><thead><tr><th>Adressfamilie</th><th>Negation</th><th>AFD-Teil</th><th>Präfix</th></tr></thead><tbody>";
 
             for (var i = 0; i < record.rData.addressPrefixes.length; i++) {
-                tableHtmlRow += "<tr><td>" + record.rData.addressPrefixes[i].addressFamily + "</td>";
-                tableHtmlRow += "<td>" + record.rData.addressPrefixes[i].negation + "</td>";
-                tableHtmlRow += "<td>" + record.rData.addressPrefixes[i].afdPart + "</td>";
-                tableHtmlRow += "<td>" + record.rData.addressPrefixes[i].prefix + "</td></tr>";
+                tableHtmlRow += "<tr><td>" + htmlEncode(record.rData.addressPrefixes[i].addressFamily) + "</td>";
+                tableHtmlRow += "<td>" + htmlEncode(record.rData.addressPrefixes[i].negation) + "</td>";
+                tableHtmlRow += "<td>" + htmlEncode(record.rData.addressPrefixes[i].afdPart) + "</td>";
+                tableHtmlRow += "<td>" + htmlEncode(record.rData.addressPrefixes[i].prefix) + "</td></tr>";
             }
 
             tableHtmlRow += "</tbody></table>";

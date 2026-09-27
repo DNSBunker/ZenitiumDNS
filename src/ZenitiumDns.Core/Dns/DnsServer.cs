@@ -269,6 +269,7 @@ namespace ZenitiumDns.Core.Dns
         int _serveStaleMaxWaitTime = SERVE_STALE_MAX_WAIT_TIME;
         int _cachePrefetchEligibility = 2;
         int _cachePrefetchTrigger = 9;
+        int _cachePrefetchTriggerPercent = 10;
 
         bool _enableBlocking = true;
         int _udpListenerThreads;
@@ -630,7 +631,7 @@ namespace ZenitiumDns.Core.Dns
             BinaryReader bR = new BinaryReader(s);
 
             int version = bR.ReadByte();
-            if ((version < 1) || (version > 12))
+            if ((version < 1) || (version > 13))
                 throw new InvalidDataException("DNS Server config version not supported.");
 
             string serverDomain = s.ReadShortString();
@@ -1202,6 +1203,11 @@ namespace ZenitiumDns.Core.Dns
                 _ddrProxyDohHttp3 = true;
             }
 
+            if (version >= 13)
+                _cachePrefetchTriggerPercent = bR.ReadByte();
+            else
+                _cachePrefetchTriggerPercent = 10;
+
             if (_dnsTlsCertificatePath is null)
             {
                 StopTlsCertificateUpdateTimer();
@@ -1233,7 +1239,7 @@ namespace ZenitiumDns.Core.Dns
             BinaryWriter bW = new BinaryWriter(s);
 
             bW.Write(Encoding.ASCII.GetBytes("DC"));
-            bW.Write((byte)12);
+            bW.Write((byte)13);
 
             s.WriteShortString(_serverDomain);
 
@@ -1499,6 +1505,7 @@ namespace ZenitiumDns.Core.Dns
             bW.Write(_ddrProxyDoh);
             bW.Write(_ddrProxyDohPort);
             bW.Write(_ddrProxyDohHttp3);
+            bW.Write((byte)_cachePrefetchTriggerPercent);
         }
 
         #endregion
@@ -4193,7 +4200,7 @@ namespace ZenitiumDns.Core.Dns
                         {
                             DnsResourceRecord answer = cacheAnswer[i];
 
-                            if ((answer.OriginalTtlValue >= _cachePrefetchEligibility) && ((answer.TTL <= Math.Min(_cachePrefetchTrigger, answer.OriginalTtlValue / 10)) || answer.IsStale))
+                            if ((answer.OriginalTtlValue >= _cachePrefetchEligibility) && ((answer.TTL <= GetPrefetchThreshold(answer.OriginalTtlValue)) || answer.IsStale))
                             {
                                 if ((conditionalForwarders is not null) && (conditionalForwarders.Count > 0))
                                 {
@@ -5161,6 +5168,16 @@ namespace ZenitiumDns.Core.Dns
                     _ipv6ProbeTimer?.Change(IPV6_PROBE_TIMER_INTERVAL, Timeout.Infinite);
                 }
             }
+        }
+
+        private uint GetPrefetchThreshold(uint originalTtl)
+        {
+            uint threshold = Math.Min((uint)_cachePrefetchTrigger, originalTtl / 10);
+
+            if (_cachePrefetchTriggerPercent > 0)
+                threshold = Math.Max(threshold, (uint)((ulong)originalTtl * (ulong)_cachePrefetchTriggerPercent / 100));
+
+            return threshold;
         }
 
         private async Task PrefetchCacheAsync(DnsQuestionRecord question, IPEndPoint remoteEP, IReadOnlyList<DnsResourceRecord> conditionalForwarders, bool dnssecValidation, NetworkAddress eDnsClientSubnet, bool advancedForwardingClientSubnet)
@@ -7363,6 +7380,18 @@ namespace ZenitiumDns.Core.Dns
                     throw new ArgumentOutOfRangeException(nameof(CachePrefetchEligibility), "Valid value is greater that or equal to 2.");
 
                 _cachePrefetchEligibility = value;
+            }
+        }
+
+        public int CachePrefetchTriggerPercent
+        {
+            get { return _cachePrefetchTriggerPercent; }
+            set
+            {
+                if ((value < 0) || (value > 50))
+                    throw new ArgumentOutOfRangeException(nameof(CachePrefetchTriggerPercent), "Valid range is from 0 to 50 percent.");
+
+                _cachePrefetchTriggerPercent = value;
             }
         }
 
