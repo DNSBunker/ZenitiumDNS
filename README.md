@@ -46,6 +46,7 @@ ZenitiumDNS is a fork of [Technitium DNS Server](https://github.com/TechnitiumSo
   - about 70 % less CPU time per query under the same load,
   - about 65 % fewer memory allocations,
   - no minute-by-minute stalls caused by cache maintenance.
+- Much lower memory use: 2.5 million block list domains take about 80 instead of 395 MB, and the statistics keep only the top 1,000 entries of every completed minute. Under load, about 70 % less memory is in use.
 - Additional bug and security fixes in the cache, the query log apps, the web interface and DNS-over-TCP/TLS.
 
 # Features

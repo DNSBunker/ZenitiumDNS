@@ -1,5 +1,7 @@
 # Drop Requests App
 
+[Deutsche Version](README.de.md)
+
 A DNS App for ZenitiumDNS that drops incoming DNS requests based on network source addresses and DNS question patterns.
 
 This application extends the core DNS Server by intercepting requests at the entry point and applying configurable filtering rules before queries reach the resolution pipeline. It provides administrators with granular control over which DNS queries are processed, enabling network segmentation, abuse mitigation, and security enforcement.
@@ -18,13 +20,15 @@ This application is designed for **system administrators, ISPs, and security-con
 
 ## Installation
 
-1. Open the ZenitiumDNS **web console**
+The app ships with ZenitiumDNS and is installed on the first start, but stays disabled.
 
-2. Navigate to **Apps** section
+1. Open the ZenitiumDNS **web interface**
 
-3. Click **App Store** and find the Drop Requests App to install
+2. Go to **Apps**
 
-4. Configure the app by clicking on the **Config** button
+3. Click **Enable** next to *Drop requests* (DropRequestsApp)
+
+4. Click **Configure** to edit the configuration
 
 ## Configuration
 
@@ -193,7 +197,7 @@ The Drop Requests App evaluates each incoming DNS request through the following 
 
 1. Verify `enableBlocking` is set to `true` in `dnsApp.config`
 
-2. Check the DNS Server **App Logs** for any configuration parsing errors
+2. Check the DNS server log for configuration parsing errors
 
 3. Confirm the source IP address of the request is not in `allowedNetworks` (allowlist overrides all blocks)
 
@@ -201,7 +205,7 @@ The Drop Requests App evaluates each incoming DNS request through the following 
 
 5. For question-based blocking, confirm the domain name matches the `name` field exactly (case-insensitive), or that `blockZone` is enabled for subdomain blocking
 
-6. Reload the app through the web console by saving its config again.
+6. Reload the app through the web interface by saving its configuration again.
 
 ### Legitimate Requests Are Being Dropped
 
@@ -229,7 +233,7 @@ The Drop Requests App evaluates each incoming DNS request through the following 
 
 2. Confirm the packets are actually malformed by checking for parsing exceptions in the DNS Server logs
 
-3. Reload the app through the web console by saving its config again.
+3. Reload the app through the web interface by saving its configuration again.
 
 4. Some malformed packets may still be logged before being dropped; check the action taken in the logs (`DropSilently`)
 

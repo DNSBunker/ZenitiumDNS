@@ -1,210 +1,216 @@
-# ZenitiumDNS 15.5.1 im Vergleich zu Technitium DNS Server 15.5
+# ZenitiumDNS 15.5.1 compared with Technitium DNS Server 15.5
 
-Dieses Dokument listet ausschließlich die Unterschiede zwischen dem Original-Build **Technitium DNS Server 15.5** (veröffentlicht am 19. September 2026) und dem Build **ZenitiumDNS 15.5.1** (Stand 27. September 2026) auf. ZenitiumDNS 15.5.1 enthält außerdem alle Korrekturen aus Technitium DNS Server 15.5.1; welche davon ZenitiumDNS schon vorher hatte, steht am Ende. Die vollständige Versionsgeschichte steht in [CHANGELOG.md](CHANGELOG.md).
+[Deutsche Version](CHANGELOG-ZenitiumDNS.de.md)
 
-## Überblick
+This document only lists the differences between the original build **Technitium DNS Server 15.5** (released on 19 September 2026) and the build **ZenitiumDNS 15.5.1** (as of 28 September 2026). ZenitiumDNS 15.5.1 also contains all fixes from Technitium DNS Server 15.5.1; which of them ZenitiumDNS already had before is listed at the end. The complete version history is in [CHANGELOG.md](CHANGELOG.md).
 
-| Bereich | Technitium DNS Server 15.5 | ZenitiumDNS 15.5 |
-| ------- | -------------------------- | ---------------- |
-| Name, Pfade, Dienst | Technitium, `/etc/dns`, Dienst `dns` | ZenitiumDNS, `/etc/zenitiumdns`, Dienst `zenitiumdns` |
-| Einsatzzweck | autoritativer und rekursiver DNS-Server, DHCP-Server, Clustering | öffentlicher rekursiver Resolver; autoritative Zonen, Zonentransfers, DHCP, Clustering und Windows-Komponenten entfernt |
-| Update-Prüfung und App-Store | fest auf Technitium-Server | Update-Prüfung gegen die GitHub-Releases von ZenitiumDNS mit Changelog, App-Store entfernt |
-| Installation unter Debian 13 | Skript lädt Binärdateien und .NET aus dem Internet | eigenständiges `.deb`-Paket mit eingebauter .NET-Laufzeit |
-| Erstes Admin-Passwort | `admin` | zufällig erzeugt |
-| Sprache der Weboberfläche und Doku | Englisch | Deutsch oder Englisch, nach der Installation wählbar und jederzeit umstellbar |
-| CNAME-Ketten über viele Zonen (z. B. `www.bbc.com`, `x.com`) | `SERVFAIL` durch zu niedrige Resolver-Limits | werden vollständig aufgelöst |
-| Ausfall der Root-Priming-Anfrage | rekursive Auflösung fällt komplett aus | Rückfall auf die Root-Hints |
-| „IPv6 bevorzugen“ mit nicht erreichbaren IPv6-Nameservern | jede Anfrage schlägt fehl | nach der ersten Anfrage Antwort über IPv4 in ca. 30 ms |
-| Cache-Wartung | blockierende Garbage Collection jede Minute (50–250 ms Hänger) | Garbage Collection im Hintergrund |
-| CPU-Zeit pro Anfrage bei 100.000 Anfragen/s | 86–100 µs | 24–30 µs |
-| Pipelining über DNS-over-TCP/TLS | unbegrenzt viele gleichzeitige Anfragen pro Verbindung | standardmäßig höchstens 100 pro Verbindung, einstellbar |
-| Gestörte IPv6-Anbindung | IPv6-Adressen werden weiter angefragt, Zeitüberschreitungen verzögern Auflösungen | IPv6 wird nur bei bestätigtem Ausfall ausgesetzt (Gegenprobe über die IPv6-Root-Server), einzelne tote IPv6-Nameserver lösen nichts aus, die erste IPv6-Antwort hebt die Sperre auf |
-| Antwortzeiten in Übersicht und Metriken | nicht vorhanden | Median, Perzentile, Cache/rekursiv, live und pro Minute |
-| Weboberfläche | Bootstrap-Standardoptik, feste Mindestbreite 970 px, Einstellungen in einer langen Seite je Tab | eigenes Design mit Seitenleiste und Messwertleiste, mobil nutzbar, thematische Einstellungsbereiche mit Erklärungen |
-| Anfragen vom Typ ANY, AXFR/IXFR, ohne RD-Flag, fremde Opcodes oder Klassen | werden verarbeitet | per Anfragefilter über UDP verworfen, über TCP/DoT/DoH/DoQ mit `REFUSED` abgewiesen |
-| DNSSEC mit ML-DSA-44 (Post-Quantum) | unbekannter Algorithmus, Zone gilt als unsigniert | wird validiert, mit Downgrade-Schutz |
-| Mitgelieferte Apps | müssen einzeln installiert werden, sind danach sofort aktiv | vorinstalliert, standardmäßig deaktiviert, einzeln aktivierbar |
-| Docker | Image und Compose-Datei | entfernt |
-| Ratenbegrenzung | Durchschnitt der Anfragen pro Minute über ein Stichprobenfenster | Token-Bucket in Anfragen pro Sekunde mit Burst |
-| Client-IP-Sperrlisten | nicht vorhanden | IPsum, Spamhaus DROP u. a., Verwerfen vor dem Auswerten der Anfrage |
-| TLS-Zertifikate | nur PKCS#12 (`.pfx`) | zusätzlich PEM (`fullchain.pem`, `privkey.pem`) |
-| DDR (RFC 9462) | nur über selbst angelegte Zone | eingebaut, automatisch aus den aktiven Diensten, auch für DoH hinter einem Reverse Proxy |
-| Selbsttest | nicht vorhanden | eigener Bereich, schwere Probleme auf der Übersicht |
-| Speicher für 2,5 Mio. Blocklisten-Einträge | ca. 395 MB | ca. 200 MB |
-| TCP-Anfragen an Cloudflare-Nameserver | wiederverwendete Verbindungen laufen in Timeouts | eigene Verbindung, Wiederverwendung wird erkannt |
-| Lokale Root-Zone (RFC 8806) | nur als selbst angelegte Secondary-Zone | eingebaut, Root- und arpa-Zone von IANA mit ZONEMD- und Signaturprüfung, NXDOMAIN für nicht existierende TLDs ohne Root-Server |
-| Root-Vertrauensanker | nur mitgelieferte Datei | täglich von IANA, nur mit gültiger ICANN-Signatur, oder eigene Version |
-| Do53 | immer aktiv | aktiviert, nur DDR (verwerfen oder REFUSED) oder aus |
-| Apps | englisch, Konfiguration als JSON-Textfeld | Namen, Beschreibungen und Fehlermeldungen auf Deutsch oder Englisch, Formular mit übersetzten Bezeichnungen, JSON für Experten |
-| Übersicht | ab 1 Stunde | ab 1 Minute, Echtzeitgraphen interner Prozesse |
-| Automatisches Eingreifen bei Speicherplatz-, Speicher- oder Dienstproblemen | nicht vorhanden | Wächter |
-| EDNS-Padding (RFC 7830, RFC 8467) | nicht vorhanden | Antworten über DoT, DoH und DoQ auf Vielfache von 468 Byte, Anfragen an verschlüsselte Forwarder auf 128 Byte |
-| Protokollierung von Client-Adressen | immer | abschaltbar |
-| Prefetch | höchstens in den letzten 9 Sekunden der TTL | ab einem einstellbaren Anteil der Rest-TTL, Standard 10 % |
-| Prüfung der Systemzeit | nicht vorhanden | Selbsttest gegen den Date-Header von IANA und NTP-Status des Kernels |
-| Prometheus-Metriken, API-Tokens | vorhanden | entfernt |
+## Overview
 
-## Messwerte
+| Area | Technitium DNS Server 15.5 | ZenitiumDNS 15.5 |
+| ---- | -------------------------- | ---------------- |
+| Name, paths, service | Technitium, `/etc/dns`, service `dns` | ZenitiumDNS, `/etc/zenitiumdns`, service `zenitiumdns` |
+| Purpose | authoritative and recursive DNS server, DHCP server, clustering | public recursive resolver; authoritative zones, zone transfers, DHCP, clustering and Windows components removed |
+| Update check and app store | hard-wired to Technitium servers | update check against the GitHub releases of ZenitiumDNS with changelog, app store removed |
+| Installation on Debian 13 | script downloads binaries and .NET from the internet | self-contained `.deb` package with built-in .NET runtime |
+| Initial admin password | `admin` | randomly generated |
+| Language of web interface and docs | English | German or English, selectable after installation and switchable at any time |
+| CNAME chains across many zones (e.g. `www.bbc.com`, `x.com`) | `SERVFAIL` because of resolver limits that are too low | resolved completely |
+| Failure of the root priming query | recursive resolution fails completely | falls back to the root hints |
+| "Prefer IPv6" with unreachable IPv6 name servers | every query fails | after the first query, answer over IPv4 in about 30 ms |
+| Cache maintenance | blocking garbage collection every minute (50–250 ms stalls) | background garbage collection |
+| CPU time per query at 100,000 queries/s | 86–100 µs | 24–30 µs |
+| Pipelining over DNS-over-TCP/TLS | unlimited concurrent queries per connection | at most 100 per connection by default, adjustable |
+| Broken IPv6 connectivity | IPv6 addresses keep being queried, timeouts delay resolutions | IPv6 is only suspended on a confirmed outage (cross-check via the IPv6 root servers), single dead IPv6 name servers trigger nothing, the first IPv6 response lifts the suspension |
+| Response times on the dashboard and in the metrics | not available | median, percentiles, cache/recursive, live and per minute |
+| Web interface | Bootstrap default look, fixed minimum width of 970 px, settings in one long page per tab | own design with sidebar and readout band, usable on mobile, settings in topic sections with explanations |
+| Queries of type ANY, AXFR/IXFR, without RD flag, foreign opcodes or classes | are processed | dropped over UDP by the request filter, refused with `REFUSED` over TCP/DoT/DoH/DoQ |
+| DNSSEC with ML-DSA-44 (post-quantum) | unknown algorithm, zone is treated as unsigned | validated, with downgrade protection |
+| Bundled apps | must be installed one by one and are active right away | preinstalled, disabled by default, can be enabled individually |
+| Docker | image and compose file | removed |
+| Rate limiting | average queries per minute over a sampling window | token bucket in queries per second with burst |
+| Client IP block lists | not available | IPsum, Spamhaus DROP and others, dropped before the query is evaluated |
+| TLS certificates | PKCS#12 (`.pfx`) only | PEM as well (`fullchain.pem`, `privkey.pem`) |
+| DDR (RFC 9462) | only via a zone you create yourself | built in, automatically from the active services, also for DoH behind a reverse proxy |
+| Self-test | not available | own section, serious problems on the dashboard |
+| Memory for 2.5 million block list entries | about 395 MB | about 80 MB |
+| Statistics memory after 30 minutes at 2,000 queries/s from 50,000 clients | about 590 MB, every minute of the last one to two hours kept completely | about 50 MB, completed minutes cut down to the top 1,000 |
+| Hourly statistics file of a busy hour | about 100 MB (complete minute data) | 0.6–1.4 MB (hour totals and top 1,000 per minute) |
+| Live objects in the same test with HaGeZi TIF and PRO | 945 MB, 18.2 million objects | 271 MB, 3.8 million objects |
+| "Prefer IPv6" with name servers without glue and AAAA records | `SERVFAIL` (upstream issue #2175) | answered |
+| TCP queries to Cloudflare name servers | reused connections run into timeouts | own connection, reuse is detected |
+| Local root zone (RFC 8806) | only as a secondary zone you create yourself | built in, root and arpa zone from IANA with ZONEMD and signature verification, NXDOMAIN for nonexistent TLDs without the root servers |
+| Root trust anchors | bundled file only | daily from IANA, only with a valid ICANN signature, or a custom version |
+| Do53 | always active | enabled, DDR only (drop or REFUSED) or off |
+| Apps | English, configuration as a JSON text field | names, descriptions and error messages in German or English, form with translated labels, JSON for experts |
+| Dashboard | from 1 hour | from 1 minute, live graphs of internal processes |
+| Automatic intervention on disk space, memory or service problems | not available | watchdog |
+| EDNS padding (RFC 7830, RFC 8467) | not available | responses over DoT, DoH and DoQ padded to multiples of 468 bytes, queries to encrypted forwarders to 128 bytes |
+| Logging of client addresses | always | can be turned off |
+| Prefetch | at most within the last 9 seconds of the TTL | from an adjustable share of the remaining TTL, 10 % by default |
+| Check of the system time | not available | self-test against the Date header of IANA and the NTP status of the kernel |
+| Prometheus metrics, API tokens | available | removed |
 
-Gemessen auf demselben Rechner (20 Kerne) mit `dnsperf` gegen einen autoritativen Server und einen cachenden Resolver mit 2.000 Namen. Werte für autoritative Antworten / Antworten aus dem Cache. Die Werte für autoritative Antworten stammen aus einem Build vor dem Entfernen der autoritativen Zonen und zeigen die Wirkung der Optimierungen auf den gemeinsamen Anfragepfad.
+## Measurements
 
-| Messung | Technitium 15.5 | ZenitiumDNS 15.5 | Änderung |
-| ------- | --------------- | ---------------- | -------- |
-| CPU-Zeit pro Anfrage bei fester Last (100.000 Anfragen/s) | 85,8 / 99,8 µs | 23,6 / 29,5 µs | −73 % / −70 % |
-| Mittlere Latenz bei fester Last | 85 / 71 µs | 19 / 19 µs | −78 % / −73 % |
-| Spitzendurchsatz | 686.000 / 628.000 Anfragen/s | 721.000 / 703.000 Anfragen/s | +5 % / +12 % |
-| Speicherallokation pro Anfrage aus dem Cache | ca. 2,9 KB | ca. 1,0 KB | −65 % |
-| Pausenzeit der Garbage Collection unter Volllast | 22 % | 7 % | −68 % |
-| Gen0-Garbage-Collections pro Sekunde unter Volllast | 134 | 55 | −59 % |
-| Lock-Konflikte pro Sekunde unter Volllast | 1.798 | 41 | −98 % |
+Measured on the same machine (20 cores) with `dnsperf` against an authoritative server and a caching resolver with 2,000 names. Values for authoritative answers / answers from the cache. The values for authoritative answers come from a build before the authoritative zones were removed and show the effect of the optimizations on the shared query path.
 
-Funktionstests im isolierten Netz-Namespace mit nachgebauter DNS-Hierarchie:
+| Measurement | Technitium 15.5 | ZenitiumDNS 15.5 | Change |
+| ----------- | --------------- | ---------------- | ------ |
+| CPU time per query at fixed load (100,000 queries/s) | 85.8 / 99.8 µs | 23.6 / 29.5 µs | −73 % / −70 % |
+| Mean latency at fixed load | 85 / 71 µs | 19 / 19 µs | −78 % / −73 % |
+| Peak throughput | 686,000 / 628,000 queries/s | 721,000 / 703,000 queries/s | +5 % / +12 % |
+| Memory allocation per query from the cache | about 2.9 KB | about 1.0 KB | −65 % |
+| Garbage collection pause time under full load | 22 % | 7 % | −68 % |
+| Gen0 garbage collections per second under full load | 134 | 55 | −59 % |
+| Lock contentions per second under full load | 1,798 | 41 | −98 % |
+
+Functional tests in an isolated network namespace with a simulated DNS hierarchy:
 
 | Test | Technitium 15.5 | ZenitiumDNS 15.5 |
 | ---- | --------------- | ---------------- |
-| CNAME-Kette über 12 Zonen | 9 von 12 Einträgen, danach Abbruch | alle 12 Einträge |
-| Upstream-Anfragen durch Prefetch bei kurzer TTL (24 Client-Anfragen) | 24 | 2 |
-| 10 Anfragen, „IPv6 bevorzugen“, IPv6-Nameserver nicht erreichbar | 10 × Fehler nach 2 s | 2 × Fehler, dann 8 × Antwort in 22–42 ms |
-| TLS-Zertifikat in `…/cfgcert/` neben dem Konfigurationsordner `…/cfg/` | gespeichert als `cert/test.pfx`, nach Neustart nicht mehr ladbar | absoluter Pfad bleibt erhalten |
+| CNAME chain across 12 zones | 9 of 12 records, then aborted | all 12 records |
+| Upstream queries caused by prefetch with a short TTL (24 client queries) | 24 | 2 |
+| 10 queries, "Prefer IPv6", IPv6 name servers unreachable | 10 × error after 2 s | 2 × error, then 8 × answer in 22–42 ms |
+| TLS certificate in `…/cfgcert/` next to the configuration folder `…/cfg/` | saved as `cert/test.pfx`, no longer loadable after a restart | absolute path is kept |
 
-## Alle Änderungen im Detail
+## All changes in detail
 
-### Ausrichtung als öffentlicher Resolver
-- **Entfernt:**
-  - autoritative Zonen vom Typ Primary, Secondary, Stub, Secondary Forwarder und Catalog samt DNSSEC-Signierung und SOA-Bearbeitung,
-  - Zonentransfers (AXFR, IXFR, XFR-over-TLS/QUIC), DNS NOTIFY, dynamische Updates und TSIG,
-  - DHCP-Server und Clustering,
-  - die Übernahme von DNS-Client-Antworten in eine lokale Zone,
-  - 16 Apps für LAN- und Hosting-Szenarien (Auto PTR, Block Page, Default Records, DNS Block List, Failover, Filter AAAA, Geo Continent, Geo Country, Geo Distance, No Data, NX Domain Override, Split Horizon, Weighted Round Robin, What Is My DNS, Wild IP, Zone Alias),
-  - Windows-Dienst, Systemtray, Windows-Firewall-Bibliothek und Windows-Installer.
-- **Erhalten:** Conditional-Forwarder-Zonen mit lokalen Einträgen und Zugriffsbeschränkung, Blocklisten, erlaubte und blockierte Domains, die Resolver-Apps (Advanced Blocking, Advanced Forwarding, DNS64, DNS Rebinding Protection, Drop Requests, Log Exporter, NX Domain, Query Logs für SQLite, MySQL, PostgreSQL und SQL Server).
-- **Protokollverhalten:** AXFR/IXFR werden mit `REFUSED` und EDE „Not Supported“ beantwortet, NOTIFY und UPDATE mit `NOTIMP`, TSIG-signierte Anfragen mit `BADKEY`.
+### Focus on public resolvers
+- **Removed:**
+  - authoritative zones of type primary, secondary, stub, secondary forwarder and catalog, including DNSSEC signing and SOA editing,
+  - zone transfers (AXFR, IXFR, XFR-over-TLS/QUIC), DNS NOTIFY, dynamic updates and TSIG,
+  - DHCP server and clustering,
+  - importing DNS client responses into a local zone,
+  - 16 apps for LAN and hosting scenarios (Auto PTR, Block Page, Default Records, DNS Block List, Failover, Filter AAAA, Geo Continent, Geo Country, Geo Distance, No Data, NX Domain Override, Split Horizon, Weighted Round Robin, What Is My DNS, Wild IP, Zone Alias),
+  - Windows service, system tray, Windows firewall library and Windows installer.
+- **Kept:** conditional forwarder zones with local records and access restriction, block lists, allowed and blocked domains, the resolver apps (Advanced Blocking, Advanced Forwarding, DNS64, DNS Rebinding Protection, Drop Requests, Log Exporter, NX Domain, Query Logs for SQLite, MySQL, PostgreSQL and SQL Server).
+- **Protocol behavior:** AXFR/IXFR are answered with `REFUSED` and the EDE "Not Supported", NOTIFY and UPDATE with `NOTIMP`, TSIG-signed queries with `BADKEY`.
 
-### Anfragefilter
-- Regeln nach dem Vorbild von dnsdist, standardmäßig aktiv: nicht lesbar oder unter 12 Byte, über 1232 Byte, Opcode ungleich QUERY, Klasse ungleich IN, ANY, AXFR/IXFR, ohne RD-Flag, EDNS-Version größer 0.
-- UDP-Treffer werden verworfen, über TCP, DoT, DoH und DoQ gibt es `REFUSED` mit EDE „Prohibited“. Loopback ist ausgenommen.
-- Trefferzähler je Regel in Einstellungen, JSON-Metriken und Prometheus (`request_filter_matches_total`).
+### Request filter
+- Rules modeled after dnsdist, active by default: unreadable or under 12 bytes, over 1232 bytes, opcode other than QUERY, class other than IN, ANY, AXFR/IXFR, without RD flag, EDNS version greater than 0.
+- UDP matches are dropped; over TCP, DoT, DoH and DoQ the answer is `REFUSED` with the EDE "Prohibited". Loopback is exempt.
+- Match counters per rule in the settings, the JSON metrics and Prometheus (`request_filter_matches_total`).
 
 ### DNSSEC
-- Validierung von ML-DSA-44 (Algorithmus 18) und Schutz vor Downgrades auf klassische Algorithmen, wenn der DS-Datensatz einen Post-Quantum-Algorithmus ankündigt.
-- Der DNS-Client erklärt, warum die DNSSEC-Prüfung gegen diesen Server scheitert, wenn dessen Validierung ausgeschaltet ist.
+- Validation of ML-DSA-44 (algorithm 18) and protection against downgrades to classic algorithms when the DS record set announces a post-quantum algorithm.
+- The DNS client explains why the DNSSEC check against this server fails when its validation is turned off.
 
 ### Apps
-- Mitgelieferte Apps werden beim ersten Start deaktiviert installiert und bei Paket-Updates aktualisiert. Deinstallierte Apps bleiben entfernt.
-- Aktivieren und Deaktivieren in der Weboberfläche und über `api/apps/enable` und `api/apps/disable`.
+- Bundled apps are installed disabled on the first start and updated on package updates. Uninstalled apps stay removed.
+- Enabling and disabling in the web interface and via `api/apps/enable` and `api/apps/disable`.
 
-### Schutz, Blockierung und Protokolle
-- Ratenbegrenzung in Anfragen pro Sekunde (GCRA-Token-Bucket je Subnetz, Burst einstellbar), Migration bestehender QPM-Werte.
-- Client-Sperrlisten mit automatischer Aktualisierung, Verwerfen vor dem Parsen, Trennen von Stream-Verbindungen.
-- Eigener Blockierungstext mit Platzhaltern, eigene TTL für negatives Caching; das SOA-MINIMUM bleibt nach einem Neustart erhalten.
-- Blocklisten-Schnellauswahl nur mit HaGeZi-Listen vom Build-Mirror, halber Speicherbedarf der Blocklisten, allokationsfreie Suche.
-- PEM-Zertifikate mit separatem Schlüssel, eingebautes DDR, Selbsttest.
-- Resolver: Umgang mit Nameservern, die nur eine Anfrage pro TCP-Verbindung beantworten; QNAME-Rückfall bei Timeouts; Downloads mit effektivem IPv6-Modus.
+### Protection, blocking and protocols
+- Rate limiting in queries per second (GCRA token bucket per subnet, adjustable burst), migration of existing QPM values.
+- Client block lists with automatic updates, dropping before parsing, closing of stream connections.
+- Custom blocking text with placeholders, custom TTL for negative caching; the SOA MINIMUM survives a restart.
+- Block list quick selection only with HaGeZi lists from the build mirror, half the memory for block lists, allocation-free lookups.
+- PEM certificates with a separate key, built-in DDR, self-test.
+- Resolver: handling of name servers that only answer one query per TCP connection; QNAME fallback on timeouts; downloads with the effective IPv6 mode.
 
-### Standardwerte neuer Installationen
-- 100.000 Cache-Einträge, Blockier-TTL 300 s, Listen-Backlog 1024, TCP-Empfangs-Timeout 5 s, IPv6 für ausgehende Anfragen aktiviert, Statistik und Logs 30 Tage.
+### Defaults for new installations
+- 100,000 cache entries, blocking TTL 300 s, listen backlog 1024, TCP receive timeout 5 s, IPv6 enabled for outgoing queries, statistics and logs 30 days.
 
-### Statistik und Überwachung
-- Antwortzeit-Messung für alle Transportprotokolle mit Durchschnitt, Median, 95./99. Perzentil, Maximum und getrennten Werten für Cache und rekursive Auflösung.
-- Neue Übersicht mit Kennzahlen, Statuschips, Antwortzeit-Verlauf, Anteilstabellen und umschaltbaren Verlaufsansichten.
-- Zusätzliche Felder in `api/dashboard/stats/get` und in den JSON- und Prometheus-Metriken, neuer Aufruf `api/dashboard/ipv6/probe`.
-- Korrektur: Der erste abgeschnittene Eintrag fehlte im Sammelwert „Andere“ gekürzter Top-Listen.
+### Statistics and monitoring
+- Response time measurement for all transport protocols with average, median, 95th/99th percentile, maximum and separate values for the cache and recursive resolution.
+- New dashboard with key figures, status chips, response time history, share tables and switchable history views.
+- Additional fields in `api/dashboard/stats/get` and in the JSON and Prometheus metrics, new call `api/dashboard/ipv6/probe`.
+- Fix: The first truncated entry was missing from the "Others" total of truncated top lists.
 
-### Weboberfläche und Einstellungen
-- Neues Design mit Seitenleiste, Seitentitel und Farbsystem in Petrol, lokal eingebundene Red-Hat-Schriften, einheitliche Formulare, Tabellen und Dialoge in Hell, Dunkel und Bernstein.
-- Messwertleiste auf der Übersicht mit Verlauf je Kennzahl und Statusangabe in Worten. Diagrammfarben sind auf Farbfehlsichtigkeit geprüft.
-- Mobil nutzbar: Symbolleiste statt Seitenleiste, seitlich scrollbare Tabellen, keine feste Mindestbreite mehr.
-- Neu gegliederte Navigation (Übersicht, Resolver, Filter, Apps, DNS-Client, Protokolle, Einstellungen, Verwaltung, Info) und Einstellungen in zehn thematischen Bereichen mit Erklärungstexten.
-- Neue Einstellungen: automatischer IPv6-Rückfall, UDP-Empfangs-Threads je Socket, Obergrenze gleichzeitiger Anfragen je TCP-/TLS-Verbindung.
-- Entfernte Einstellungen: SOA-Vorgaben, Zonentransfer- und NOTIFY-Netze, TSIG-Schlüssel.
+### Web interface and settings
+- New design with sidebar, page titles and a petrol color system, locally embedded Red Hat fonts, consistent forms, tables and dialogs in Light, Dark and Amber.
+- Readout band on the dashboard with a history per key figure and a status in words. Chart colors are checked for color vision deficiencies.
+- Usable on mobile: toolbar instead of sidebar, tables scroll sideways, no fixed minimum width anymore.
+- Reorganized navigation (Dashboard, Resolver, Filter, Apps, DNS client, Logs, Settings, Administration, About) and settings in ten topic sections with explanatory texts.
+- New settings: automatic IPv6 fallback, UDP receive threads per socket, limit for concurrent queries per TCP/TLS connection.
+- Removed settings: SOA defaults, zone transfer and NOTIFY networks, TSIG keys.
 
 ### Resolver
-- **CNAME-Ketten und Nameserver ohne Glue:** Die Limits pro Client-Anfrage wurden angehoben, auf 400 ausgehende Anfragen und 128 Hash-Operationen. Domains wie `www.bbc.com` oder `x.com` scheiterten im Original mit „No valid response from name servers“ (Upstream-Issue #2175).
-- **QNAME-Minimierung:** Das Original schickte für das letzte Label eine überflüssige Anfrage vom Typ `A`, auch nach NXDOMAIN.
-- **Root-Priming:** Scheitert die Priming-Anfrage oder liefert sie keine Adressen, fiel die rekursive Auflösung im Original ganz aus. ZenitiumDNS nutzt dann die Root-Hints. Die Priming-Anfrage wird ohne RD-Flag gesendet.
-- **Doppelte Nameserver:** Doppelte Einträge in der Nameserver-Liste werden entfernt.
-- **DNS 0x20:** Eine Antwort mit abweichender Groß-/Kleinschreibung des Namens gilt jetzt als Spoofing-Versuch und führt sofort zur Wiederholung über TCP.
-- **Nameserver-Auswahl:**
-  - Antwortzeit und Fehlerrate werden getrennt pro Adressfamilie (IPv4/IPv6) geführt.
-  - Die Antwortquote wird als gleitender Durchschnitt statt über die gesamte Laufzeit gezählt.
-  - Ausgefallene Adressen werden hinter funktionierende einsortiert, auch im Modus „IPv6 bevorzugen“.
-  - Die Reihenfolge ergibt sich aus einer einzigen kombinierten Sortierung statt aus mehreren instabilen Sortierungen.
-- **Cache-Ansicht:** Die Nameserver-Statistik zeigt zusätzlich die aktuelle Antwortquote und die IPv6-Werte.
+- **CNAME chains and name servers without glue:** The limits per client query were raised to 400 outgoing queries and 128 hash operations. Domains such as `www.bbc.com` or `x.com` failed in the original with "No valid response from name servers" (upstream issue #2175).
+- **QNAME minimization:** The original sent a superfluous query of type `A` for the last label, even after NXDOMAIN.
+- **Root priming:** If the priming query fails or returns no addresses, recursive resolution failed completely in the original. ZenitiumDNS then uses the root hints. The priming query is sent without the RD flag.
+- **Duplicate name servers:** Duplicate entries in the name server list are removed.
+- **DNS 0x20:** A response with a different letter case of the name is now treated as a spoofing attempt and immediately leads to a retry over TCP.
+- **Name server selection:**
+  - Response time and error rate are kept separately per address family (IPv4/IPv6).
+  - The answer rate is counted as a moving average instead of over the entire uptime.
+  - Failed addresses are sorted behind working ones, also in "Prefer IPv6" mode.
+  - The order results from a single combined sort instead of several unstable sorts.
+- **Cache view:** The name server statistics additionally show the current answer rate and the IPv6 values.
 
 ### Cache
-- **Sperre der Root-Server nach DNSSEC-Fehlern:** „Cache leeren“ und das Umschalten der DNSSEC-Validierung setzen die Fehlermarkierung der Root-Hints zurück. Im Original blieb die Auflösung danach bis zu fünf Minuten gestört.
-- **Fehler-Cache und Serve Stale:** Abgelaufene Fehlereinträge wurden im Original als veraltete Antwort ausgeliefert und verlängerten Ausfälle.
-- **Prefetch:** Das Original löste bei kurzer TTL fast bei jeder Anfrage ein Prefetch aus. Jetzt greift es erst im letzten Zehntel der TTL.
-- **Garbage Collection:** Das Original führte in der minütlichen Cache-Wartung eine blockierende vollständige Garbage Collection aus (Upstream-Issue #2174). ZenitiumDNS nutzt dort und beim Neuladen von Statistiken, Blocklisten und der Advanced-Forwarding-App eine Garbage Collection im Hintergrund.
-- **Race Condition:** Beim Entfernen leerer Cache-Zonen konnten gleichzeitig hinzugefügte Einträge verloren gehen und der Eintragszähler falsch hochzählen.
-- **LRU-Verdrängung:** Bei A-/AAAA-Einträgen mit mehreren Adressen wurde der Zeitpunkt der letzten Nutzung nie aktualisiert. Beliebte Einträge wurden bei vollem Cache dadurch zuerst verdrängt.
+- **Root servers blocked after DNSSEC errors:** "Clear cache" and toggling DNSSEC validation reset the error mark of the root hints. In the original, resolution stayed disrupted for up to five minutes afterwards.
+- **Failure cache and serve stale:** Expired failure entries were served as stale answers in the original and prolonged outages.
+- **Prefetch:** With a short TTL, the original triggered a prefetch on almost every query. It now only kicks in within the last tenth of the TTL.
+- **Garbage collection:** The original ran a blocking full garbage collection in the cache maintenance every minute (upstream issue #2174). ZenitiumDNS uses a background garbage collection there and when reloading statistics, block lists and the Advanced Forwarding app.
+- **Race condition:** When empty cache zones were removed, entries added at the same time could get lost and the entry counter could count up incorrectly.
+- **LRU eviction:** For A/AAAA records with several addresses, the last-used time was never updated. Popular entries were therefore evicted first when the cache was full.
 
 ### Performance
-- Dedizierte UDP-Empfangs-Threads (automatisch höchstens 8 pro Socket, einstellbar bis 64) beantworten Cache-Treffer ohne Thread-Wechsel.
-- UDP-Antworten werden synchron gesendet.
-- Die interne Verarbeitungskette nutzt `ValueTask`, die Namenskompression arbeitet ohne Kopien.
-- Die Prüfung auf spezielle Zonen erzeugt keine temporären Strings mehr.
-- Enumeratoren werden in den heißen Pfaden nicht mehr geboxt.
-- Zeitstempel der letzten Nutzung werden höchstens einmal pro Sekunde geschrieben.
-- Statistikdaten laufen über eine lockfreie Warteschlange mit eigenem Thread, eindeutige Clients werden per HyperLogLog gezählt.
-- UDP-Empfangs-Threads wecken weitere Threads erst bei anhaltendem Rückstau, Sendepuffer werden wiederverwendet.
-- Server-GC mit nebenläufiger Garbage Collection.
+- Dedicated UDP receive threads (automatically at most 8 per socket, adjustable up to 64) answer cache hits without switching threads.
+- UDP responses are sent synchronously.
+- The internal processing chain uses `ValueTask`, and name compression works without copies.
+- The check for special zones no longer creates temporary strings.
+- Enumerators are no longer boxed in the hot paths.
+- Last-used timestamps are written at most once per second.
+- Statistics data runs through a lock-free queue with its own thread, and unique clients are counted with HyperLogLog.
+- UDP receive threads only wake further threads on a sustained backlog, and send buffers are reused.
+- Server GC with concurrent garbage collection.
 
-### Verschlüsselte Protokolle
-- **DNS-over-TCP und DNS-over-TLS:** Standardmäßig höchstens 100 laufende Anfragen pro Verbindung, einstellbar. Das Original ließ beliebig viele zu.
-- **DNS-over-HTTPS:** Die gespeicherte Serveradresse enthält nicht mehr die komplette Anfrage (`?dns=…`).
+### Encrypted protocols
+- **DNS-over-TCP and DNS-over-TLS:** At most 100 running queries per connection by default, adjustable. The original allowed any number.
+- **DNS-over-HTTPS:** The stored server address no longer contains the complete query (`?dns=…`).
 
-### Sicherheit
-- API-Tokens aus `DNS_SERVER_AUTH_STATIC_SESSIONS` gelten jetzt auch beim allerersten Start ohne `auth.config`.
-- SQL-Injection über den Serverfilter in den Query-Log-Apps für MySQL, PostgreSQL und SQL Server behoben.
-- XSS über App-Namen in der Weboberfläche behoben.
-- Benutzer ohne Admin-Rechte können keine fremden Sitzungen mehr löschen.
-- Beim Wiederherstellen einer Sicherung werden keine Dateien außerhalb des Zielordners mehr geschrieben.
-- TLS-Zertifikatspfade neben dem Konfigurationsordner werden korrekt gespeichert (Upstream-Issue #2162).
-- DNS-over-HTTPS per POST: Anfragen über 65.535 Byte werden mit 413 abgewiesen und begrenzt gelesen.
-- DNS-Nachrichten mit unplausiblen Eintragszahlen werden vor dem Parsen verworfen.
-- Werte in Inline-Handlern der Weboberfläche werden für JavaScript maskiert.
+### Security
+- API tokens from `DNS_SERVER_AUTH_STATIC_SESSIONS` now also work on the very first start without `auth.config`.
+- SQL injection via the server filter in the query log apps for MySQL, PostgreSQL and SQL Server fixed.
+- XSS via app names in the web interface fixed.
+- Users without admin rights can no longer delete other users' sessions.
+- Restoring a backup no longer writes files outside the target folder.
+- TLS certificate paths next to the configuration folder are saved correctly (upstream issue #2162).
+- DNS-over-HTTPS via POST: requests over 65,535 bytes are rejected with 413 and read with a limit.
+- DNS messages with implausible record counts are dropped before parsing.
+- Values in inline handlers of the web interface are escaped for JavaScript.
 
-### Web-API und Weboberfläche
-- Die Eintrags-APIs beachten `zone=.` für die Root-Zone.
-- Die Seitengröße der Log-Abfrage ist begrenzt, und die Größenbegrenzung beim Herunterladen von Logs läuft nicht mehr über.
-- Ausstehende Änderungen werden vor Sicherungen und beim Beenden geschrieben.
-- Weboberfläche und Dokumentation sind auf Deutsch übersetzt.
+### Web API and web interface
+- The record APIs honor `zone=.` for the root zone.
+- The page size of the log query is limited, and the size limit for downloading logs no longer overflows.
+- Pending changes are written before backups and on shutdown.
+- Web interface and documentation are translated into German.
 
-### Apps und Stabilität
-- Log Exporter App: Syslog-Nachrichten werden nicht mehr doppelt nach RFC 5424 formatiert (Upstream-Issue #2173).
-- Der Timer des Load-Balancing-Proxys löst nach dem Entsorgen nicht mehr aus.
-- Ein Fehler beim Laden einer Zonendatei führt nicht mehr zu einer `LockRecursionException`.
+### Apps and stability
+- Log Exporter app: syslog messages are no longer formatted twice according to RFC 5424 (upstream issue #2173).
+- The timer of the load balancing proxy no longer fires after disposal.
+- An error while loading a zone file no longer leads to a `LockRecursionException`.
 
-### Installation und Betrieb
-- Debian-13-Paket (`setup/debian/build-deb.sh`) für amd64 und arm64:
-  - gehärteter systemd-Dienst,
-  - zufälliges Admin-Passwort,
-  - automatische Anpassung von systemd-resolved,
-  - mitgelieferte DNS-Apps.
-- Docker-Image, Compose-Datei und die Umgebungsvariablen zur Erstkonfiguration wurden entfernt.
-- Update-Prüfung und App-Store sind standardmäßig deaktiviert: `DNS_SERVER_UPDATE_CHECK_URL`, `DNS_SERVER_APP_STORE_URL`.
+### Installation and operation
+- Debian 13 package (`setup/debian/build-deb.sh`) for amd64 and arm64:
+  - hardened systemd service,
+  - random admin password,
+  - automatic adjustment of systemd-resolved,
+  - bundled DNS apps.
+- Docker image, compose file and the environment variables for initial configuration were removed.
+- Update check and app store are disabled by default: `DNS_SERVER_UPDATE_CHECK_URL`, `DNS_SERVER_APP_STORE_URL`.
 
-## Kompatibilität
+## Compatibility
 
-- **Konfiguration:** Einstellungen, Benutzer, Conditional-Forwarder-Zonen, Blocklisten, erlaubte und blockierte Domains, Statistiken und Sicherungen von Technitium DNS Server 15.5 können übernommen werden. ZenitiumDNS speichert die DNS-Einstellungen im Format Version 10 und die Einstellungen der Weboberfläche im Format Version 5 und Zonendateien mit Zoneninformationen Version 15. Diese Dateien kann das Original nicht mehr lesen.
-- **Entfernte Zonentypen:** Zonendateien von Primary-, Secondary-, Stub-, Secondary-Forwarder- und Catalog-Zonen bleiben im Ordner `zones` liegen, werden aber beim Start übersprungen und protokolliert. Sie lassen sich bei Bedarf mit dem Original weiterverwenden.
-- **DHCP und Cluster:** DHCP-Bereichsdateien und die Cluster-Konfiguration werden ignoriert. Berechtigungen für den Bereich DHCP werden beim Laden verworfen. Eine vorhandene Gruppe „DHCP Administrators“ bleibt als gewöhnliche Gruppe ohne Sonderrechte bestehen und kann gelöscht werden.
-- **HTTP-API:** Die API dient nur noch der Weboberfläche. Die Aufrufe für DNSSEC, Catalog-Zonen, Zonenkonvertierung, Resync, TSIG, DHCP und Clustering, der App-Store, das Installieren und Deinstallieren von Apps, API-Tokens und die Prometheus-Metriken sowie der Parameter `node` entfallen. `api/zones/create` akzeptiert nur noch den Typ `Forwarder`.
-- **Cache-Datei:** ZenitiumDNS speichert die Nameserver-Statistik in `cache.bin` in einem erweiterten Format (Version 2). Wird eine solche Cache-Datei mit dem Original geladen, verwirft das Original den Cache. Die Konfiguration ist davon nicht betroffen.
-- **DNS-Apps:** Die Namensräume wurden umbenannt (`ZenitiumDns.*`, `ZenitiumLibrary.*`). Für Technitium kompilierte Apps müssen gegen `ZenitiumDns.ApplicationCommon` neu kompiliert werden. Alle mitgelieferten Apps sind bereits angepasst.
-- **Syslog-Export:** Durch die Korrektur der doppelten Formatierung ändert sich das Format der Syslog-Nachrichten der Log Exporter App. Die Metadaten stehen jetzt als echte strukturierte Daten nach RFC 5424 in der Nachricht.
-- **Pipelining:** Clients, die über eine einzelne TCP- oder TLS-Verbindung mehr als 100 Anfragen gleichzeitig offen halten, werden gebremst, bis Antworten gesendet wurden.
+- **Configuration:** Settings, users, conditional forwarder zones, block lists, allowed and blocked domains, statistics and backups of Technitium DNS Server 15.5 can be taken over. ZenitiumDNS saves the DNS settings in format version 10, the web interface settings in format version 5 and zone files with zone information version 15. The original can no longer read these files.
+- **Removed zone types:** Zone files of primary, secondary, stub, secondary forwarder and catalog zones stay in the `zones` folder but are skipped and logged at startup. They can be used further with the original if needed.
+- **DHCP and cluster:** DHCP scope files and the cluster configuration are ignored. Permissions for the DHCP section are discarded on load. An existing "DHCP Administrators" group remains as an ordinary group without special rights and can be deleted.
+- **HTTP API:** The API only serves the web interface. The calls for DNSSEC, catalog zones, zone conversion, resync, TSIG, DHCP and clustering, the app store, installing and uninstalling apps, API tokens and the Prometheus metrics as well as the `node` parameter are gone. `api/zones/create` only accepts the type `Forwarder`.
+- **Cache file:** ZenitiumDNS saves the name server statistics in `cache.bin` in an extended format (version 2). If such a cache file is loaded by the original, the original discards the cache. The configuration is not affected.
+- **DNS apps:** The namespaces were renamed (`ZenitiumDns.*`, `ZenitiumLibrary.*`). Apps compiled for Technitium must be recompiled against `ZenitiumDns.ApplicationCommon`. All bundled apps are already adapted.
+- **Syslog export:** Because the double formatting was fixed, the format of the syslog messages of the Log Exporter app changes. The metadata is now contained in the message as real structured data according to RFC 5424.
+- **Statistics:** Statistics files are saved in format version 11 (counters) and 2 (hourly files), which the original cannot read. Files of the original are read.
+- **Pipelining:** Clients that keep more than 100 queries open at the same time over a single TCP or TLS connection are slowed down until responses have been sent.
 
-## Abgleich mit Technitium DNS Server 15.5.1
+## Sync with Technitium DNS Server 15.5.1
 
-Technitium DNS Server 15.5.1 erschien am 26. September 2026. Alle Korrekturen daraus sind in ZenitiumDNS 15.5.1 enthalten, soweit sie noch vorhandene Teile betreffen (DHCP-Korrekturen entfallen). Einige davon hatte ZenitiumDNS bereits vorher:
+Technitium DNS Server 15.5.1 was released on 26 September 2026. All of its fixes are included in ZenitiumDNS 15.5.1 where they concern parts that still exist (DHCP fixes do not apply). ZenitiumDNS already had some of them before:
 
-| Korrektur in 15.5.1 | In ZenitiumDNS |
-| ------------------- | -------------- |
-| XSS über App-Namen in der Weboberfläche | schon in 15.5 behoben |
-| Löschen fremder Sitzungen durch Benutzer ohne Admin-Rechte | schon in 15.5 behoben, zusätzlich Längenprüfung des Teil-Tokens übernommen |
-| Blockierende Garbage Collection in der Cache-Wartung (Upstream-Issue #2174) | schon in 15.5 durch Hintergrund-GC behoben, zusätzlich GC nur nach großen Bereinigungen übernommen |
-| Resolver-Limits bei langen CNAME-Ketten (Upstream-Issue #2175) | schon in 15.5 durch höhere Limits behoben, jetzt ohne Hash-Limit und mit EDE „ResolverLimitReached“ |
-| XSS in der Liste der Logdateien, RA-Flag in Blockierantworten, lokale Blocklisten, RRSIG-Zeitraum, Pfadvergleiche, `install.sh` | neu übernommen |
-
+| Fix in 15.5.1 | In ZenitiumDNS |
+| ------------- | -------------- |
+| XSS via app names in the web interface | already fixed in 15.5 |
+| Deleting other users' sessions by users without admin rights | already fixed in 15.5, length check of the partial token adopted in addition |
+| Blocking garbage collection in the cache maintenance (upstream issue #2174) | already fixed in 15.5 by a background GC, GC only after large cleanups adopted in addition |
+| Resolver limits with long CNAME chains (upstream issue #2175) | already fixed in 15.5 by higher limits, now without a hash limit and with the EDE "ResolverLimitReached" |
+| XSS in the list of log files, RA flag in blocking responses, local block lists, RRSIG validity period, path comparisons, `install.sh` | newly adopted |

@@ -1,34 +1,36 @@
-# Hinweis
+# Notice
 
-ZenitiumDNS ist eine veränderte Fassung der folgenden Werke:
+[Deutsche Version](NOTICE.de.md)
 
-- **Technitium DNS Server** Version 15.5.1, Copyright (C) 2026 Shreyas Zare (shreyas@technitium.com), https://github.com/TechnitiumSoftware/DnsServer
+ZenitiumDNS is a modified version of the following works:
+
+- **Technitium DNS Server** version 15.5.1, Copyright (C) 2026 Shreyas Zare (shreyas@technitium.com), https://github.com/TechnitiumSoftware/DnsServer
 - **TechnitiumLibrary**, Copyright (C) 2026 Shreyas Zare (shreyas@technitium.com), https://github.com/TechnitiumSoftware/TechnitiumLibrary
 
-Beide Werke stehen unter der GNU General Public License Version 3 oder (nach deiner Wahl) jeder späteren Version. ZenitiumDNS wird unter derselben Lizenz verbreitet. Der vollständige Lizenztext steht in der Datei [LICENSE](LICENSE). Die ursprünglichen Urheberrechts- und Lizenzhinweise in den Quelldateien wurden beibehalten.
+Both works are licensed under the GNU General Public License version 3 or (at your option) any later version. ZenitiumDNS is distributed under the same license. The full license text is in the file [LICENSE](LICENSE). The original copyright and license notices in the source files have been kept.
 
-Die Änderungen und Ergänzungen von ZenitiumDNS: Copyright (C) 2026 xRuffKez. Veränderte Quelldateien tragen diesen Hinweis zusätzlich zum ursprünglichen, neu hinzugekommene Dateien einen eigenen Lizenzkopf.
+The changes and additions of ZenitiumDNS: Copyright (C) 2026 xRuffKez. Modified source files carry this notice in addition to the original one, newly added files carry their own license header.
 
-Der Name „Technitium“ wird hier nur verwendet, um die Herkunft dieses Werks anzugeben. ZenitiumDNS steht in keiner Verbindung zu Technitium oder dem ursprünglichen Autor und wird von ihnen nicht unterstützt.
+The name "Technitium" is only used here to state the origin of this work. ZenitiumDNS is not affiliated with Technitium or the original author and is not endorsed by them.
 
-## Mitgelieferte Schriften
+## Bundled fonts
 
-Die Weboberfläche enthält die Schriften **Red Hat Text**, **Red Hat Display** und **Red Hat Mono**, Copyright 2024 The Red Hat Project Authors (https://github.com/RedHatOfficial/RedHatFont). Sie stehen unter der SIL Open Font License 1.1, deren Text in `src/ZenitiumDns.Core/www/fonts/RedHatFont-OFL.txt` liegt.
+The web interface contains the fonts **Red Hat Text**, **Red Hat Display** and **Red Hat Mono**, Copyright 2024 The Red Hat Project Authors (https://github.com/RedHatOfficial/RedHatFont). They are licensed under the SIL Open Font License 1.1, whose text is in `src/ZenitiumDns.Core/www/fonts/RedHatFont-OFL.txt`.
 
-## Änderungen
+## Changes
 
-Die folgenden Änderungen wurden im September 2026 vorgenommen:
+The following changes were made in September 2026:
 
-- Das Produkt wurde in ZenitiumDNS umbenannt. Logos, Symbole, Produktnamen, User-Agents, Dienstnamen, Registrierungsschlüssel, Installationspfade und Log-Pfade wurden ersetzt.
-- Die Repositorys von DNS-Server und Bibliothek wurden zu einem Quellbaum mit einer Solution (`ZenitiumDNS.slnx`) zusammengeführt. Statt vorkompilierter Assemblys werden Projektreferenzen verwendet, gemeinsame Build-Eigenschaften stehen in `Directory.Build.props`.
-- Namensräume und Assemblys wurden von `TechnitiumLibrary.*` in `ZenitiumLibrary.*` und von `DnsServerCore.*` in `ZenitiumDns.*` umbenannt. Die Assembly des Server-Hosts wurde ebenfalls umbenannt.
-- Nicht vom DNS-Server verwendete Bibliotheksprojekte wurden entfernt (BitTorrent, Tor, UPnP, Security.Cryptography).
-- Alle Verbindungen zur Infrastruktur des Originalprojekts wurden entfernt. Die Update-Prüfung fragt die Releases von ZenitiumDNS auf GitHub ab und lässt sich über `DNS_SERVER_UPDATE_CHECK_URL` umstellen oder abschalten. Den DNS-App-Store gibt es nicht mehr, alle Apps werden mit dem Paket ausgeliefert.
-- Der Linux-Installer installiert aus einem lokalen Build, statt Binärdateien des Originals herunterzuladen. Neu hinzugekommen ist ein eigenständiges Debian-Paket.
-- Der Funktionsumfang wurde auf den Betrieb als öffentlicher rekursiver Resolver reduziert. Entfernt wurden autoritative Zonen (Primary, Secondary, Stub, Secondary Forwarder, Catalog), DNSSEC-Signierung, Zonentransfers (AXFR/IXFR, XFR-over-TLS/QUIC), DNS NOTIFY, dynamische Updates, TSIG, der DHCP-Server, das Clustering samt HTTP-API-Client, die für LAN- und Hosting-Szenarien gedachten DNS-Apps sowie Windows-Dienst, Systemtray-App, Windows-Firewall-Bibliothek und Windows-Installer. Conditional-Forwarder-Zonen, Blocklisten sowie erlaubte und blockierte Domains bleiben erhalten.
-- Statistik und Überwachung wurden um Antwortzeiten (Median, Perzentile, Cache/rekursiv), Live-Kennzahlen und zusätzliche Metriken erweitert. Die Weboberfläche wurde neu gegliedert und um Einstellungen für IPv6-Rückfall, UDP-Empfangs-Threads und Pipelining-Limit ergänzt.
-- Weboberfläche und Dokumentation wurden ins Deutsche übersetzt. Zusätzlich gibt es eine vollständige englische Fassung, die Sprache ist nach der Installation wählbar.
-- Die Weboberfläche erhielt ein neues Design. Die GIF-Ladeanimationen und die Stylesheets für Dunkel- und Bernstein-Modus wurden durch ein gemeinsames Stylesheet ersetzt.
-- Neu hinzugekommen sind ein Anfragefilter für den öffentlichen Betrieb, die DNSSEC-Validierung von ML-DSA-44 und das Aktivieren und Deaktivieren einzelner Apps. Das Docker-Image wurde entfernt.
-- Kommentare wurden aus dem Quellcode entfernt. Die Urheberrechts- und Lizenzköpfe der Quelldateien blieben dabei erhalten.
-- Zahlreiche Fehler, Sicherheitsprobleme und Performance-Engpässe wurden behoben. Die vollständige Liste steht in [CHANGELOG-ZenitiumDNS.md](CHANGELOG-ZenitiumDNS.md).
+- The product was renamed to ZenitiumDNS. Logos, icons, product names, user agents, service names, registry keys, installation paths and log paths were replaced.
+- The repositories of the DNS server and the library were merged into one source tree with a single solution (`ZenitiumDNS.slnx`). Project references are used instead of precompiled assemblies, and common build properties are in `Directory.Build.props`.
+- Namespaces and assemblies were renamed from `TechnitiumLibrary.*` to `ZenitiumLibrary.*` and from `DnsServerCore.*` to `ZenitiumDns.*`. The assembly of the server host was renamed as well.
+- Library projects not used by the DNS server were removed (BitTorrent, Tor, UPnP, Security.Cryptography).
+- All connections to the infrastructure of the original project were removed. The update check queries the releases of ZenitiumDNS on GitHub and can be redirected or turned off via `DNS_SERVER_UPDATE_CHECK_URL`. The DNS app store no longer exists; all apps are shipped with the package.
+- The Linux installer installs from a local build instead of downloading binaries of the original. A self-contained Debian package was added.
+- The feature set was reduced to running a public recursive resolver. Removed were authoritative zones (primary, secondary, stub, secondary forwarder, catalog), DNSSEC signing, zone transfers (AXFR/IXFR, XFR-over-TLS/QUIC), DNS NOTIFY, dynamic updates, TSIG, the DHCP server, clustering including the HTTP API client, the DNS apps intended for LAN and hosting scenarios, as well as the Windows service, system tray app, Windows firewall library and Windows installer. Conditional forwarder zones, block lists and allowed and blocked domains are kept.
+- Statistics and monitoring were extended with response times (median, percentiles, cache/recursive), live key figures and additional metrics. The web interface was reorganized and extended with settings for IPv6 fallback, UDP receive threads and a pipelining limit.
+- The web interface and documentation were translated into German. In addition, there is a complete English version; the language can be chosen after installation.
+- The web interface got a new design. The GIF loading animations and the stylesheets for the dark and amber modes were replaced by a shared stylesheet.
+- Added were a request filter for public operation, DNSSEC validation of ML-DSA-44 and enabling and disabling individual apps. The Docker image was removed.
+- Comments were removed from the source code. The copyright and license headers of the source files were kept.
+- Numerous bugs, security issues and performance bottlenecks were fixed. The complete list is in [CHANGELOG-ZenitiumDNS.md](CHANGELOG-ZenitiumDNS.md).

@@ -1,5 +1,7 @@
 # Query Logs MySQL App
 
+[Deutsche Version](README.de.md)
+
 A DNS App for ZenitiumDNS that logs DNS queries to a MySQL/MariaDB database.
 
 ## Overview

@@ -40,6 +40,9 @@ namespace ZenitiumDns.Core.Dns
         #region variables
 
         public const int STATS_TOP_LIMIT = 1000;
+        const int STATS_HOUR_LIMIT = 10000;
+        const int STATS_SETTLE_MINUTES = 10;
+        const int DAILY_STATS_CACHE_DAYS = 32;
 
         readonly DnsServer _dnsServer;
         readonly string _statsFolder;
@@ -63,14 +66,19 @@ namespace ZenitiumDns.Core.Dns
         readonly StatCounter[] _lastHourStatCountersCopy = new StatCounter[60];
         ConcurrentDictionary<DateTime, HourlyStats> _hourlyStatsCache = new ConcurrentDictionary<DateTime, HourlyStats>(1, 24);
         ConcurrentDictionary<DateTime, StatCounter> _dailyStatsCache = new ConcurrentDictionary<DateTime, StatCounter>(1, 7);
+        ConcurrentDictionary<DateTime, StatCounter> _monthlyStatsCache = new ConcurrentDictionary<DateTime, StatCounter>(1, 12);
 
         readonly Timer _maintenanceTimer;
+        int _maintenanceRunning;
         const int MAINTENANCE_TIMER_INITIAL_INTERVAL = 10000;
         const int MAINTENANCE_TIMER_PERIODIC_INTERVAL = 10000;
 
         readonly ResponseTimeStats _responseTimeStats = new ResponseTimeStats();
 
+        internal const int MAX_QUEUE_LENGTH = 100000;
+
         readonly ConcurrentQueue<StatsQueueItem> _queue = new ConcurrentQueue<StatsQueueItem>();
+        int _queueLength;
         readonly Thread _consumerThread;
         volatile bool _consumerStopping;
         const int CONSUMER_INTERVAL = 5;
@@ -107,6 +115,9 @@ namespace ZenitiumDns.Core.Dns
 
             _maintenanceTimer = new Timer(delegate (object state)
             {
+                if (Interlocked.Exchange(ref _maintenanceRunning, 1) == 1)
+                    return;
+
                 try
                 {
                     DoMaintenance();
@@ -114,6 +125,10 @@ namespace ZenitiumDns.Core.Dns
                 catch (Exception ex)
                 {
                     _dnsServer.LogManager.Write(ex);
+                }
+                finally
+                {
+                    Volatile.Write(ref _maintenanceRunning, 0);
                 }
             }, null, MAINTENANCE_TIMER_INITIAL_INTERVAL, MAINTENANCE_TIMER_PERIODIC_INTERVAL);
 
@@ -207,6 +222,8 @@ namespace ZenitiumDns.Core.Dns
             _consumerStopping = true;
             _consumerThread?.Join();
 
+            SpinWait.SpinUntil(delegate () { return Interlocked.CompareExchange(ref _maintenanceRunning, 1, 0) == 0; }, 30000);
+
             DoMaintenance();
 
             _disposed = true;
@@ -223,6 +240,8 @@ namespace ZenitiumDns.Core.Dns
             {
                 while (_queue.TryDequeue(out StatsQueueItem item))
                 {
+                    Interlocked.Decrement(ref _queueLength);
+
                     try
                     {
                         ProcessQueueItem(item);
@@ -369,7 +388,7 @@ namespace ZenitiumDns.Core.Dns
 
                     if ((lastHourlyStats == null) || (lastDateTime.Hour != lastHourlyStatsDateTime.Hour))
                     {
-                        lastHourlyStats = LoadHourlyStats(lastDateTime);
+                        lastHourlyStats = LoadHourlyStats(lastDateTime, truncate: false);
                         lastHourlyStatsDateTime = lastDateTime;
                     }
 
@@ -407,11 +426,16 @@ namespace ZenitiumDns.Core.Dns
                 {
                     lastStatCounter.Lock();
 
-                    if (!_enableInMemoryStats)
+                    if (_enableInMemoryStats)
+                    {
+                        lastStatCounter.Truncate(STATS_TOP_LIMIT);
+                    }
+                    else
                     {
                         HourlyStats hourlyStats = LoadHourlyStats(lastDateTime, truncate: false);
 
                         hourlyStats.UpdateStat(lastDateTime, lastStatCounter);
+                        lastStatCounter.Truncate(STATS_TOP_LIMIT);
 
                         SaveHourlyStats(lastDateTime, hourlyStats);
                     }
@@ -420,7 +444,8 @@ namespace ZenitiumDns.Core.Dns
                 }
             }
 
-            LoadDailyStats(currentDateTime.AddDays(-1));
+            if (currentDateTime.TimeOfDay >= TimeSpan.FromMinutes(STATS_SETTLE_MINUTES))
+                LoadDailyStats(currentDateTime.AddDays(-1));
 
             {
                 DateTime threshold = currentDateTime.AddHours(-24);
@@ -439,12 +464,12 @@ namespace ZenitiumDns.Core.Dns
             }
 
             {
-                DateTime lastHourThreshold = currentDateTime.AddHours(-1);
-                lastHourThreshold = new DateTime(lastHourThreshold.Year, lastHourThreshold.Month, lastHourThreshold.Day, lastHourThreshold.Hour, 0, 0, DateTimeKind.Utc);
+                DateTime completedHourThreshold = currentDateTime.AddMinutes(-6);
+                completedHourThreshold = new DateTime(completedHourThreshold.Year, completedHourThreshold.Month, completedHourThreshold.Day, completedHourThreshold.Hour, 0, 0, DateTimeKind.Utc);
 
                 foreach (KeyValuePair<DateTime, HourlyStats> item in _hourlyStatsCache)
                 {
-                    if (item.Key < lastHourThreshold)
+                    if (item.Key < completedHourThreshold)
                     {
                         item.Value.UnloadMinuteStats();
                         item.Value.Truncate(STATS_TOP_LIMIT);
@@ -453,8 +478,7 @@ namespace ZenitiumDns.Core.Dns
             }
 
             {
-                DateTime threshold = currentDateTime.AddMonths(-12);
-                threshold = new DateTime(threshold.Year, threshold.Month, 1, 0, 0, 0, DateTimeKind.Utc);
+                DateTime threshold = currentDateTime.Date.AddDays(-DAILY_STATS_CACHE_DAYS);
 
                 List<DateTime> _keysToRemove = new List<DateTime>();
 
@@ -467,53 +491,85 @@ namespace ZenitiumDns.Core.Dns
                 foreach (DateTime key in _keysToRemove)
                     _dailyStatsCache.TryRemove(key, out _);
             }
+
+            {
+                DateTime threshold = currentDateTime.AddMonths(-13);
+                threshold = new DateTime(threshold.Year, threshold.Month, 1, 0, 0, 0, DateTimeKind.Utc);
+
+                List<DateTime> _keysToRemove = new List<DateTime>();
+
+                foreach (KeyValuePair<DateTime, StatCounter> item in _monthlyStatsCache)
+                {
+                    if (item.Key < threshold)
+                        _keysToRemove.Add(item.Key);
+                }
+
+                foreach (DateTime key in _keysToRemove)
+                    _monthlyStatsCache.TryRemove(key, out _);
+            }
         }
 
-        private HourlyStats LoadHourlyStats(DateTime dateTime, bool forceReload = false, bool ifNotExistsReturnEmptyHourlyStats = false, bool truncate = true)
+        private HourlyStats ReadHourlyStats(DateTime dateTime, bool loadMinuteStats, bool ifNotExistsReturnEmptyHourlyStats)
+        {
+            string hourlyStatsFile = Path.Combine(_statsFolder, dateTime.ToString("yyyyMMddHH", CultureInfo.InvariantCulture) + ".stat");
+
+            if (File.Exists(hourlyStatsFile))
+            {
+                try
+                {
+                    using (FileStream fS = new FileStream(hourlyStatsFile, FileMode.Open, FileAccess.Read))
+                    {
+                        return new HourlyStats(new BinaryReader(fS), loadMinuteStats);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _dnsServer.LogManager.Write(ex);
+                }
+            }
+
+            if (ifNotExistsReturnEmptyHourlyStats)
+                return HourlyStats.Empty;
+
+            return new HourlyStats();
+        }
+
+        private HourlyStats LoadHourlyStats(DateTime dateTime, bool forceReload = false, bool ifNotExistsReturnEmptyHourlyStats = false, bool truncate = true, bool loadMinuteStats = true)
         {
             if (_enableInMemoryStats)
                 return HourlyStats.Empty;
 
             DateTime hourlyDateTime = new DateTime(dateTime.Year, dateTime.Month, dateTime.Day, dateTime.Hour, 0, 0, 0, DateTimeKind.Utc);
 
-            if (forceReload || !_hourlyStatsCache.TryGetValue(hourlyDateTime, out HourlyStats hourlyStats) || (hourlyStats.Truncated && !truncate) || ReferenceEquals(hourlyStats, HourlyStats.Empty))
+            if (forceReload || !_hourlyStatsCache.TryGetValue(hourlyDateTime, out HourlyStats hourlyStats) || (hourlyStats.Truncated && !truncate) || (loadMinuteStats && (hourlyStats.MinuteStats is null)) || ReferenceEquals(hourlyStats, HourlyStats.Empty))
             {
-                string hourlyStatsFile = Path.Combine(_statsFolder, dateTime.ToString("yyyyMMddHH", CultureInfo.InvariantCulture) + ".stat");
+                hourlyStats = ReadHourlyStats(hourlyDateTime, loadMinuteStats, ifNotExistsReturnEmptyHourlyStats);
 
-                if (File.Exists(hourlyStatsFile))
-                {
-                    try
-                    {
-                        using (FileStream fS = new FileStream(hourlyStatsFile, FileMode.Open, FileAccess.Read))
-                        {
-                            hourlyStats = new HourlyStats(new BinaryReader(fS));
-                        }
-
-                        if (truncate)
-                            hourlyStats.Truncate(STATS_TOP_LIMIT);
-                    }
-                    catch (Exception ex)
-                    {
-                        _dnsServer.LogManager.Write(ex);
-
-                        if (ifNotExistsReturnEmptyHourlyStats)
-                            hourlyStats = HourlyStats.Empty;
-                        else
-                            hourlyStats = new HourlyStats();
-                    }
-                }
-                else
-                {
-                    if (ifNotExistsReturnEmptyHourlyStats)
-                        hourlyStats = HourlyStats.Empty;
-                    else
-                        hourlyStats = new HourlyStats();
-                }
+                if (truncate)
+                    hourlyStats.Truncate(STATS_TOP_LIMIT);
 
                 _hourlyStatsCache[hourlyDateTime] = hourlyStats;
             }
 
             return hourlyStats;
+        }
+
+        private StatCounter BuildDailyStats(DateTime dailyDateTime)
+        {
+            StatCounter dailyStats = new StatCounter();
+            dailyStats.Lock();
+
+            for (int hour = 0; hour < 24; hour++)
+            {
+                DateTime hourlyDateTime = dailyDateTime.AddHours(hour);
+
+                if (!_hourlyStatsCache.TryGetValue(hourlyDateTime, out HourlyStats hourlyStats) || hourlyStats.Truncated || ReferenceEquals(hourlyStats, HourlyStats.Empty))
+                    hourlyStats = ReadHourlyStats(hourlyDateTime, false, true);
+
+                dailyStats.Merge(hourlyStats.HourStat);
+            }
+
+            return dailyStats;
         }
 
         private StatCounter LoadDailyStats(DateTime dateTime)
@@ -523,58 +579,76 @@ namespace ZenitiumDns.Core.Dns
 
             DateTime dailyDateTime = new DateTime(dateTime.Year, dateTime.Month, dateTime.Day, 0, 0, 0, 0, DateTimeKind.Utc);
 
-            if (!_dailyStatsCache.TryGetValue(dailyDateTime, out StatCounter dailyStats))
+            if (_dailyStatsCache.TryGetValue(dailyDateTime, out StatCounter dailyStats))
+                return dailyStats;
+
+            DateTime utcNow = DateTime.UtcNow;
+
+            if (dailyDateTime.AddDays(1) > utcNow.AddMinutes(-STATS_SETTLE_MINUTES))
+                return BuildDailyStats(dailyDateTime);
+
+            string dailyStatsFile = Path.Combine(_statsFolder, dateTime.ToString("yyyyMMdd", CultureInfo.InvariantCulture) + ".dstat");
+
+            if (File.Exists(dailyStatsFile))
             {
-                string dailyStatsFile = Path.Combine(_statsFolder, dateTime.ToString("yyyyMMdd", CultureInfo.InvariantCulture) + ".dstat");
-
-                if (File.Exists(dailyStatsFile))
+                try
                 {
-                    try
+                    using (FileStream fS = new FileStream(dailyStatsFile, FileMode.Open, FileAccess.Read))
                     {
-                        using (FileStream fS = new FileStream(dailyStatsFile, FileMode.Open, FileAccess.Read))
-                        {
-                            dailyStats = new StatCounter(new BinaryReader(fS));
-                        }
-
-                        if (dailyStats.Truncate(STATS_TOP_LIMIT))
-                        {
-                            SaveDailyStats(dailyDateTime, dailyStats);
-                            GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced, false);
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        _dnsServer.LogManager.Write(ex);
-                    }
-                }
-
-                if (dailyStats is null)
-                {
-                    dailyStats = new StatCounter();
-                    dailyStats.Lock();
-
-                    for (int hour = 0; hour < 24; hour++)
-                    {
-                        HourlyStats hourlyStats = LoadHourlyStats(dailyDateTime.AddHours(hour), ifNotExistsReturnEmptyHourlyStats: true, truncate: false);
-                        dailyStats.Merge(hourlyStats.HourStat);
+                        dailyStats = new StatCounter(new BinaryReader(fS));
                     }
 
-                    if (dailyStats.TotalQueries > 0)
+                    if (dailyStats.Truncate(STATS_TOP_LIMIT))
                     {
-                        _ = dailyStats.Truncate(STATS_TOP_LIMIT);
                         SaveDailyStats(dailyDateTime, dailyStats);
                         GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced, false);
                     }
                 }
-
-                if (!_dailyStatsCache.TryAdd(dailyDateTime, dailyStats))
+                catch (Exception ex)
                 {
-                    if (!_dailyStatsCache.TryGetValue(dailyDateTime, out dailyStats))
-                        throw new DnsServerException("Unable to load daily stats.");
+                    _dnsServer.LogManager.Write(ex);
                 }
             }
 
-            return dailyStats;
+            if (dailyStats is null)
+            {
+                dailyStats = BuildDailyStats(dailyDateTime);
+
+                if (dailyStats.TotalQueries > 0)
+                {
+                    _ = dailyStats.Truncate(STATS_TOP_LIMIT);
+                    SaveDailyStats(dailyDateTime, dailyStats);
+                }
+            }
+
+            if (dailyDateTime < utcNow.Date.AddDays(-DAILY_STATS_CACHE_DAYS))
+                return dailyStats;
+
+            return _dailyStatsCache.GetOrAdd(dailyDateTime, dailyStats);
+        }
+
+        private StatCounter LoadMonthlyStats(DateTime monthlyDateTime)
+        {
+            if (_enableInMemoryStats)
+                return StatCounter.Empty;
+
+            if (_monthlyStatsCache.TryGetValue(monthlyDateTime, out StatCounter monthlyStats))
+                return monthlyStats;
+
+            monthlyStats = new StatCounter();
+            monthlyStats.Lock();
+
+            int days = DateTime.DaysInMonth(monthlyDateTime.Year, monthlyDateTime.Month);
+
+            for (int day = 0; day < days; day++)
+                monthlyStats.Merge(LoadDailyStats(monthlyDateTime.AddDays(day)), true);
+
+            if (monthlyDateTime.AddMonths(1) > DateTime.UtcNow.AddMinutes(-STATS_SETTLE_MINUTES))
+                return monthlyStats;
+
+            monthlyStats.Truncate(STATS_TOP_LIMIT);
+
+            return _monthlyStatsCache.GetOrAdd(monthlyDateTime, monthlyStats);
         }
 
         private void SaveHourlyStats(DateTime dateTime, HourlyStats hourlyStats)
@@ -621,6 +695,7 @@ namespace ZenitiumDns.Core.Dns
 
             _hourlyStatsCache = new ConcurrentDictionary<DateTime, HourlyStats>(1, 24);
             _dailyStatsCache = new ConcurrentDictionary<DateTime, StatCounter>(1, 7);
+            _monthlyStatsCache = new ConcurrentDictionary<DateTime, StatCounter>(1, 12);
         }
 
         #endregion
@@ -650,6 +725,12 @@ namespace ZenitiumDns.Core.Dns
 
         public void QueueUpdate(DnsDatagram request, IPEndPoint remoteEP, DnsTransportProtocol protocol, DnsDatagram response, bool rateLimited, double responseTime = -1)
         {
+            if (Interlocked.Increment(ref _queueLength) > MAX_QUEUE_LENGTH)
+            {
+                Interlocked.Decrement(ref _queueLength);
+                return;
+            }
+
             _queue.Enqueue(new StatsQueueItem(request, remoteEP, protocol, response, rateLimited, responseTime));
         }
 
@@ -880,9 +961,6 @@ namespace ZenitiumDns.Core.Dns
 
             for (int month = 0; month < 12; month++)
             {
-                StatCounter monthlyStatCounter = new StatCounter();
-                monthlyStatCounter.Lock();
-
                 DateTime lastMonthDateTime = lastYearDateTime.AddMonths(month);
                 string label;
 
@@ -893,13 +971,7 @@ namespace ZenitiumDns.Core.Dns
 
                 labels[month] = label;
 
-                int days = DateTime.DaysInMonth(lastMonthDateTime.Year, lastMonthDateTime.Month);
-
-                for (int day = 0; day < days; day++)
-                {
-                    StatCounter dailyStatCounter = LoadDailyStats(lastMonthDateTime.AddDays(day));
-                    monthlyStatCounter.Merge(dailyStatCounter, true);
-                }
+                StatCounter monthlyStatCounter = LoadMonthlyStats(lastMonthDateTime);
 
                 totalStatCounter.Merge(monthlyStatCounter, true);
 
@@ -1176,7 +1248,7 @@ namespace ZenitiumDns.Core.Dns
 
                 labels[hour] = label;
 
-                HourlyStats hourlyStats = LoadHourlyStats(lastDateTime, ifNotExistsReturnEmptyHourlyStats: true);
+                HourlyStats hourlyStats = LoadHourlyStats(lastDateTime, ifNotExistsReturnEmptyHourlyStats: true, loadMinuteStats: false);
                 StatCounter hourlyStatCounter = hourlyStats.HourStat;
 
                 totalStatCounter.Merge(hourlyStatCounter);
@@ -1472,22 +1544,7 @@ namespace ZenitiumDns.Core.Dns
             lastYearDateTime = new DateTime(lastYearDateTime.Year, lastYearDateTime.Month, 1, 0, 0, 0, DateTimeKind.Utc);
 
             for (int month = 0; month < 12; month++)
-            {
-                StatCounter monthlyStatCounter = new StatCounter();
-                monthlyStatCounter.Lock();
-
-                DateTime lastMonthDateTime = lastYearDateTime.AddMonths(month);
-
-                int days = DateTime.DaysInMonth(lastMonthDateTime.Year, lastMonthDateTime.Month);
-
-                for (int day = 0; day < days; day++)
-                {
-                    StatCounter dailyStatCounter = LoadDailyStats(lastMonthDateTime.AddDays(day));
-                    monthlyStatCounter.Merge(dailyStatCounter, true);
-                }
-
-                totalStatCounter.Merge(monthlyStatCounter, true);
-            }
+                totalStatCounter.Merge(LoadMonthlyStats(lastYearDateTime.AddMonths(month)), true);
 
             switch (type)
             {
@@ -1580,7 +1637,7 @@ namespace ZenitiumDns.Core.Dns
             {
                 DateTime lastDateTime = startDate.AddHours(hour);
 
-                HourlyStats hourlyStats = LoadHourlyStats(lastDateTime, ifNotExistsReturnEmptyHourlyStats: true);
+                HourlyStats hourlyStats = LoadHourlyStats(lastDateTime, ifNotExistsReturnEmptyHourlyStats: true, loadMinuteStats: false);
                 StatCounter hourlyStatCounter = hourlyStats.HourStat;
 
                 totalStatCounter.Merge(hourlyStatCounter);
@@ -1662,14 +1719,17 @@ namespace ZenitiumDns.Core.Dns
         { get { return _responseTimeStats; } }
 
         internal int QueueLength
-        { get { return _queue.Count; } }
+        { get { return Math.Max(0, Volatile.Read(ref _queueLength)); } }
 
         internal int DropQueuedItems()
         {
             int dropped = 0;
 
             while (_queue.TryDequeue(out _))
+            {
+                Interlocked.Decrement(ref _queueLength);
                 dropped++;
+            }
 
             return dropped;
         }
@@ -1720,6 +1780,7 @@ namespace ZenitiumDns.Core.Dns
                     {
                         _hourlyStatsCache = new ConcurrentDictionary<DateTime, HourlyStats>(1, 1);
                         _dailyStatsCache = new ConcurrentDictionary<DateTime, StatCounter>(1, 1);
+                        _monthlyStatsCache = new ConcurrentDictionary<DateTime, StatCounter>(1, 1);
                     }
                 }
             }
@@ -1751,7 +1812,7 @@ namespace ZenitiumDns.Core.Dns
             public readonly static HourlyStats Empty = new HourlyStats();
 
             readonly StatCounter _hourStat;
-            StatCounter[] _minuteStats = new StatCounter[60];
+            StatCounter[] _minuteStats;
 
             bool _truncated;
 
@@ -1764,6 +1825,8 @@ namespace ZenitiumDns.Core.Dns
                 _hourStat = new StatCounter();
                 _hourStat.Lock();
 
+                _minuteStats = new StatCounter[60];
+
                 for (int i = 0; i < _minuteStats.Length; i++)
                 {
                     _minuteStats[i] = new StatCounter();
@@ -1771,7 +1834,7 @@ namespace ZenitiumDns.Core.Dns
                 }
             }
 
-            public HourlyStats(BinaryReader bR)
+            public HourlyStats(BinaryReader bR, bool loadMinuteStats)
             {
                 if (Encoding.ASCII.GetString(bR.BaseStream.ReadExactly(2)) != "HS")
                     throw new InvalidDataException("HourlyStats format is invalid.");
@@ -1783,10 +1846,32 @@ namespace ZenitiumDns.Core.Dns
                         _hourStat = new StatCounter();
                         _hourStat.Lock();
 
-                        for (int i = 0; i < _minuteStats.Length; i++)
+                        if (loadMinuteStats)
+                            _minuteStats = new StatCounter[60];
+
+                        for (int i = 0; i < 60; i++)
                         {
-                            _minuteStats[i] = new StatCounter(bR);
-                            _hourStat.Merge(_minuteStats[i]);
+                            StatCounter minuteStat = new StatCounter(bR);
+                            _hourStat.Merge(minuteStat);
+
+                            if (loadMinuteStats)
+                            {
+                                minuteStat.Truncate(STATS_TOP_LIMIT);
+                                _minuteStats[i] = minuteStat;
+                            }
+                        }
+
+                        break;
+
+                    case 2:
+                        _hourStat = new StatCounter(bR);
+
+                        if (loadMinuteStats)
+                        {
+                            _minuteStats = new StatCounter[60];
+
+                            for (int i = 0; i < 60; i++)
+                                _minuteStats[i] = new StatCounter(bR);
                         }
 
                         break;
@@ -1825,20 +1910,21 @@ namespace ZenitiumDns.Core.Dns
 
             public bool Truncate(int limit)
             {
+                if (ReferenceEquals(this, Empty))
+                    return false;
+
+                StatCounter[] minuteStats = _minuteStats;
+                if (minuteStats is not null)
+                {
+                    foreach (StatCounter minuteStat in minuteStats)
+                        minuteStat?.Truncate(limit);
+                }
+
                 if (_truncated)
                     return false;
 
                 if (_hourStat.Truncate(limit))
                     _truncated = true;
-
-                if (_minuteStats is not null)
-                {
-                    foreach (StatCounter minuteStat in _minuteStats)
-                    {
-                        if (minuteStat.Truncate(limit))
-                            _truncated = true;
-                    }
-                }
 
                 return _truncated;
             }
@@ -1846,7 +1932,9 @@ namespace ZenitiumDns.Core.Dns
             public void WriteTo(BinaryWriter bW)
             {
                 bW.Write(Encoding.ASCII.GetBytes("HS"));
-                bW.Write((byte)1);
+                bW.Write((byte)2);
+
+                _hourStat.WriteTo(bW, STATS_HOUR_LIMIT);
 
                 for (int i = 0; i < _minuteStats.Length; i++)
                 {
@@ -1881,6 +1969,7 @@ namespace ZenitiumDns.Core.Dns
             #region variables
 
             const int MAX_COUNTER_ENTRIES = 200000;
+            const int CLIENT_SKETCH_PRECISION = 12;
 
             public readonly static StatCounter Empty = new StatCounter() { _locked = true };
 
@@ -1905,6 +1994,7 @@ namespace ZenitiumDns.Core.Dns
             ConcurrentDictionary<DnsResourceRecordType, Counter> _queryTypes;
             readonly ConcurrentDictionary<DnsTransportProtocol, Counter> _protocolTypes;
             ConcurrentDictionary<IPAddress, (Counter, Counter)> _clientIpAddressesUdpTcp;
+            UniqueAddressCounter _clientSketch;
 
             bool _truncationFoundDuringMerge;
             long _totalClientsDailyStatsSummation;
@@ -2023,6 +2113,7 @@ namespace ZenitiumDns.Core.Dns
                     case 8:
                     case 9:
                     case 10:
+                    case 11:
                         _totalQueries = bR.ReadInt64();
                         _totalNoError = bR.ReadInt64();
                         _totalServerFailure = bR.ReadInt64();
@@ -2115,6 +2206,14 @@ namespace ZenitiumDns.Core.Dns
                             }
                         }
 
+                        if ((version >= 11) && bR.ReadBoolean())
+                        {
+                            UniqueAddressCounter clientSketch = new UniqueAddressCounter(bR);
+
+                            if (clientSketch.Precision == CLIENT_SKETCH_PRECISION)
+                                _clientSketch = clientSketch;
+                        }
+
                         break;
 
                     default:
@@ -2151,6 +2250,71 @@ namespace ZenitiumDns.Core.Dns
                 return (new Counter(), new Counter());
             }
 
+            private static int CompareDomainHits(KeyValuePair<string, Counter> item1, KeyValuePair<string, Counter> item2)
+            {
+                return item2.Value.Count.CompareTo(item1.Value.Count);
+            }
+
+            private static int CompareClientHits(KeyValuePair<IPAddress, (Counter, Counter)> item1, KeyValuePair<IPAddress, (Counter, Counter)> item2)
+            {
+                long hits1 = item1.Value.Item1.Count + item1.Value.Item2.Count;
+                long hits2 = item2.Value.Item1.Count + item2.Value.Item2.Count;
+
+                return hits2.CompareTo(hits1);
+            }
+
+            private static ConcurrentDictionary<string, Counter> GetTopDomains(ConcurrentDictionary<string, Counter> domains, int limit)
+            {
+                List<KeyValuePair<string, Counter>> topDomainsList = new List<KeyValuePair<string, Counter>>(domains);
+
+                topDomainsList.Sort(CompareDomainHits);
+
+                if (topDomainsList.Count > limit)
+                    topDomainsList.RemoveRange(limit, topDomainsList.Count - limit);
+
+                ConcurrentDictionary<string, Counter> topDomains = new ConcurrentDictionary<string, Counter>(1, topDomainsList.Count);
+
+                foreach (KeyValuePair<string, Counter> item in topDomainsList)
+                    topDomains[item.Key] = item.Value;
+
+                return topDomains;
+            }
+
+            private static void WriteDomains(BinaryWriter bW, ConcurrentDictionary<string, Counter> domains, int limit)
+            {
+                List<KeyValuePair<string, Counter>> domainsList = new List<KeyValuePair<string, Counter>>(domains);
+
+                if ((limit > 0) && (domainsList.Count > limit))
+                {
+                    domainsList.Sort(CompareDomainHits);
+                    domainsList.RemoveRange(limit, domainsList.Count - limit);
+                }
+
+                bW.Write(domainsList.Count);
+
+                foreach (KeyValuePair<string, Counter> item in domainsList)
+                {
+                    bW.BaseStream.WriteShortString(item.Key);
+                    bW.Write(item.Value.Count);
+                }
+            }
+
+            private UniqueAddressCounter GetOrCreateClientSketch()
+            {
+                UniqueAddressCounter clientSketch = _clientSketch;
+                if (clientSketch is not null)
+                    return clientSketch;
+
+                clientSketch = new UniqueAddressCounter(CLIENT_SKETCH_PRECISION);
+
+                foreach (KeyValuePair<IPAddress, (Counter, Counter)> clientIpAddress in _clientIpAddressesUdpTcp)
+                    clientSketch.Add(clientIpAddress.Key);
+
+                _clientSketch = clientSketch;
+
+                return clientSketch;
+            }
+
             #endregion
 
             #region public
@@ -2185,7 +2349,7 @@ namespace ZenitiumDns.Core.Dns
                     return (new Counter(), new Counter());
 
                 counters = _clientIpAddressesUdpTcp.GetOrAdd(clientIpAddress, GetNewCounterTuple);
-                _totalClients = _clientIpAddressesUdpTcp.Count;
+                _totalClients = Math.Max(_totalClients, _clientIpAddressesUdpTcp.Count);
 
                 return counters;
             }
@@ -2343,10 +2507,32 @@ namespace ZenitiumDns.Core.Dns
                     counterTuple.Item2.Merge(clientIpAddress.Value.Item2);
                 }
 
-                _totalClients = _clientIpAddressesUdpTcp.Count;
+                UniqueAddressCounter sourceClientSketch = statCounter._clientSketch;
+
+                if ((sourceClientSketch is not null) || (_clientSketch is not null))
+                {
+                    UniqueAddressCounter clientSketch = GetOrCreateClientSketch();
+
+                    if (sourceClientSketch is not null)
+                    {
+                        clientSketch.Merge(sourceClientSketch);
+                    }
+                    else
+                    {
+                        foreach (KeyValuePair<IPAddress, (Counter, Counter)> clientIpAddress in statCounter._clientIpAddressesUdpTcp)
+                            clientSketch.Add(clientIpAddress.Key);
+                    }
+
+                    _totalClients = Math.Max(_clientIpAddressesUdpTcp.Count, clientSketch.Estimate());
+                }
+                else
+                {
+                    _totalClients = _clientIpAddressesUdpTcp.Count;
+                }
+
                 _totalClientsDailyStatsSummation += statCounter._totalClients;
 
-                if (isDailyStatCounter && (statCounter._totalClients > statCounter._clientIpAddressesUdpTcp.Count))
+                if (isDailyStatCounter && (sourceClientSketch is null) && (statCounter._totalClients > statCounter._clientIpAddressesUdpTcp.Count))
                     _truncationFoundDuringMerge = true;
             }
 
@@ -2356,43 +2542,13 @@ namespace ZenitiumDns.Core.Dns
 
                 if (_queryDomains.Count > limit)
                 {
-                    List<KeyValuePair<string, Counter>> topDomainsList = new List<KeyValuePair<string, Counter>>(_queryDomains);
-
-                    topDomainsList.Sort(delegate (KeyValuePair<string, Counter> item1, KeyValuePair<string, Counter> item2)
-                    {
-                        return item2.Value.Count.CompareTo(item1.Value.Count);
-                    });
-
-                    if (topDomainsList.Count > limit)
-                        topDomainsList.RemoveRange(limit, topDomainsList.Count - limit);
-
-                    ConcurrentDictionary<string, Counter> queryDomains = new ConcurrentDictionary<string, Counter>(1, topDomainsList.Count);
-
-                    foreach (KeyValuePair<string, Counter> item in topDomainsList)
-                        queryDomains[item.Key] = item.Value;
-
-                    _queryDomains = queryDomains;
+                    _queryDomains = GetTopDomains(_queryDomains, limit);
                     truncated = true;
                 }
 
                 if (_queryBlockedDomains.Count > limit)
                 {
-                    List<KeyValuePair<string, Counter>> topBlockedDomainsList = new List<KeyValuePair<string, Counter>>(_queryBlockedDomains);
-
-                    topBlockedDomainsList.Sort(delegate (KeyValuePair<string, Counter> item1, KeyValuePair<string, Counter> item2)
-                    {
-                        return item2.Value.Count.CompareTo(item1.Value.Count);
-                    });
-
-                    if (topBlockedDomainsList.Count > limit)
-                        topBlockedDomainsList.RemoveRange(limit, topBlockedDomainsList.Count - limit);
-
-                    ConcurrentDictionary<string, Counter> queryBlockedDomains = new ConcurrentDictionary<string, Counter>(1, topBlockedDomainsList.Count);
-
-                    foreach (KeyValuePair<string, Counter> item in topBlockedDomainsList)
-                        queryBlockedDomains[item.Key] = item.Value;
-
-                    _queryBlockedDomains = queryBlockedDomains;
+                    _queryBlockedDomains = GetTopDomains(_queryBlockedDomains, limit);
                     truncated = true;
                 }
 
@@ -2428,14 +2584,12 @@ namespace ZenitiumDns.Core.Dns
                 if (_clientIpAddressesUdpTcp.Count > limit)
                 {
                     List<KeyValuePair<IPAddress, (Counter, Counter)>> topClientsList = new List<KeyValuePair<IPAddress, (Counter, Counter)>>(_clientIpAddressesUdpTcp);
+                    UniqueAddressCounter clientSketch = _clientSketch ?? new UniqueAddressCounter(CLIENT_SKETCH_PRECISION);
 
-                    topClientsList.Sort(delegate (KeyValuePair<IPAddress, (Counter, Counter)> x, KeyValuePair<IPAddress, (Counter, Counter)> y)
-                    {
-                        long x1 = x.Value.Item1.Count + x.Value.Item2.Count;
-                        long y1 = y.Value.Item1.Count + y.Value.Item2.Count;
+                    foreach (KeyValuePair<IPAddress, (Counter, Counter)> item in topClientsList)
+                        clientSketch.Add(item.Key);
 
-                        return y1.CompareTo(x1);
-                    });
+                    topClientsList.Sort(CompareClientHits);
 
                     if (topClientsList.Count > limit)
                         topClientsList.RemoveRange(limit, topClientsList.Count - limit);
@@ -2445,6 +2599,7 @@ namespace ZenitiumDns.Core.Dns
                     foreach (KeyValuePair<IPAddress, (Counter, Counter)> item in topClientsList)
                         clientIpAddressesUdpTcp[item.Key] = item.Value;
 
+                    _clientSketch = clientSketch;
                     _clientIpAddressesUdpTcp = clientIpAddressesUdpTcp;
                     truncated = true;
                 }
@@ -2452,13 +2607,13 @@ namespace ZenitiumDns.Core.Dns
                 return truncated;
             }
 
-            public void WriteTo(BinaryWriter bW)
+            public void WriteTo(BinaryWriter bW, int limit = 0)
             {
                 if (!_locked)
                     throw new DnsServerException("StatCounter must be locked.");
 
                 bW.Write(Encoding.ASCII.GetBytes("SC"));
-                bW.Write((byte)10);
+                bW.Write((byte)11);
 
                 bW.Write(_totalQueries);
                 bW.Write(_totalNoError);
@@ -2474,27 +2629,14 @@ namespace ZenitiumDns.Core.Dns
 
                 bW.Write(_totalClients);
 
-                {
-                    bW.Write(_queryDomains.Count);
-                    foreach (KeyValuePair<string, Counter> queryDomain in _queryDomains)
-                    {
-                        bW.BaseStream.WriteShortString(queryDomain.Key);
-                        bW.Write(queryDomain.Value.Count);
-                    }
-                }
+                WriteDomains(bW, _queryDomains, limit);
+                WriteDomains(bW, _queryBlockedDomains, limit);
 
                 {
-                    bW.Write(_queryBlockedDomains.Count);
-                    foreach (KeyValuePair<string, Counter> queryBlockedDomain in _queryBlockedDomains)
-                    {
-                        bW.BaseStream.WriteShortString(queryBlockedDomain.Key);
-                        bW.Write(queryBlockedDomain.Value.Count);
-                    }
-                }
+                    List<KeyValuePair<DnsResourceRecordType, Counter>> queryTypes = new List<KeyValuePair<DnsResourceRecordType, Counter>>(_queryTypes);
 
-                {
-                    bW.Write(_queryTypes.Count);
-                    foreach (KeyValuePair<DnsResourceRecordType, Counter> queryType in _queryTypes)
+                    bW.Write(queryTypes.Count);
+                    foreach (KeyValuePair<DnsResourceRecordType, Counter> queryType in queryTypes)
                     {
                         bW.Write((ushort)queryType.Key);
                         bW.Write(queryType.Value.Count);
@@ -2502,22 +2644,46 @@ namespace ZenitiumDns.Core.Dns
                 }
 
                 {
-                    bW.Write(_protocolTypes.Count);
-                    foreach (KeyValuePair<DnsTransportProtocol, Counter> protocolType in _protocolTypes)
+                    List<KeyValuePair<DnsTransportProtocol, Counter>> protocolTypes = new List<KeyValuePair<DnsTransportProtocol, Counter>>(_protocolTypes);
+
+                    bW.Write(protocolTypes.Count);
+                    foreach (KeyValuePair<DnsTransportProtocol, Counter> protocolType in protocolTypes)
                     {
                         bW.Write((byte)protocolType.Key);
                         bW.Write(protocolType.Value.Count);
                     }
                 }
 
+                List<KeyValuePair<IPAddress, (Counter, Counter)>> clientIpAddresses = new List<KeyValuePair<IPAddress, (Counter, Counter)>>(_clientIpAddressesUdpTcp);
+                UniqueAddressCounter clientSketch = _clientSketch;
+
+                if ((limit > 0) && (clientIpAddresses.Count > limit))
                 {
-                    bW.Write(_clientIpAddressesUdpTcp.Count);
-                    foreach (KeyValuePair<IPAddress, (Counter, Counter)> clientIpAddress in _clientIpAddressesUdpTcp)
-                    {
-                        clientIpAddress.Key.WriteTo(bW);
-                        bW.Write(clientIpAddress.Value.Item1.Count);
-                        bW.Write(clientIpAddress.Value.Item2.Count);
-                    }
+                    clientSketch = (clientSketch is null) ? new UniqueAddressCounter(CLIENT_SKETCH_PRECISION) : clientSketch.Clone();
+
+                    foreach (KeyValuePair<IPAddress, (Counter, Counter)> clientIpAddress in clientIpAddresses)
+                        clientSketch.Add(clientIpAddress.Key);
+
+                    clientIpAddresses.Sort(CompareClientHits);
+                    clientIpAddresses.RemoveRange(limit, clientIpAddresses.Count - limit);
+                }
+
+                bW.Write(clientIpAddresses.Count);
+                foreach (KeyValuePair<IPAddress, (Counter, Counter)> clientIpAddress in clientIpAddresses)
+                {
+                    clientIpAddress.Key.WriteTo(bW);
+                    bW.Write(clientIpAddress.Value.Item1.Count);
+                    bW.Write(clientIpAddress.Value.Item2.Count);
+                }
+
+                if (clientSketch is null)
+                {
+                    bW.Write(false);
+                }
+                else
+                {
+                    bW.Write(true);
+                    clientSketch.WriteTo(bW);
                 }
             }
 

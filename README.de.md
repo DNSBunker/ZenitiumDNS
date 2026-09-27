@@ -19,7 +19,7 @@ Um die Namensauflösung kümmert sich kaum jemand, denn sie läuft automatisch i
 Der Funktionsumfang ist auf den Betrieb als Resolver zugeschnitten. Autoritative Zonen, Zonentransfers, DHCP-Server, Clustering und die Windows-Komponenten des Originals sind entfernt. Für interne Domains gibt es Weiterleitungszonen (Conditional Forwarder), in denen sich einzelne Einträge lokal überschreiben lassen.
 
 # Herkunft
-ZenitiumDNS ist ein Fork von [Technitium DNS Server](https://github.com/TechnitiumSoftware/DnsServer) und [TechnitiumLibrary](https://github.com/TechnitiumSoftware/TechnitiumLibrary) von Shreyas Zare auf Basis von Version 15.5.1. Beide Projekte stehen unter der GNU General Public License v3.0, ebenso dieser Fork. Welche Änderungen der Fork enthält, steht in [NOTICE.md](NOTICE.md). Alle Unterschiede zum Original-Build mit Messwerten sind in [CHANGELOG-ZenitiumDNS.md](CHANGELOG-ZenitiumDNS.md) aufgeführt.
+ZenitiumDNS ist ein Fork von [Technitium DNS Server](https://github.com/TechnitiumSoftware/DnsServer) und [TechnitiumLibrary](https://github.com/TechnitiumSoftware/TechnitiumLibrary) von Shreyas Zare auf Basis von Version 15.5.1. Beide Projekte stehen unter der GNU General Public License v3.0, ebenso dieser Fork. Welche Änderungen der Fork enthält, steht in [NOTICE.de.md](NOTICE.de.md). Alle Unterschiede zum Original-Build mit Messwerten sind in [CHANGELOG-ZenitiumDNS.de.md](CHANGELOG-ZenitiumDNS.de.md) aufgeführt.
 
 # Was ZenitiumDNS gegenüber dem Original bietet
 - Auf öffentliche Resolver zugeschnitten: Autoritative Zonen (Primary, Secondary, Stub, Catalog), DNSSEC-Signierung, Zonentransfers, NOTIFY, dynamische Updates, TSIG, DHCP-Server, Clustering, Windows-Dienst, Systemtray und Windows-Installer sind entfernt. Das verkleinert Angriffsfläche und Weboberfläche.
@@ -46,6 +46,7 @@ ZenitiumDNS ist ein Fork von [Technitium DNS Server](https://github.com/Techniti
   - rund 70 % weniger CPU-Zeit pro Anfrage bei gleicher Last,
   - rund 65 % weniger Speicherallokationen,
   - keine minütlichen Hänger durch die Cache-Wartung.
+- Deutlich weniger Speicherbedarf: 2,5 Millionen Domains aus Blocklisten belegen rund 80 statt 395 MB, und die Statistik behält von jeder abgeschlossenen Minute nur die Top 1000. Unter Last ist rund 70 % weniger Speicher belegt.
 - Zusätzliche Fehler- und Sicherheitskorrekturen im Cache, in den Query-Log-Apps, der Weboberfläche und bei DNS-over-TCP/TLS.
 
 # Funktionen
@@ -149,8 +150,8 @@ fehlende Übersetzungen an und prüfen, ob Markup und Platzhalter übereinstimme
 - [Debian-Paket](setup/debian/README.Debian.de.md)
 - [Umgebungsvariablen](docs/EnvironmentVariables.de.md)
 - [Unterstützte RFCs](docs/SupportedRFCs.de.md)
-- [Änderungsprotokoll](CHANGELOG.md)
-- [Unterschiede zum Original-Build](CHANGELOG-ZenitiumDNS.md)
+- [Änderungsprotokoll](CHANGELOG.de.md)
+- [Unterschiede zum Original-Build](CHANGELOG-ZenitiumDNS.de.md)
 
 # Lizenz
 ZenitiumDNS ist freie Software unter der [GNU General Public License v3.0](LICENSE).

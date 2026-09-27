@@ -1,5 +1,7 @@
 # Advanced Blocking App
 
+[Deutsche Version](README.de.md)
+
 A DNS App for ZenitiumDNS that provides advanced domain blocking capabilities with support for client-based group policies, multiple block list formats, and fine-grained control over blocking behavior.
 
 ## Overview
@@ -14,23 +16,25 @@ The Advanced Blocking App extends the DNS server's blocking capabilities by allo
 
 ## ⚠️ Important Warning:  Overlap with Default Blocking
 
-> **When this app is installed and enabled, it operates independently from the DNS server's built-in blocking feature.**
+> **When this app is enabled, it operates independently from the DNS server's built-in blocking feature.**
 >
 > The Advanced Blocking App does **NOT** use the block lists configured in the DNS server's Settings > Blocking page.  You must configure all block lists, allow lists, and blocking behavior within the app's own configuration.
 >
 > **You should choose one approach:**
 >
-> - **Option A:** Use the DNS server's built-in blocking (Settings > Blocking) and do NOT install this app
-> - **Option B:** Install this app and configure ALL your blocking rules here, ignoring the built-in blocking settings
+> - **Option A:** Use the DNS server's built-in blocking (Settings > Blocking) and do NOT enable this app
+> - **Option B:** Enable this app and configure ALL your blocking rules here, ignoring the built-in blocking settings
 >
 > Using both simultaneously may lead to confusion, as they process requests independently.  The app's blocking is evaluated during the request processing pipeline and may take precedence based on processing order.
 
 ## Installation
 
-1. Open the ZenitiumDNS web console
-2. Navigate to **Apps** section
-3. Click **App Store** and find the Advanced Blocking App to install
-4. Configure the app by clicking on the **Config** button
+The app ships with ZenitiumDNS and is installed on the first start, but stays disabled.
+
+1. Open the ZenitiumDNS web interface
+2. Go to **Apps**
+3. Click **Enable** next to *Advanced blocking* (AdvancedBlockingApp)
+4. Click **Configure** to edit the configuration
 
 ## Configuration
 

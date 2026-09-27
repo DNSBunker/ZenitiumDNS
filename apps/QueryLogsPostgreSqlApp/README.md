@@ -1,5 +1,7 @@
 # Query Logs PostgreSQL App
 
+[Deutsche Version](README.de.md)
+
 A DNS App for ZenitiumDNS that logs DNS queries to a PostgreSQL database.
 
 ## Overview
@@ -63,7 +65,7 @@ The database table stores values for some fields in numeric format. The fields a
   "maxLogDays": 0,
   "maxLogRecords": 0,
   "databaseName": "DnsQueryLogs",
-  "connectionString": "Server=192.168.180.128; Port=3306; Uid=username; Pwd=password;"
+  "connectionString": "Server=127.0.0.1; Port=5432; Username=username; Password=password;"
 }
 ```
 

@@ -1,5 +1,7 @@
 # DNS64 App
 
+[Deutsche Version](README.de.md)
+
 A DNS App for ZenitiumDNS that implements RFC 6147 DNS64 functionality to enable IPv6-only clients to access IPv4-only resources through DNS protocol translation.
 
 This app extends ZenitiumDNS to synthesize AAAA records from A records, allowing IPv6-only clients to discover and access IPv4 resources when used in conjunction with a NAT64 gateway. The app operates as both a post-processor for recursive queries and an authoritative request handler for reverse DNS lookups within the DNS64 address space.
@@ -25,7 +27,7 @@ DNS64 **must** be deployed in conjunction with a functional NAT64 gateway. The a
 
 **Operational Risk:**
 
-Installing and enabling DNS64 App without a corresponding NAT64 gateway in place will cause **connectivity failures** for IPv6-only clients attempting to reach IPv4-only destinations. Synthesized AAAA records will resolve to IPv6 addresses that cannot be routed without NAT64.
+Enabling DNS64 App without a corresponding NAT64 gateway in place will cause **connectivity failures** for IPv6-only clients attempting to reach IPv4-only destinations. Synthesized AAAA records will resolve to IPv6 addresses that cannot be routed without NAT64.
 
 **Deployment Options:**
 
@@ -38,13 +40,15 @@ DNS64 operates as a post-processor in the DNS resolution pipeline. It processes 
 
 ## Installation
 
-1. Open the ZenitiumDNS web console
+The app ships with ZenitiumDNS and is installed on the first start, but stays disabled.
 
-2. Navigate to **Apps** section
+1. Open the ZenitiumDNS web interface
 
-3. Click **App Store** and find the DNS64 App to install
+2. Go to **Apps**
 
-4. Configure the app by clicking on the **Config** button
+3. Click **Enable** next to *DNS64* (Dns64App)
+
+4. Click **Configure** to edit the configuration
 
 ## Configuration
 
@@ -92,7 +96,7 @@ Each group object defines a complete DNS64 policy.
 | `name` | string | (required) | Unique identifier for the group. Referenced by `networkGroupMap`. |
 | `enableDns64` | boolean | (required) | Group-level DNS64 enable flag. Allows per-group activation/deactivation. |
 | `dns64PrefixMap` | object | (required) | Maps IPv4 network ranges to DNS64 IPv6 prefixes. Keys are IPv4 CIDR, values are IPv6 prefix strings or `null`. |
-| `excludedIpv6` | array | `[]` | Array of IPv6 network addresses (CIDR) to exclude from DNS64 processing. Existing AAAA records in these ranges suppress synthesis. |
+| `excludedIpv6` | array | `[]` | Array of IPv6 network addresses (CIDR) whose AAAA records are ignored. If all AAAA records of a response fall within these ranges, AAAA records are synthesized as if none existed. |
 
 ### DNS64 Prefix Mapping
 
@@ -133,11 +137,11 @@ Longest prefix match. The most specific IPv4 network match determines the DNS64 
 
 ### IPv6 Exclusion List
 
-The `excludedIpv6` array prevents DNS64 synthesis when existing AAAA records fall within specified IPv6 ranges.
+The `excludedIpv6` array lists IPv6 ranges whose existing AAAA records are ignored (RFC 6147, section 5.1.4). If a response only contains AAAA records within these ranges, DNS64 synthesizes AAAA records anyway.
 
 **Purpose:**
 
-Prevents synthesis when legitimate IPv6 addresses already exist but should not be used (e.g., IPv4-mapped IPv6 addresses).
+Ensures synthesis when AAAA records exist but must not be used (e.g., IPv4-mapped IPv6 addresses).
 
 **Common Exclusions:**
 
@@ -225,7 +229,7 @@ The DNS64 App implements two distinct processing paths:
 1. **Request Validation:** App checks if DNS64 is enabled globally and DNSSEC is not requested
 2. **Response Analysis:** App evaluates recursive resolver response for AAAA query
 3. **Group Selection:** Client source IP is matched against `networkGroupMap` using longest prefix match
-4. **Exclusion Check:** If AAAA records exist and fall outside `excludedIpv6` ranges, no synthesis occurs
+4. **Exclusion Check:** AAAA records within `excludedIpv6` ranges are removed; if AAAA records outside these ranges remain, no synthesis occurs
 5. **A Record Query:** If no valid AAAA records exist, app performs internal A record query
 6. **Prefix Mapping:** Each A record is matched against `dns64PrefixMap` using longest prefix match
 7. **AAAA Synthesis:** IPv4 addresses are embedded in IPv6 prefix to generate synthesized AAAA records
@@ -321,7 +325,7 @@ App returns authoritative CNAME from `.ip6.arpa` to `.in-addr.arpa`, then server
 
 ### DNS64 Prefix Length Error
 
-**Symptoms:** Configuration validation fails with "DNS64 prefix can have only the following prefixes" error.
+**Symptoms:** The configuration is rejected with the error "The DNS64 prefix must have a length of 32, 40, 48, 56, 64 or 96."
 
 **Resolution:**
 

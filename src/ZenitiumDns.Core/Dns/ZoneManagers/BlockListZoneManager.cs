@@ -23,7 +23,6 @@ using System.Collections.Generic;
 using System.IO;
 using System.Net;
 using System.Net.Http;
-using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
@@ -333,23 +332,36 @@ namespace ZenitiumDns.Core.Dns.ZoneManagers
             return word;
         }
 
-        private Queue<string> ReadListFile(Uri listUrl, bool isAllowList, out Queue<string> exceptionDomains)
+        private string GetListFilePath(Uri listUrl)
         {
-            Queue<string> domains = new Queue<string>();
-            exceptionDomains = new Queue<string>();
+            if (listUrl.IsFile)
+                return listUrl.LocalPath;
+
+            return GetBlockListFilePath(listUrl);
+        }
+
+        private void ReadListFile(Uri listUrl, bool isAllowList, Action<string> addDomain, Action<string> addExceptionDomain)
+        {
+            int domainCount = 0;
+            int exceptionDomainCount = 0;
+
+            void AddDomain(string domain)
+            {
+                addDomain(domain);
+                domainCount++;
+            }
+
+            void AddExceptionDomain(string domain)
+            {
+                addExceptionDomain(domain);
+                exceptionDomainCount++;
+            }
 
             try
             {
                 _dnsServer.LogManager.Write("DNS Server is reading " + (isAllowList ? "allow" : "block") + " list from: " + listUrl.AbsoluteUri);
 
-                string listFilePath;
-
-                if (listUrl.IsFile)
-                    listFilePath = listUrl.LocalPath;
-                else
-                    listFilePath = GetBlockListFilePath(listUrl);
-
-                using (FileStream fS = new FileStream(listFilePath, FileMode.Open, FileAccess.Read))
+                using (FileStream fS = new FileStream(GetListFilePath(listUrl), FileMode.Open, FileAccess.Read, FileShare.Read, 65536))
                 {
                     StreamReader sR = new StreamReader(fS, true);
 
@@ -384,14 +396,14 @@ namespace ZenitiumDns.Core.Dns.ZoneManagers
                                 options = line.Substring(i + 1);
 
                                 if (((options.Length == 0) || (options.StartsWith('$') && (options.Contains("doc") || options.Contains("all")))) && DnsClient.IsDomainNameValid(domain))
-                                    domains.Enqueue(domain.ToLowerInvariant());
+                                    AddDomain(domain.ToLowerInvariant());
                             }
                             else
                             {
                                 domain = line.Substring(2);
 
                                 if (DnsClient.IsDomainNameValid(domain))
-                                    domains.Enqueue(domain.ToLowerInvariant());
+                                    AddDomain(domain.ToLowerInvariant());
                             }
                         }
                         else if (line.StartsWith("@@||", StringComparison.Ordinal))
@@ -403,14 +415,14 @@ namespace ZenitiumDns.Core.Dns.ZoneManagers
                                 options = line.Substring(i + 1);
 
                                 if (((options.Length == 0) || (options.StartsWith('$') && (options.Contains("doc") || options.Contains("all")))) && DnsClient.IsDomainNameValid(domain))
-                                    exceptionDomains.Enqueue(domain.ToLowerInvariant());
+                                    AddExceptionDomain(domain.ToLowerInvariant());
                             }
                             else
                             {
                                 domain = line.Substring(4);
 
                                 if (DnsClient.IsDomainNameValid(domain))
-                                    exceptionDomains.Enqueue(domain.ToLowerInvariant());
+                                    AddExceptionDomain(domain.ToLowerInvariant());
                             }
                         }
                         else
@@ -463,19 +475,17 @@ namespace ZenitiumDns.Core.Dns.ZoneManagers
                             if (IPAddress.TryParse(hostname, out _))
                                 continue;
 
-                            domains.Enqueue(hostname);
+                            AddDomain(hostname);
                         }
                     }
                 }
 
-                _dnsServer.LogManager.Write("DNS Server read " + (isAllowList ? "allow" : "block") + " list file (" + domains.Count + " domain(s) blocked" + (exceptionDomains.Count > 0 ? ", " + exceptionDomains.Count + " domain(s) allowed" : "") + ") from: " + listUrl.AbsoluteUri);
+                _dnsServer.LogManager.Write("DNS Server read " + (isAllowList ? "allow" : "block") + " list file (" + domainCount + " domain(s) " + (isAllowList ? "allowed" : "blocked") + (exceptionDomainCount > 0 ? ", " + exceptionDomainCount + " domain(s) " + (isAllowList ? "blocked" : "allowed") : "") + ") from: " + listUrl.AbsoluteUri);
             }
             catch (Exception ex)
             {
                 _dnsServer.LogManager.Write("DNS Server failed to read " + (isAllowList ? "allow" : "block") + " list from: " + listUrl.AbsoluteUri, ex);
             }
-
-            return domains;
         }
 
         private static int ToLowerDomain(string domain, Span<char> buffer)
@@ -492,9 +502,9 @@ namespace ZenitiumDns.Core.Dns.ZoneManagers
 
             while (true)
             {
-                if (listZone.BlockLookup.TryGetValue(current, out string zone, out int combination))
+                if (listZone.BlockZone.TryGetValue(current, out ushort combination))
                 {
-                    blockedDomain = zone;
+                    blockedDomain = current.ToString();
                     return listZone.BlockListCombinations[combination];
                 }
 
@@ -518,7 +528,7 @@ namespace ZenitiumDns.Core.Dns.ZoneManagers
 
             while (true)
             {
-                if (listZone.AllowLookup.Contains(current))
+                if (listZone.AllowZone.Contains(current))
                     return true;
 
                 int i = current.IndexOf('.');
@@ -771,65 +781,40 @@ namespace ZenitiumDns.Core.Dns.ZoneManagers
                     blockListUrls.Add(new Uri(listUri));
             }
 
-            Dictionary<Uri, Queue<string>> allowListQueues = new Dictionary<Uri, Queue<string>>(allowListUrls.Count);
-            Dictionary<Uri, Queue<string>> blockListQueues = new Dictionary<Uri, Queue<string>>(blockListUrls.Count);
-            int totalAllowedDomains = 0;
-            int totalBlockedDomains = 0;
+            long totalFileSize = 0;
 
-            foreach (Uri allowListUrl in allowListUrls)
+            foreach (Uri listUrl in blockListUrls)
             {
-                if (!allowListQueues.ContainsKey(allowListUrl))
+                try
                 {
-                    Queue<string> allowListQueue = ReadListFile(allowListUrl, true, out Queue<string> blockListQueue);
-
-                    totalAllowedDomains += allowListQueue.Count;
-                    allowListQueues.Add(allowListUrl, allowListQueue);
-
-                    totalBlockedDomains += blockListQueue.Count;
-                    blockListQueues.Add(allowListUrl, blockListQueue);
+                    FileInfo fileInfo = new FileInfo(GetListFilePath(listUrl));
+                    if (fileInfo.Exists)
+                        totalFileSize += fileInfo.Length;
                 }
+                catch
+                { }
             }
 
-            foreach (Uri blockListUrl in blockListUrls)
-            {
-                if (!blockListQueues.ContainsKey(blockListUrl))
-                {
-                    Queue<string> blockListQueue = ReadListFile(blockListUrl, false, out Queue<string> allowListQueue);
+            ListZone currentListZone = _listZone;
 
-                    totalBlockedDomains += blockListQueue.Count;
-                    blockListQueues.Add(blockListUrl, blockListQueue);
-
-                    totalAllowedDomains += allowListQueue.Count;
-                    allowListQueues.Add(blockListUrl, allowListQueue);
-                }
-            }
-
-            HashSet<string> allowListZone = new HashSet<string>(totalAllowedDomains);
-
-            foreach (KeyValuePair<Uri, Queue<string>> allowListQueue in allowListQueues)
-            {
-                Queue<string> queue = allowListQueue.Value;
-
-                while (queue.Count > 0)
-                    allowListZone.Add(queue.Dequeue());
-            }
-
-            Dictionary<string, int> blockListZone = new Dictionary<string, int>(totalBlockedDomains);
+            DomainTable allowListZone = new DomainTable(currentListZone.AllowZone.Count);
+            DomainTable blockListZone = new DomainTable(Math.Max(currentListZone.BlockZone.Count, totalFileSize / 24));
             List<Uri[]> combinations = new List<Uri[]>();
             Dictionary<(int, int), int> extendedCombinations = new Dictionary<(int, int), int>();
+            HashSet<Uri> loadedListUrls = new HashSet<Uri>();
             int listIndex = 0;
 
-            foreach (KeyValuePair<Uri, Queue<string>> blockListQueue in blockListQueues)
+            void LoadList(Uri listUrl, bool isAllowList)
             {
-                Queue<string> queue = blockListQueue.Value;
-                Uri listUrl = blockListQueue.Key;
+                if (!loadedListUrls.Add(listUrl))
+                    return;
+
+                int currentListIndex = listIndex++;
                 int singleCombination = -1;
 
-                while (queue.Count > 0)
+                void AddBlocked(string domain)
                 {
-                    ref int combination = ref CollectionsMarshal.GetValueRefOrAddDefault(blockListZone, queue.Dequeue(), out bool exists);
-
-                    if (!exists)
+                    if (blockListZone.TryAdd(domain, 0, out int handle))
                     {
                         if (singleCombination < 0)
                         {
@@ -837,26 +822,52 @@ namespace ZenitiumDns.Core.Dns.ZoneManagers
                             combinations.Add([listUrl]);
                         }
 
-                        combination = singleCombination;
+                        blockListZone.SetValue(handle, (ushort)singleCombination);
                     }
-                    else if (Array.IndexOf(combinations[combination], listUrl) < 0)
+                    else if (handle >= 0)
                     {
-                        if (!extendedCombinations.TryGetValue((combination, listIndex), out int extendedCombination))
+                        int combination = blockListZone.GetValue(handle);
+
+                        if (Array.IndexOf(combinations[combination], listUrl) >= 0)
+                            return;
+
+                        if (!extendedCombinations.TryGetValue((combination, currentListIndex), out int extendedCombination))
                         {
+                            if (combinations.Count > ushort.MaxValue)
+                                return;
+
                             extendedCombination = combinations.Count;
                             combinations.Add([.. combinations[combination], listUrl]);
-                            extendedCombinations.Add((combination, listIndex), extendedCombination);
+                            extendedCombinations.Add((combination, currentListIndex), extendedCombination);
                         }
 
-                        combination = extendedCombination;
+                        blockListZone.SetValue(handle, (ushort)extendedCombination);
                     }
                 }
 
-                listIndex++;
+                void AddAllowed(string domain)
+                {
+                    allowListZone.TryAdd(domain, 0, out _);
+                }
+
+                if (isAllowList)
+                    ReadListFile(listUrl, true, AddAllowed, AddBlocked);
+                else
+                    ReadListFile(listUrl, false, AddBlocked, AddAllowed);
             }
+
+            foreach (Uri allowListUrl in allowListUrls)
+                LoadList(allowListUrl, true);
+
+            foreach (Uri blockListUrl in blockListUrls)
+                LoadList(blockListUrl, false);
+
+            allowListZone.TrimExcess();
+            blockListZone.TrimExcess();
 
             _listZone = new ListZone(allowListZone, blockListZone, combinations.ToArray());
 
+            _dnsServer.LogManager.Write("DNS Server block list zone uses " + WebUtilities.GetFormattedSize(allowListZone.MemoryUsage + blockListZone.MemoryUsage) + " of memory for " + blockListZone.Count + " blocked and " + allowListZone.Count + " allowed domain(s).");
             _dnsServer.LogManager.Write("DNS Server block list zone was loaded successfully.");
         }
 
@@ -1139,20 +1150,16 @@ namespace ZenitiumDns.Core.Dns.ZoneManagers
 
         sealed class ListZone
         {
-            public static readonly ListZone Empty = new ListZone(new HashSet<string>(), new Dictionary<string, int>(), []);
+            public static readonly ListZone Empty = new ListZone(DomainTable.Empty, DomainTable.Empty, []);
 
-            public readonly HashSet<string> AllowZone;
-            public readonly HashSet<string>.AlternateLookup<ReadOnlySpan<char>> AllowLookup;
-            public readonly Dictionary<string, int> BlockZone;
-            public readonly Dictionary<string, int>.AlternateLookup<ReadOnlySpan<char>> BlockLookup;
+            public readonly DomainTable AllowZone;
+            public readonly DomainTable BlockZone;
             public readonly Uri[][] BlockListCombinations;
 
-            public ListZone(HashSet<string> allowZone, Dictionary<string, int> blockZone, Uri[][] blockListCombinations)
+            public ListZone(DomainTable allowZone, DomainTable blockZone, Uri[][] blockListCombinations)
             {
                 AllowZone = allowZone;
-                AllowLookup = allowZone.GetAlternateLookup<ReadOnlySpan<char>>();
                 BlockZone = blockZone;
-                BlockLookup = blockZone.GetAlternateLookup<ReadOnlySpan<char>>();
                 BlockListCombinations = blockListCombinations;
             }
         }

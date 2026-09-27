@@ -1,5 +1,7 @@
 # Advanced Forwarding App
 
+[Deutsche Version](README.de.md)
+
 A DNS App for ZenitiumDNS that performs conditional forwarding to configured upstream resolvers.
 
 ## Overview

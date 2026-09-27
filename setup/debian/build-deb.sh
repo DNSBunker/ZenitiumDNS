@@ -109,8 +109,11 @@ install -m 0644 "$scriptDir/copyright" "$docDir/copyright"
 install -m 0644 "$scriptDir/README.Debian.md" "$docDir/README.Debian.md"
 install -m 0644 "$scriptDir/README.Debian.de.md" "$docDir/README.Debian.de.md"
 install -m 0644 "$rootDir/README.md" "$docDir/README.md"
+install -m 0644 "$rootDir/README.de.md" "$docDir/README.de.md"
 install -m 0644 "$rootDir/NOTICE.md" "$docDir/NOTICE.md"
+install -m 0644 "$rootDir/NOTICE.de.md" "$docDir/NOTICE.de.md"
 gzip -9 -n -c "$rootDir/CHANGELOG.md" > "$docDir/changelog.gz"
+gzip -9 -n -c "$rootDir/CHANGELOG.de.md" > "$docDir/changelog.de.gz"
 
 find "$pkgDir" -type d -exec chmod 0755 {} +
 find "$pkgDir" -type f -exec chmod 0644 {} +
@@ -127,7 +130,7 @@ Priority: optional
 Architecture: $arch
 Maintainer: $maintainer
 Installed-Size: $installedSize
-Depends: libc6 (>= 2.27), libgcc-s1, libstdc++6, libssl3t64 | libssl3, libicu76 | libicu78 | libicu74 | libicu72, ca-certificates, tzdata, passwd
+Depends: libc6 (>= 2.34), libgcc-s1, libstdc++6, libssl3t64 | libssl3, libicu76 | libicu78 | libicu74 | libicu72, ca-certificates, tzdata, passwd
 Recommends: iproute2
 Suggests: libmsquic, dnsutils
 Provides: dns-server

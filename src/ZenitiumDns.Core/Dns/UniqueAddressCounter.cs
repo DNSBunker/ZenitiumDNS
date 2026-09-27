@@ -19,6 +19,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 using System;
 using System.Buffers.Binary;
+using System.IO;
 using System.Net;
 using System.Numerics;
 
@@ -26,10 +27,58 @@ namespace ZenitiumDns.Core.Dns
 {
     sealed class UniqueAddressCounter
     {
-        const int PRECISION = 14;
-        const int REGISTER_COUNT = 1 << PRECISION;
+        #region variables
 
-        readonly byte[] _registers = new byte[REGISTER_COUNT];
+        const int MIN_PRECISION = 4;
+        const int MAX_PRECISION = 16;
+
+        readonly int _precision;
+        readonly byte[] _registers;
+
+        #endregion
+
+        #region constructor
+
+        public UniqueAddressCounter(int precision = 14)
+        {
+            if ((precision < MIN_PRECISION) || (precision > MAX_PRECISION))
+                throw new ArgumentOutOfRangeException(nameof(precision));
+
+            _precision = precision;
+            _registers = new byte[1 << precision];
+        }
+
+        public UniqueAddressCounter(BinaryReader bR)
+        {
+            _precision = bR.ReadByte();
+
+            if ((_precision < MIN_PRECISION) || (_precision > MAX_PRECISION))
+                throw new InvalidDataException("Unique address counter precision is invalid.");
+
+            _registers = bR.ReadBytes(1 << _precision);
+
+            if (_registers.Length != (1 << _precision))
+                throw new EndOfStreamException();
+        }
+
+        #endregion
+
+        #region private
+
+        private static ulong Mix(ulong value)
+        {
+            value ^= value >> 33;
+            value *= 0xff51afd7ed558ccdUL;
+            value ^= value >> 33;
+            value *= 0xc4ceb9fe1a85ec53UL;
+            value ^= value >> 33;
+
+            return value;
+        }
+
+        #endregion
+
+        #region public
 
         public void Add(IPAddress address)
         {
@@ -51,20 +100,43 @@ namespace ZenitiumDns.Core.Dns
                 hash = Mix(high ^ Mix(low ^ 0x0600000000000000UL));
             }
 
-            int index = (int)(hash >> (64 - PRECISION));
-            ulong remaining = (hash << PRECISION) | (1UL << (PRECISION - 1));
+            int index = (int)(hash >> (64 - _precision));
+            ulong remaining = (hash << _precision) | (1UL << (_precision - 1));
             byte rank = (byte)(BitOperations.LeadingZeroCount(remaining) + 1);
 
             if (_registers[index] < rank)
                 _registers[index] = rank;
         }
 
+        public void Merge(UniqueAddressCounter counter)
+        {
+            if (counter._precision != _precision)
+                throw new ArgumentException("Unique address counters with different precision cannot be merged.", nameof(counter));
+
+            byte[] registers = counter._registers;
+
+            for (int i = 0; i < _registers.Length; i++)
+            {
+                if (_registers[i] < registers[i])
+                    _registers[i] = registers[i];
+            }
+        }
+
+        public UniqueAddressCounter Clone()
+        {
+            UniqueAddressCounter clone = new UniqueAddressCounter(_precision);
+            Buffer.BlockCopy(_registers, 0, clone._registers, 0, _registers.Length);
+
+            return clone;
+        }
+
         public long Estimate()
         {
+            int registerCount = _registers.Length;
             double sum = 0;
             int zeros = 0;
 
-            for (int i = 0; i < REGISTER_COUNT; i++)
+            for (int i = 0; i < registerCount; i++)
             {
                 byte register = _registers[i];
                 sum += 1.0 / (1UL << register);
@@ -73,24 +145,28 @@ namespace ZenitiumDns.Core.Dns
                     zeros++;
             }
 
-            double alpha = 0.7213 / (1 + (1.079 / REGISTER_COUNT));
-            double estimate = alpha * REGISTER_COUNT * REGISTER_COUNT / sum;
+            double alpha = 0.7213 / (1 + (1.079 / registerCount));
+            double estimate = alpha * registerCount * registerCount / sum;
 
-            if ((estimate <= 2.5 * REGISTER_COUNT) && (zeros > 0))
-                estimate = REGISTER_COUNT * Math.Log((double)REGISTER_COUNT / zeros);
+            if ((estimate <= 2.5 * registerCount) && (zeros > 0))
+                estimate = registerCount * Math.Log((double)registerCount / zeros);
 
             return (long)Math.Round(estimate);
         }
 
-        private static ulong Mix(ulong value)
+        public void WriteTo(BinaryWriter bW)
         {
-            value ^= value >> 33;
-            value *= 0xff51afd7ed558ccdUL;
-            value ^= value >> 33;
-            value *= 0xc4ceb9fe1a85ec53UL;
-            value ^= value >> 33;
-
-            return value;
+            bW.Write((byte)_precision);
+            bW.Write(_registers);
         }
+
+        #endregion
+
+        #region properties
+
+        public int Precision
+        { get { return _precision; } }
+
+        #endregion
     }
 }

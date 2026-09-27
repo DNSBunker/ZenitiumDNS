@@ -75,6 +75,17 @@ Then enter `fullchain.pem` as TLS certificate and `privkey.pem` as private key u
 
 For Windows 11, iOS and macOS to switch to DoH, DoT or DoQ automatically via DDR, the certificate should also contain the IP addresses of the server. Let's Encrypt does not issue such certificates. The self-test shows whether the certificate contains IP addresses.
 
+## Local block lists
+
+Block lists can also be local files (`file:///path/to/list.txt`). The service runs with `ProtectHome` and `PrivateTmp` and therefore cannot see files under `/home`, `/root` or `/tmp`. Put local lists into the configuration folder, for example into `/etc/zenitiumdns/lists`, readable for the user `zenitiumdns`:
+
+```
+sudo install -d -o zenitiumdns -g zenitiumdns -m 0750 /etc/zenitiumdns/lists
+sudo install -o zenitiumdns -g zenitiumdns -m 0640 my-list.txt /etc/zenitiumdns/lists/
+```
+
+Then add `file:///etc/zenitiumdns/lists/my-list.txt` under Settings > Blocking.
+
 ## Root zone and trust anchors
 
 The service downloads the root zone and the arpa zone from `www.internic.net` and the root trust anchors from `data.iana.org` over HTTPS and only uses them after full verification (ZONEMD digest, DNSSEC signatures, ICANN signature of the anchors). The server needs outgoing HTTPS access for this. Without that access or if verification fails, the resolver queries the root servers as usual. Settings and status are under Settings > Resolver.
@@ -82,6 +93,18 @@ The service downloads the root zone and the arpa zone from `www.internic.net` an
 ## Monitoring
 
 The dashboard of the web interface shows queries per second, response times, cache hit, failure and block rates, the state of IPv6 connectivity and periods from one minute to twelve months. Below, live graphs show CPU, memory, garbage collection, thread pool, queues and pending resolutions of the last five minutes; this can be turned off under Settings > Server. The watchdog intervenes on bottlenecks by itself and reports it in the self-test and in the log.
+
+## Memory
+
+Most of the memory is taken by the block lists, the cache and the statistics of the current hour. With HaGeZi TIF and PRO (2.5 million domains, about 80 MB) and a steady 2,000 queries/s, around 1 GB of resident memory is normal; part of it is free space inside the heap that the garbage collection reuses without pausing queries. The size of the cache is set under Settings > Cache, and the watchdog trims the cache when memory runs short.
+
+If memory is tight, the garbage collection can be told to compact the heap more often in `/etc/default/zenitiumdns`:
+
+```
+DOTNET_GCConserveMemory=5
+```
+
+Values range from 0 to 9. In the test, level 7 reduced resident memory by about 30 % but paused query processing for up to half a second at a time, so only raise it if memory matters more than response times. Restart the service afterwards with `sudo systemctl restart zenitiumdns`.
 
 ## Managing the service
 

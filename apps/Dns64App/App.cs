@@ -145,14 +145,21 @@ namespace Dns64
                     }
 
                     IPAddress ipv6Address = (answer.RDATA as DnsAAAARecordData).Address;
+                    bool excluded = false;
 
                     foreach (NetworkAddress excludedIpv6 in group.ExcludedIpv6)
                     {
-                        if (!excludedIpv6.Contains(ipv6Address))
+                        if (excludedIpv6.Contains(ipv6Address))
                         {
-                            newAnswer.Add(answer);
-                            synthesizeAAAA = false;
+                            excluded = true;
+                            break;
                         }
+                    }
+
+                    if (!excluded)
+                    {
+                        newAnswer.Add(answer);
+                        synthesizeAAAA = false;
                     }
                 }
             }

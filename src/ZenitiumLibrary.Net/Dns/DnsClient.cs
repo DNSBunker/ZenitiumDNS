@@ -1101,19 +1101,7 @@ namespace ZenitiumLibrary.Net.Dns
                                 {
                                     if (!wasIPv4Attempted)
                                     {
-                                        switch (ipv6Mode)
-                                        {
-                                            case IPv6Mode.Enabled:
-                                                nameServers.Insert(nameServerIndex + 1, currentNameServer);
-                                                break;
-
-                                            case IPv6Mode.Preferred:
-                                                nameServers.Add(currentNameServer);
-                                                break;
-
-                                            default:
-                                                throw new InvalidOperationException();
-                                        }
+                                        nameServers.Insert(nameServerIndex + 1, currentNameServer);
 
                                         if ((referralLimit < nameServers.Count) && (referralLimit < MAX_NS_TO_QUERY_PER_REFERRAL))
                                             referralLimit++;

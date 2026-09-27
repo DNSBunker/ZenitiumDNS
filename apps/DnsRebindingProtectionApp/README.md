@@ -1,5 +1,7 @@
 # DNS Rebinding Protection App
 
+[Deutsche Version](README.de.md)
+
 ## Summary
 
 A DNS App for ZenitiumDNS that protects against DNS rebinding attacks by filtering private IP addresses from DNS responses for non-local domain names.
@@ -43,13 +45,15 @@ The app processes responses **after** the DNS server completes resolution but **
 
 ## Installation
 
-1. Open the ZenitiumDNS web console
+The app ships with ZenitiumDNS and is installed on the first start, but stays disabled.
 
-2. Navigate to **Apps** section
+1. Open the ZenitiumDNS web interface
 
-3. Click **App Store** and find the DNS Rebinding Protection App to install
+2. Go to **Apps**
 
-4. Configure the app by clicking on the **Config** button
+3. Click **Enable** next to *DNS rebinding protection* (DnsRebindingProtectionApp)
+
+4. Click **Configure** to edit the configuration
 
 ## Configuration
 
@@ -266,4 +270,4 @@ The app applies the following processing pipeline to each DNS response:
 2. Check JSON syntax validity using a JSON validator
 3. Review DNS server logs for configuration parsing errors
 
-**Resolution**: Reload the app through the web console by saving its config again.
+**Resolution**: Reload the app through the web interface by saving its configuration again.

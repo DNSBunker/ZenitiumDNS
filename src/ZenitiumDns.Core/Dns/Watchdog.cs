@@ -37,7 +37,7 @@ namespace ZenitiumDns.Core.Dns
         const long LOG_FILE_MAX_BYTES = 512L * 1024 * 1024;
         const double MEMORY_LOAD_CRITICAL = 0.92;
         const double CACHE_TRIM_RATIO = 0.3;
-        const int STATS_QUEUE_MAX = 500000;
+        const int STATS_QUEUE_MAX = StatsManager.MAX_QUEUE_LENGTH;
         const long THREAD_POOL_QUEUE_HIGH = 2000;
         const int THREAD_POOL_STREAK = 3;
         const int MAX_MIN_WORKER_THREADS = 1024;

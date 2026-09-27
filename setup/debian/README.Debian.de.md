@@ -75,6 +75,17 @@ Anschließend unter Einstellungen > Verschlüsselte Protokolle als TLS-Zertifika
 
 Damit Windows 11, iOS und macOS per DDR automatisch auf DoH, DoT oder DoQ wechseln, sollte das Zertifikat zusätzlich die IP-Adressen des Servers enthalten. Let's Encrypt stellt solche Zertifikate nicht aus. Der Selbsttest zeigt an, ob das Zertifikat IP-Adressen enthält.
 
+## Lokale Blocklisten
+
+Blocklisten können auch lokale Dateien sein (`file:///pfad/zur/liste.txt`). Der Dienst läuft mit `ProtectHome` und `PrivateTmp` und sieht deshalb keine Dateien unter `/home`, `/root` oder `/tmp`. Lege lokale Listen in den Konfigurationsordner, etwa nach `/etc/zenitiumdns/lists`, lesbar für den Benutzer `zenitiumdns`:
+
+```
+sudo install -d -o zenitiumdns -g zenitiumdns -m 0750 /etc/zenitiumdns/lists
+sudo install -o zenitiumdns -g zenitiumdns -m 0640 meine-liste.txt /etc/zenitiumdns/lists/
+```
+
+Anschließend unter Einstellungen > Blockierung `file:///etc/zenitiumdns/lists/meine-liste.txt` eintragen.
+
 ## Root-Zone und Vertrauensanker
 
 Der Dienst lädt Root-Zone und arpa-Zone von `www.internic.net` sowie die Root-Vertrauensanker von `data.iana.org` über HTTPS und nutzt sie erst nach vollständiger Prüfung (ZONEMD-Prüfsumme, DNSSEC-Signaturen, ICANN-Signatur der Anker). Der Server braucht dafür ausgehenden HTTPS-Zugang. Ohne diesen Zugang oder bei gescheiterter Prüfung fragt der Resolver wie gewohnt die Root-Server. Einstellungen und Status stehen unter Einstellungen > Resolver.
@@ -82,6 +93,18 @@ Der Dienst lädt Root-Zone und arpa-Zone von `www.internic.net` sowie die Root-V
 ## Überwachung
 
 Die Übersicht der Weboberfläche zeigt Anfragen pro Sekunde, Antwortzeiten, Cache-Treffer-, Fehler- und Blockierquote, den Zustand der IPv6-Anbindung und Zeiträume von einer Minute bis zwölf Monaten. Darunter zeigen Echtzeitgraphen CPU, Arbeitsspeicher, Garbage Collection, Threadpool, Warteschlangen und laufende Auflösungen der letzten fünf Minuten; abschaltbar unter Einstellungen > Server. Der Wächter greift bei Engpässen selbst ein und meldet das im Selbsttest und im Protokoll.
+
+## Arbeitsspeicher
+
+Den meisten Arbeitsspeicher belegen die Blocklisten, der Cache und die Statistik der laufenden Stunde. Mit HaGeZi TIF und PRO (2,5 Millionen Domains, rund 80 MB) und dauerhaft 2.000 Anfragen/s ist rund 1 GB belegter Speicher normal; ein Teil davon ist freier Platz im Heap, den die Garbage Collection ohne Pausen für Anfragen wiederverwendet. Die Größe des Caches steht unter Einstellungen > Cache, bei Speichermangel kürzt der Wächter den Cache.
+
+Ist der Speicher knapp, lässt sich die Garbage Collection in `/etc/default/zenitiumdns` anweisen, den Heap öfter zu verdichten:
+
+```
+DOTNET_GCConserveMemory=5
+```
+
+Erlaubt sind Werte von 0 bis 9. Im Test senkte Stufe 7 den belegten Speicher um rund 30 %, hielt die Anfragebearbeitung dafür aber zeitweise bis zu einer halben Sekunde an; die Einstellung lohnt sich also nur, wenn Speicher wichtiger ist als Antwortzeiten. Danach den Dienst mit `sudo systemctl restart zenitiumdns` neu starten.
 
 ## Dienst verwalten
 

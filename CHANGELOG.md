@@ -1,1238 +1,1262 @@
-# ZenitiumDNS Änderungsprotokoll
+# ZenitiumDNS changelog
 
-## ZenitiumDNS 15.5.1 (Paket 15.5.1-6)
-Veröffentlicht: 27. September 2026
+[Deutsche Version](CHANGELOG.de.md)
 
-### Neu
-- Vollständige englische Fassung: Weboberfläche, Selbsttest, Meldungen des Servers und des Wächters, Status von Root-Zone und Vertrauensankern, App-Beschreibungen und -Fehlermeldungen, die Startseite für DNS-over-HTTPS sowie die Ausgaben des Installers gibt es auf Deutsch und Englisch.
-- Die Sprache wird nach der Installation beim ersten Anmelden in einem Dialog gewählt und gilt für alle Benutzer des Servers. Umstellen lässt sie sich jederzeit unter Einstellungen > Server > Sprache; die Seite lädt danach in der neuen Sprache. Bis zur Auswahl richtet sich die Anmeldeseite nach der Browsersprache und bietet einen Umschalter Deutsch/Englisch.
-- Datums- und Zahlenformate folgen der Sprache (Englisch: `2026-09-27 18:08`, `1,234`).
-- Die englischen Texte der Weboberfläche stehen in `www/lang/en.json`. `tools/i18n.py` meldet fehlende Übersetzungen und prüft, ob Markup und Platzhalter übereinstimmen.
+## ZenitiumDNS 15.5.1 (package 15.5.1-7)
+Released: 28 September 2026
 
-### Weitere Änderungen
-- Neues Repository https://github.com/DNSBunker/ZenitiumDNS. Die Update-Prüfung fragt dessen Releases ab.
-- README, README.Debian und die Dokumentation in `docs` gibt es auf Englisch und Deutsch, die Paketbeschreibung ist englisch.
-- Konfigurationsformat Version 6 für die Weboberfläche (Sprache). Ältere Versionen von ZenitiumDNS können es nicht lesen. Bestehende Installationen werden beim Update auf Deutsch gesetzt und fragen nicht erneut nach der Sprache.
+### Memory
+- Statistics: every completed minute is cut down to its top 1,000 domains, blocked domains and clients right away. Previously every minute of the last one to two hours kept all entries, up to 200,000 per list, which is where most of the memory of a busy public resolver went. Unique clients of a cut-down list are counted with a 4 KB HyperLogLog sketch, so client numbers stay accurate to about 2 %. Top lists of the last hour are built from the top 1,000 of every minute; with very evenly spread traffic the counts of lower-ranked entries can come out too low.
+- Hourly statistics files store the totals of the hour (top 10,000 per list) and the cut-down minutes: 0.6 to 1.4 MB instead of about 100 MB for a busy hour. The views for a day, week, month, year and custom ranges only read the hour totals, and old files are read minute by minute, so complete minute data no longer ends up in memory. Daily totals are built without keeping 24 complete hours in memory, the cache of daily totals keeps 32 days and the year view keeps monthly totals. A day is only saved once it is complete (with a 10 minute grace period).
+- Block lists are stored compactly: all domains as bytes in 1 MB blocks with a hash table instead of one .NET string per domain. HaGeZi TIF and PRO (2.49 million domains) take 78 instead of 215 MB, and full garbage collections no longer have to walk 2.5 million objects. Lists are read line by line while loading instead of first being kept in memory completely.
+- The statistics queue holds at most 100,000 entries; further entries are dropped until it has caught up, and the watchdog empties a full queue. Previously it could grow until the watchdog stepped in at 500,000 entries.
+- Measured on 2 CPU cores with HaGeZi TIF and PRO and 2,000 queries/s from 50,000 clients (40 % unique names) for 30 minutes: 271 instead of 945 MB of live objects (3.8 instead of 18.2 million), resident memory about 970 MB instead of about 2 GB. The rest is free space inside the heap that the background garbage collection reuses; `DOTNET_GCConserveMemory` reduces it at the cost of pauses of up to half a second (see README.Debian).
 
-## ZenitiumDNS 15.5.1 (Paket 15.5.1-5)
-Veröffentlicht: 27. September 2026
+### Fixed
+- With "Prefer IPv6", resolution failed with SERVFAIL for zones whose name servers have neither glue nor AAAA records (such as `x.com` or `abs.twimg.com`) once IPv6 was confirmed as working. The resolver tried the AAAA lookups of all name servers first, and the A lookups ended up behind the limit of 8 name servers per referral. The A lookup now directly follows the AAAA lookup of the same name server (upstream issue #2175). In a test with 8 such name servers: previously SERVFAIL, now answered.
+- DNS64 app: with more than one entry in `excludedIpv6`, AAAA records were kept as soon as they were outside any single range, so the exclusion hardly ever took effect and answers could contain records twice.
+- Overlapping runs of the statistics maintenance are skipped.
 
-### Neu
-- Prefetch nach Anteil der TTL: Ein Eintrag wird erneuert, sobald bei einer Abfrage nur noch 10 % seiner ursprünglichen TTL übrig sind, bei einer TTL von einer Stunde also in den letzten 6 Minuten statt erst in den letzten 9 Sekunden. Häufig abgefragte Einträge laufen so nicht mehr ab. Einstellbar von 0 bis 50 % unter Einstellungen > Cache, 0 schaltet auf den bisherigen Sekunden-Auslöser zurück.
-- Der Selbsttest vergleicht die Systemzeit mit dem Date-Header von data.iana.org und meldet eine Abweichung ab 5 Sekunden als Warnung, ab 60 Sekunden als Fehler. Zusätzlich prüft er, ob der Kernel die Uhr per NTP synchronisiert.
+### Other changes
+- Statistics files: format version 11 for counters and version 2 for hourly files. Older versions of ZenitiumDNS cannot read them. Existing files are read and converted when they are saved again.
+- The Debian package requires glibc 2.34 or later, which the SQLite library of the query log app needs (upstream issue #2178), and also installs the German README, NOTICE and changelog.
+- All documents are available in English and German: English under the usual file name, German as `.de.md`. New are the English CHANGELOG, CHANGELOG-ZenitiumDNS and NOTICE and German versions of all app READMEs. The app READMEs describe installation without the app store, and the PostgreSQL example uses the PostgreSQL port.
+- README.Debian explains where local block lists (`file://`) must be stored so that the hardened service can read them, and how memory can be reduced further.
+- The upstream issues of Technitium DNS Server up to 27 September 2026 were reviewed: #2175 is fixed as described, #2162, #2173 and #2174 were already fixed, and #2178 is covered by the package dependency; the remaining reports concern features that ZenitiumDNS does not contain or the reporter's network.
 
-### Sicherheit
-- Protokoll-Injektion: Steuerzeichen aus Domainnamen, HTTP-Headern oder Fehlermeldungen konnten eigene Zeilen ins Protokoll schreiben. Sie erscheinen jetzt als `\xNN`, Zeilenumbrüche in Stacktraces werden eingerückt.
-- Die Statistik begrenzt Domains, blockierte Domains und Clients auf je 200.000 Einträge pro Zeitabschnitt. Zufällige Namen oder gefälschte Absender konnten den Arbeitsspeicher bisher unbegrenzt füllen.
-- Der DNS-Parser lehnt leere RDATA bei Typen ab, die Daten brauchen, und Mailbox-Namen mit mehr als einem `@`. Solche Pakete lösten beim Weiterverarbeiten Ausnahmen aus. Gefunden mit einem Fuzzer, danach 12 Millionen Durchläufe ohne Fehler.
-- Weboberfläche: Sitzungsdaten, Benutzertyp, App-Klassen und APL-Einträge werden vor der Ausgabe kodiert.
+## ZenitiumDNS 15.5.1 (package 15.5.1-6)
+Released: 27 September 2026
 
-### Weitere Änderungen
-- Konfigurationsformat Version 13 für die DNS-Einstellungen. Ältere Versionen von ZenitiumDNS können es nicht lesen.
+### New
+- Complete English version: the web interface, the self-test, server and watchdog messages, the status of the root zone and trust anchors, app descriptions and error messages, the DNS-over-HTTPS landing page and the installer output are available in German and English.
+- The language is chosen in a dialog at the first sign-in after installation and applies to all users of the server. It can be changed at any time under Settings > Server > Language; the page then reloads in the new language. Until a language is chosen, the sign-in page follows the browser language and offers a German/English switch.
+- Date and number formats follow the language (English: `2026-09-27 18:08`, `1,234`).
+- The English texts of the web interface are in `www/lang/en.json`. `tools/i18n.py` reports missing translations and checks that markup and placeholders match.
 
-## ZenitiumDNS 15.5.1 (Paket 15.5.1-4)
-Veröffentlicht: 27. September 2026
+### Other changes
+- New repository https://github.com/DNSBunker/ZenitiumDNS. The update check queries its releases.
+- The README, README.Debian and the documentation in `docs` are available in English and German; the package description is in English.
+- Configuration format version 6 for the web interface (language). Older versions of ZenitiumDNS cannot read it. Existing installations are set to German on update and are not asked for the language again.
 
-### Neu
-- DDR kann DoH eines vorgeschalteten Reverse Proxys wie Caddy oder nginx ankündigen, wenn dieser Server selbst nur DNS-over-HTTP ohne TLS anbietet. Unter Einstellungen > Protokolle > Automatische Erkennung (DDR) lassen sich öffentlicher Port und HTTP/3 einstellen. Die SVCB-Einträge für `_dns.resolver.arpa` und `_dns.<Servername>` enthalten dann `alpn=h2,h3`, den Port und `dohpath=/dns-query{?dns}` zusätzlich zu DoT und DoQ.
-- Die Apps sind auf Deutsch: Anzeigenamen wie „Erweiterte Blockierung“ oder „Anfrageprotokoll (SQLite)“, Beschreibungen, Handler-Beschreibungen und die Fehlermeldungen bei ungültiger Konfiguration. Der technische Name bleibt als Kennung daneben sichtbar. Beim Paket-Update werden die mitgelieferten Apps aktualisiert, ihre Konfiguration bleibt erhalten.
-- Die Übersicht zeigt „Rekursiv mit lokaler Root-Zone“, solange die lokale Root-Zone aktiv ist.
+## ZenitiumDNS 15.5.1 (package 15.5.1-5)
+Released: 27 September 2026
 
-### Behoben
-- Der Knopf „Jetzt prüfen“ für IPv6 meldete immer „IPv6 nicht erreichbar“ und zeigte „IPv6 ausgesetzt“, auch wenn IPv6 funktionierte, weil die Oberfläche die Antwort falsch auslas. Nach einem Neustart sah wieder alles normal aus. Der Knopf zeigt jetzt das Ergebnis der Prüfung der IPv6-Root-Server samt Fehlertext und wann zuletzt ein Nameserver über IPv6 geantwortet hat.
-- Eine fehlgeschlagene Prüfung der IPv6-Root-Server setzt IPv6 nicht mehr aus, solange in den letzten 30 Sekunden Nameserver über IPv6 geantwortet haben.
-- Ein Klick auf „Jetzt prüfen“ während einer laufenden Prüfung lieferte sofort den alten Stand. Jetzt wird das Ergebnis der laufenden Prüfung abgewartet.
-- Mit der Einstellung „IPv6 bevorzugen“ scheiterten auf Servern ohne funktionierendes IPv6 die ersten Anfragen nach jedem Neustart mit SERVFAIL, weil Nameserver ohne Glue-Einträge zuerst über IPv6 angefragt wurden. Bis IPv6 bestätigt ist, wird jetzt auch in diesem Modus zuerst die IPv4-Adresse aufgelöst. Auf dem Testserver wurden danach alle Domains direkt nach dem Start in 50 bis 200 ms beantwortet.
+### New
+- Prefetch by share of the TTL: a record is refreshed as soon as only 10 % of its original TTL is left when it is queried, so with a TTL of one hour within the last 6 minutes instead of only within the last 9 seconds. Frequently queried records therefore no longer expire. Adjustable from 0 to 50 % under Settings > Cache; 0 switches back to the previous trigger in seconds.
+- The self-test compares the system time with the Date header of data.iana.org and reports a deviation of 5 seconds or more as a warning and of 60 seconds or more as an error. It also checks whether the kernel synchronizes the clock via NTP.
 
-### Weitere Änderungen
-- Konfigurationsformat Version 12 für die DNS-Einstellungen. Ältere Versionen von ZenitiumDNS können es nicht lesen.
+### Security
+- Log injection: control characters from domain names, HTTP headers or error messages could write their own lines into the log. They now appear as `\xNN`, and line breaks in stack traces are indented.
+- The statistics limit domains, blocked domains and clients to 200,000 entries each per time slice. Random names or spoofed senders could previously fill the memory without limit.
+- The DNS parser rejects empty RDATA for types that require data, and mailbox names with more than one `@`. Such packets caused exceptions during further processing. Found with a fuzzer, followed by 12 million runs without errors.
+- Web interface: session data, user type, app classes and APL records are encoded before output.
 
-## ZenitiumDNS 15.5.1 (Paket 15.5.1-3)
-Veröffentlicht: 27. September 2026
+### Other changes
+- Configuration format version 13 for the DNS settings. Older versions of ZenitiumDNS cannot read it.
 
-### Lokale Root-Zone und Vertrauensanker (RFC 8806)
-- Der Resolver lädt die Root-Zone und die arpa-Zone von IANA, prüft sie vollständig und nutzt sie lokal. Die Root-Zone wird über ihre ZONEMD-Prüfsumme (RFC 8976) und die DNSSEC-Signaturen geprüft, die arpa-Zone über die Signaturen aller Einträge und den DS-Eintrag aus der Root-Zone. Delegationen zu Top-Level-Domains und Reverse-Zonen kommen aus dem Speicher, Anfragen nach nicht existierenden Top-Level-Domains beantwortet der Resolver selbst mit NXDOMAIN und signiertem NSEC-Beweis. Im Test gingen bei zufälligen Fantasie-TLDs und neuen Domains keine Anfragen mehr an die Root-Server.
-- Die Zonen werden stündlich per If-Modified-Since aktualisiert. Eine Zone, deren Prüfung scheitert, deren Signaturen ablaufen oder die älter als ihr SOA-Expire-Wert ist, wird nicht verwendet; der Resolver fragt dann wie bisher die Root-Server.
-- Die Vertrauensanker (Root-KSK) werden täglich aus `root-anchors.xml` von IANA übernommen, aber nur, wenn die Signatur der Datei auf die ICANN Root CA zurückführt. Beide ICANN-Wurzelzertifikate werden mitgeliefert.
-- Für alle drei lässt sich unter Einstellungen > Resolver wählen: automatisch von IANA, eine eigene, in der Weboberfläche bearbeitete Version oder aus (Root-Server fragen bzw. mitgelieferte Anker). Der Selbsttest zeigt Seriennummer, Prüfergebnis und Fehler.
+## ZenitiumDNS 15.5.1 (package 15.5.1-4)
+Released: 27 September 2026
 
-### Unverschlüsseltes DNS (Do53)
-- Neuer Do53-Modus: aktiviert, nur DDR beantworten und andere Anfragen verwerfen, nur DDR beantworten und andere Anfragen mit `REFUSED` ablehnen, oder deaktiviert (Port 53 wird nicht geöffnet). Anfragen von Loopback-Adressen werden immer beantwortet. Der Selbsttest warnt, wenn Do53 nur DDR beantwortet, es aber keine DDR-Einträge gibt.
-- Anfragen von Adressen auf Client-Sperrlisten werden über UDP jetzt vor dem Parsen verworfen.
+### New
+- DDR can announce the DoH endpoint of an upstream reverse proxy such as Caddy or nginx when this server itself only offers DNS-over-HTTP without TLS. The public port and HTTP/3 can be set under Settings > Encrypted protocols > Automatic discovery (DDR). The SVCB records for `_dns.resolver.arpa` and `_dns.<server name>` then contain `alpn=h2,h3`, the port and `dohpath=/dns-query{?dns}` in addition to DoT and DoQ.
+- The apps are in German: display names such as "Erweiterte Blockierung" (Advanced blocking) or "Anfrageprotokoll (SQLite)" (Query logs (SQLite)), descriptions, handler descriptions and the error messages for invalid configurations. The technical name stays visible next to it as an identifier. On package updates the bundled apps are updated and their configuration is kept.
+- The dashboard shows "Recursive with local root zone" while the local root zone is active.
 
-### Standardwerte für öffentliche Resolver
-- Ratenbegrenzung: je IPv4-Adresse 1000 Anfragen/s über UDP und 5000 über TCP, DoT, DoH und DoQ, ohne Sammellimit für `/24`, das CGNAT-Pools ausbremst; IPv6 `/64` 1000 und 5000, `/48` 10.000 und 50.000. Alle gebremsten UDP-Anfragen erhalten eine TC-Antwort, damit echte Clients sofort auf TCP ausweichen. Die bisherigen Standardwerte werden beim Update ersetzt, eigene Werte bleiben erhalten. Die Oberfläche prüft Bereiche und bietet „Empfohlene Werte eintragen“, der Selbsttest warnt vor Limits, die Clients hinter NAT treffen.
-- Maximale TTL im Cache 1 Tag statt 7 Tage, neue Obergrenze für negative Antworten von 1 Stunde (RFC 2308), auch für die an Clients ausgelieferte SOA-TTL.
-- Auflösungsfehler werden nicht mehr protokolliert und, falls eingeschaltet, einzeilig ohne Stacktrace. Beim Update wird dieses Protokoll abgeschaltet.
-- Protokolldateien werden 7 Tage aufbewahrt.
+### Fixed
+- The "Check now" button for IPv6 always reported "IPv6 unreachable" and showed "IPv6 suspended", even when IPv6 worked, because the interface read the response incorrectly. After a restart everything looked normal again. The button now shows the result of the check of the IPv6 root servers including the error text, and when a name server last answered over IPv6.
+- A failed check of the IPv6 root servers no longer suspends IPv6 as long as name servers have answered over IPv6 within the last 30 seconds.
+- Clicking "Check now" while a check was running immediately returned the old state. The result of the running check is now awaited.
+- With the "Prefer IPv6" setting, the first queries after every restart failed with SERVFAIL on servers without working IPv6, because name servers without glue records were queried over IPv6 first. Until IPv6 is confirmed, the IPv4 address is now resolved first in this mode as well. On the test server, all domains were then answered in 50 to 200 ms right after the start.
 
-### Blockierung
-- Firefox-Canary-Domain `use-application-dns.net` und Chromes Preflight-Prüfung `dns-tunnel-check.googlezip.net` lassen sich mit NXDOMAIN beantworten. Firefox bleibt dann beim Resolver des Netzes, Chrome fragt vor dem Öffnen vorab geladener Seiten nach.
-- Der Serverdomainname und alle Namen im TLS-Zertifikat stehen samt Subdomains automatisch auf der Allowlist, damit Listen wie HaGeZis DoH-Bypass den eigenen DoH- oder DoT-Hostnamen nicht sperren.
+### Other changes
+- Configuration format version 12 for the DNS settings. Older versions of ZenitiumDNS cannot read it.
+
+## ZenitiumDNS 15.5.1 (package 15.5.1-3)
+Released: 27 September 2026
+
+### Local root zone and trust anchors (RFC 8806)
+- The resolver downloads the root zone and the arpa zone from IANA, verifies them completely and uses them locally. The root zone is verified via its ZONEMD digest (RFC 8976) and the DNSSEC signatures, the arpa zone via the signatures of all records and the DS record from the root zone. Delegations to top-level domains and reverse zones come from memory, and queries for nonexistent top-level domains are answered by the resolver itself with NXDOMAIN and a signed NSEC proof. In testing, random made-up TLDs and new domains no longer caused any queries to the root servers.
+- The zones are updated hourly with If-Modified-Since. A zone that fails verification, whose signatures expire or that is older than its SOA expire value is not used; the resolver then queries the root servers as before.
+- The trust anchors (root KSK) are taken daily from IANA's `root-anchors.xml`, but only if the signature of the file chains up to the ICANN Root CA. Both ICANN root certificates are bundled.
+- For all three, Settings > Resolver offers a choice: automatically from IANA, a custom version edited in the web interface, or off (query the root servers or use the bundled anchors). The self-test shows the serial number, the verification result and errors.
+
+### Unencrypted DNS (Do53)
+- New Do53 mode: enabled; answer DDR only and drop other queries; answer DDR only and refuse other queries with `REFUSED`; or disabled (port 53 is not opened). Queries from loopback addresses are always answered. The self-test warns if Do53 only answers DDR but there are no DDR records.
+- Queries from addresses on client block lists are now dropped over UDP before they are parsed.
+
+### Defaults for public resolvers
+- Rate limiting: 1000 queries/s per IPv4 address over UDP and 5000 over TCP, DoT, DoH and DoQ, without an aggregate limit for `/24`, which slows down CGNAT pools; IPv6 `/64` 1000 and 5000, `/48` 10,000 and 50,000. All rate-limited UDP queries receive a TC response so that real clients switch to TCP immediately. The previous defaults are replaced on update, custom values are kept. The interface validates ranges and offers "Fill in recommended values", and the self-test warns about limits that hit clients behind NAT.
+- Maximum TTL in the cache 1 day instead of 7 days, and a new cap of 1 hour for negative answers (RFC 2308), also for the SOA TTL sent to clients.
+- Resolution errors are no longer logged, and if logging is turned on, as a single line without stack trace. This log is turned off on update.
+- Log files are kept for 7 days.
+
+### Blocking
+- The Firefox canary domain `use-application-dns.net` and Chrome's preflight check `dns-tunnel-check.googlezip.net` can be answered with NXDOMAIN. Firefox then stays with the network's resolver, and Chrome asks before opening preloaded pages.
+- The server domain name and all names in the TLS certificate, including their subdomains, are automatically on the allow list, so that lists such as HaGeZi's DoH bypass do not block your own DoH or DoT host name.
 
 ### Apps
-- Der App-Store und das Installieren, Aktualisieren und Deinstallieren von Apps entfallen. Alle Apps kommen mit dem Paket; fehlende mitgelieferte Apps werden beim Start wieder bereitgestellt, vorhandene bei Paket-Updates aktualisiert.
-- Neue Konfigurationsoberfläche: ein Formular mit deutschen Bezeichnungen für jede App, abgeleitet aus ihrer `dnsApp.config`, mit Listen, Gruppen und Zuordnungstabellen. Im Expertenmodus lässt sich das JSON direkt bearbeiten; ungültiges JSON wird nicht gespeichert.
+- The app store and installing, updating and uninstalling apps are gone. All apps come with the package; missing bundled apps are restored at startup, existing ones are updated on package updates.
+- New configuration interface: a form with German labels for every app, derived from its `dnsApp.config`, with lists, groups and mapping tables. In expert mode the JSON can be edited directly; invalid JSON is not saved.
 
-### Übersicht und Überwachung
-- Zeiträume von 1, 5 und 30 Minuten mit sekundengenauer Auflösung; Standard bleibt die letzte Stunde.
-- Echtzeitgraphen interner Prozesse: CPU, Arbeitsspeicher, Garbage Collection, Threadpool, Warteschlangen, laufende Auflösungen, Anfragen pro Sekunde und Lock-Konflikte der letzten 5 Minuten, abschaltbar.
-- Neuer Wächter: Er prüft alle 10 Sekunden und greift bei schweren Problemen ein. Bei knappem Speicherplatz oder einer Protokolldatei über 512 MB pausiert er das Datei-Protokoll bis Mitternacht und löscht bei Platzmangel ältere Protokolldateien, bei Speichermangel kürzt er den Cache, eine überlaufende Statistik-Warteschlange leert er, einem ausgehungerten Threadpool gibt er mehr Threads, und fehlen DNS-Dienste, startet er sie bis zu dreimal neu. Eingriffe stehen im Protokoll und im Selbsttest.
+### Dashboard and monitoring
+- Time ranges of 1, 5 and 30 minutes with per-second resolution; the default remains the last hour.
+- Live graphs of internal processes: CPU, memory, garbage collection, thread pool, queues, running resolutions, queries per second and lock contention over the last 5 minutes, can be turned off.
+- New watchdog: it checks every 10 seconds and steps in on serious problems. When disk space runs low or a log file exceeds 512 MB, it pauses file logging until midnight and deletes older log files if space is short; on memory pressure it trims the cache; it empties an overflowing statistics queue; it gives a starved thread pool more threads; and if DNS services are missing, it restarts them up to three times. Interventions appear in the log and in the self-test.
 
-### Updates und Version
-- Die Update-Prüfung fragt höchstens einmal pro Stunde das neueste Release dieses Projekts auf GitHub ab und zeigt Änderungen, Download-Link für die passende Architektur, SHA256SUMS und den Installationsbefehl. Protokolliert wird nur ein tatsächlich gefundenes Update. Installiert wird nichts automatisch, weil der Dienst ohne Root-Rechte läuft.
-- Die Info zeigt die Paketversion, die Technitium-Basisversion, .NET-Laufzeit, Betriebssystem und Architektur.
+### Updates and version
+- The update check queries the latest release of this project on GitHub at most once per hour and shows the changes, the download link for the matching architecture, SHA256SUMS and the installation command. Only an update that was actually found is logged. Nothing is installed automatically, because the service runs without root privileges.
+- The About page shows the package version, the Technitium base version, the .NET runtime, the operating system and the architecture.
 
-### Entfernt
-- Prometheus-Metriken, API-Tokens (auch `DNS_SERVER_AUTH_STATIC_SESSIONS`) und die API-Dokumentation. Die Weboberfläche nutzt ihre interne API weiter.
+### Removed
+- Prometheus metrics, API tokens (including `DNS_SERVER_AUTH_STATIC_SESSIONS`) and the API documentation. The web interface keeps using its internal API.
 
-### Verschlüsselung und Datenschutz
-- EDNS-Padding (RFC 7830, RFC 8467), standardmäßig aktiv: Antworten über DoT, DoH und DoQ werden auf ein Vielfaches von 468 Byte aufgefüllt, wenn die Anfrage selbst Padding enthält, wie bei Browsern und Android. Wahlweise immer oder aus, unter Einstellungen > Protokolle. Anfragen an verschlüsselte Forwarder werden auf 128 Byte aufgefüllt. Antworten über Port 53 werden nie aufgefüllt. Der Selbsttest warnt, wenn Padding ausgeschaltet ist.
-- Neue Protokolloption „Keine Client-Adressen protokollieren“: Einträge enthalten dann weder IP-Adressen noch Ports der Clients, auch nicht in den Meldungen der Ratenbegrenzung.
-- DDR antwortet zusätzlich auf `_dns.<Servername>` und den Namen im Zertifikat, damit Clients, die den Resolver-Namen schon kennen, die verschlüsselten Dienste direkt abfragen können.
+### Encryption and privacy
+- EDNS padding (RFC 7830, RFC 8467), active by default: responses over DoT, DoH and DoQ are padded to a multiple of 468 bytes when the query itself contains padding, as sent by browsers and Android. Optionally always or off, under Settings > Encrypted protocols. Queries to encrypted forwarders are padded to 128 bytes. Responses over port 53 are never padded. The self-test warns when padding is turned off.
+- New logging option "Do not log client addresses": entries then contain neither IP addresses nor ports of clients, not even in the rate limiting messages.
+- DDR additionally answers `_dns.<server name>` and the name in the certificate, so that clients that already know the resolver name can query the encrypted services directly.
 
-### Sicherheit
-- Behoben: Ein Nameserver konnte Einträge mit leeren Daten liefern, etwa einen A-Eintrag ohne Adresse. Jede Anfrage nach solchen Namen schrieb eine Ausnahme samt Stacktrace ins Protokoll, rund 1 KB pro Anfrage, womit sich die Platte füllen ließ; außerdem brach die Cache-Ansicht ab. Solche Einträge werden beim Einlesen abgelehnt.
-- Behoben: Eine abgelehnte Einstellungsänderung konnte einzelne Werte trotzdem übernehmen, etwa DDR ausschalten, während Do53 nur DDR beantwortet.
+### Security
+- Fixed: A name server could return records with empty data, such as an A record without an address. Every query for such names wrote an exception including stack trace to the log, about 1 KB per query, which could be used to fill up the disk; the cache view also broke. Such records are now rejected when parsed.
+- Fixed: A rejected settings change could still apply individual values, for example turning off DDR while Do53 only answers DDR.
 
-### Behoben
-- Die automatische IPv6-Erkennung setzte funktionierende IPv6-Verbindungen aus. Schon 8 aufeinanderfolgende Fehler irgendeines IPv6-Nameservers reichten, und als Fehler zählten auch Anfragen, die nur abgebrochen wurden, weil ein IPv4-Server schneller geantwortet hatte, sowie Antworten wie REFUSED oder SERVFAIL. Auf einem öffentlichen Resolver passierte das ständig; danach waren Zonen, die nur IPv6-Nameserver haben, nicht mehr auflösbar. Jetzt zählen nur echte Transportfehler (Zeitüberschreitung, Netz oder Host nicht erreichbar) und Anfragen, die mindestens eine Sekunde unbeantwortet blieben. Ausgesetzt wird erst, wenn innerhalb von 30 Sekunden keine einzige IPv6-Antwort kam, mindestens 16 Fehler von mindestens 2 Adressen auftraten und eine Prüfung der IPv6-Root-Server ebenfalls scheitert. Jede Antwort über IPv6 hebt die Sperre sofort auf, beide Wechsel stehen im Log. Die Prüfung der IPv6-Root-Server wertet IPv6 erst als gestört, wenn zwei Runden im Abstand von 5 Sekunden mit je 4 zufälligen Root-Servern und 3 Sekunden Timeout scheitern; die Log-Meldung nennt die betroffenen Server und den Fehler. Beim Start läuft die erste Prüfung nach 15 Sekunden, wenn Cache und Blocklisten geladen sind, weil eine einzelne Prüfung unter Startlast IPv6 fälschlich für bis zu 10 Minuten aussetzen konnte. Bis zum Ergebnis (höchstens 120 Sekunden) nutzt der Server IPv6-Adressen nur nachrangig, auch bei Root-Hints und bei Nameservern ohne Glue, deren IPv4-Adresse dann zuerst aufgelöst wird. Auf einem Testserver ohne globales IPv6 scheiterten vorher die ersten Anfragen nach jedem Start mit SERVFAIL, jetzt werden sie in 110 bis 250 ms beantwortet, genauso schnell wie mit abgeschaltetem IPv6; danach läuft die Prüfung nur noch minütlich, solange IPv6 ausgesetzt ist. Im Test mit toten IPv6-Nameservern bei funktionierendem IPv6: vorher gesperrt und 0 von 20 Anfragen an eine reine IPv6-Zone beantwortet, jetzt nicht gesperrt und 20 von 20.
-- Beim Nachladen der lokalen Root- und arpa-Zone in den Cache (alle 15 Minuten und nach dem Leeren des Caches) brach der Vorgang mit „Operation is not valid due to the current state of the object“ ab, weil Nameserver-Einträge wiederverwendet wurden. Jetzt werden sie neu angelegt; schlägt eine einzelne Delegation fehl, wird der Rest trotzdem geladen und eine einzeilige Meldung protokolliert.
-- Clients, die eine DoH-, DoT- oder DoQ-Verbindung während der Antwort schließen oder zu langsam lesen, erzeugten Fehlermeldungen mit Stacktrace im Log. Diese Fälle werden jetzt still behandelt, die Anfrage wird trotzdem in Statistik und Anfrageprotokoll gezählt. Dasselbe gilt für DoH-Anfragen, deren Body nicht innerhalb des Empfangs-Timeouts ankommt, und für QUIC-Verbindungen, die mit „No route to host“ enden.
-- Clients, die für DNS-over-TLS nur TLS 1.0 oder 1.1 anbieten, erzeugten bei jedem Versuch die irreführende Meldung „The server mode SSL must use a certificate with the associated private key“ samt Stacktrace. Der Handshake wird jetzt still abgewiesen; TLS 1.2 und 1.3 sind unverändert.
-- Ein ungültiger Servername (SNI) im TLS- oder QUIC-Handshake, etwa mit Steuer- oder Leerzeichen, ließ die Verbindung mit einer Exception scheitern. Der Name wird jetzt ignoriert und die Verbindung normal bedient.
-- Das Anfrageprotokoll zeigt Antwortcodes wie `NOERROR` und `NXDOMAIN` statt deutscher Umschreibungen.
+### Fixed
+- The automatic IPv6 detection suspended working IPv6 connectivity. Just 8 consecutive errors from any IPv6 name server were enough, and errors also included queries that were only canceled because an IPv4 server had answered faster, as well as responses such as REFUSED or SERVFAIL. On a public resolver this happened all the time; afterwards zones that only have IPv6 name servers could no longer be resolved. Now only real transport errors (timeout, network or host unreachable) and queries that stayed unanswered for at least one second count. IPv6 is only suspended when not a single IPv6 response arrived within 30 seconds, at least 16 errors from at least 2 addresses occurred and a check of the IPv6 root servers fails as well. Every response over IPv6 lifts the suspension immediately; both transitions are logged. The check of the IPv6 root servers only considers IPv6 broken when two rounds 5 seconds apart, each with 4 random root servers and a 3 second timeout, fail; the log message names the affected servers and the error. At startup the first check runs after 15 seconds, when the cache and block lists are loaded, because a single check under startup load could wrongly suspend IPv6 for up to 10 minutes. Until the result is known (at most 120 seconds), the server uses IPv6 addresses only with lower priority, including for root hints and for name servers without glue, whose IPv4 address is then resolved first. On a test server without global IPv6, the first queries after every start previously failed with SERVFAIL; now they are answered in 110 to 250 ms, as fast as with IPv6 turned off, and afterwards the check only runs once a minute while IPv6 is suspended. In a test with dead IPv6 name servers and working IPv6: previously suspended and 0 of 20 queries to an IPv6-only zone answered, now not suspended and 20 of 20.
+- Reloading the local root and arpa zones into the cache (every 15 minutes and after clearing the cache) aborted with "Operation is not valid due to the current state of the object" because name server records were reused. They are now created anew; if a single delegation fails, the rest is still loaded and a single-line message is logged.
+- Clients that close a DoH, DoT or DoQ connection during the response or read too slowly produced error messages with stack traces in the log. These cases are now handled silently, and the query is still counted in the statistics and the query log. The same applies to DoH requests whose body does not arrive within the receive timeout and to QUIC connections that end with "No route to host".
+- Clients that only offer TLS 1.0 or 1.1 for DNS-over-TLS produced the misleading message "The server mode SSL must use a certificate with the associated private key" including stack trace on every attempt. The handshake is now rejected silently; TLS 1.2 and 1.3 are unchanged.
+- An invalid server name (SNI) in the TLS or QUIC handshake, for example with control characters or spaces, made the connection fail with an exception. The name is now ignored and the connection is served normally.
+- The query log shows response codes such as `NOERROR` and `NXDOMAIN` instead of German descriptions.
 
-### Weitere Änderungen
-- Konfigurationsformat Version 11 für die DNS-Einstellungen. Ältere Versionen von ZenitiumDNS können es nicht lesen.
-- Die Einträge im Technitium-Repository seit 15.5.1 wurden geprüft: Die gemeldeten Resolver-Probleme sind in der Basis bereits behoben oder betreffen Funktionen, die ZenitiumDNS nicht enthält (Block-Page-App, Syslog-Doppelformatierung).
+### Other changes
+- Configuration format version 11 for the DNS settings. Older versions of ZenitiumDNS cannot read it.
+- The issues in the Technitium repository since 15.5.1 were reviewed: the reported resolver problems are already fixed in the base or concern features that ZenitiumDNS does not contain (Block Page app, syslog double formatting).
 
-## ZenitiumDNS 15.5.1 (Paket 15.5.1-2)
-Veröffentlicht: 26. September 2026
+## ZenitiumDNS 15.5.1 (package 15.5.1-2)
+Released: 26 September 2026
 
-### Schutz für den öffentlichen Betrieb
-- Die Ratenbegrenzung arbeitet in Anfragen pro Sekunde mit einem Token-Bucket je Client-Subnetz (GCRA, wie bei dnsdist). Ein einstellbarer Burst (Standard 5 Sekunden) lässt kurze Spitzen etwa beim Laden einer Webseite zu. Neue Standardwerte: IPv4 `/32` 100 und 400, `/24` 1000 und 4000, IPv6 `/64` 100 und 400, `/56` 1000 und 4000 Anfragen pro Sekunde für UDP und TCP. Bestehende Limits werden umgerechnet, die bisherigen Standardwerte durch die neuen ersetzt. Beginn und Ende einer Drosselung stehen im Log.
-- Neue Client-Sperrlisten im Anfragefilter: Listen wie IPsum oder Spamhaus DROP werden automatisch geladen und aktualisiert. Anfragen gesperrter Adressen werden über UDP verworfen, bevor sie ausgewertet werden, TCP-, DoT-, DoQ- und DoH-Verbindungen werden sofort getrennt. Die Suche läuft über sortierte Adressbereiche. Neue Metriken `client_blocklist_drops_total` und `client_blocklist_ranges`.
+### Protection for public operation
+- Rate limiting works in queries per second with a token bucket per client subnet (GCRA, as in dnsdist). An adjustable burst (default 5 seconds) allows short spikes, for example while a web page loads. New defaults: IPv4 `/32` 100 and 400, `/24` 1000 and 4000, IPv6 `/64` 100 and 400, `/56` 1000 and 4000 queries per second for UDP and TCP. Existing limits are converted, and the previous defaults are replaced with the new ones. The start and end of throttling are logged.
+- New client block lists in the request filter: lists such as IPsum or Spamhaus DROP are loaded and updated automatically. Queries from blocked addresses are dropped over UDP before they are evaluated, and TCP, DoT, DoQ and DoH connections are closed immediately. The lookup uses sorted address ranges. New metrics `client_blocklist_drops_total` and `client_blocklist_ranges`.
 
-### Blockierung
-- Eigener Blockierungstext für den Extended DNS Error und den TXT-Bericht mit den Platzhaltern `{domain}`, `{list}` und `{source}`.
-- Eigene TTL für negatives Caching: NXDOMAIN- und NODATA-Blockierantworten tragen einen SOA-Eintrag mit dieser TTL und diesem MINIMUM (Standard 300 Sekunden).
-- Behoben: Das SOA-MINIMUM der Blockierantworten fiel nach jedem Neustart auf 30 Sekunden zurück, bis die Einstellung einmal geändert wurde.
-- Die Schnellauswahl der Blocklisten enthält nur noch die Listen von HaGeZi im Format für diesen Server, geladen vom Build-Mirror `hagezi-mirror.dnsbunker.org`. Das Standardintervall für die Aktualisierung beträgt 8 Stunden.
-- Blocklisten brauchen rund die Hälfte des Arbeitsspeichers: 2,5 Millionen Domains (HaGeZi PRO und TIF) belegen etwa 200 statt 395 MB. Die Suche läuft ohne Speicherallokation. Gemessen auf 20 Kernen: rund 913.000 Anfragen/s für erlaubte und 852.000 Anfragen/s für blockierte Namen, ohne Listen 919.000 Anfragen/s. Das Neuladen dauert 1,1 Sekunden.
+### Blocking
+- Custom blocking text for the Extended DNS Error and the TXT report with the placeholders `{domain}`, `{list}` and `{source}`.
+- Custom TTL for negative caching: NXDOMAIN and NODATA blocking responses carry an SOA record with this TTL and this MINIMUM (default 300 seconds).
+- Fixed: The SOA MINIMUM of blocking responses fell back to 30 seconds after every restart until the setting was changed once.
+- The quick selection of block lists only contains HaGeZi's lists in the format for this server, loaded from the build mirror `hagezi-mirror.dnsbunker.org`. The default update interval is 8 hours.
+- Block lists need about half the memory: 2.5 million domains (HaGeZi PRO and TIF) take about 200 instead of 395 MB. Lookups run without allocating memory. Measured on 20 cores: about 913,000 queries/s for allowed and 852,000 queries/s for blocked names, 919,000 queries/s without lists. Reloading takes 1.1 seconds.
 
-### Verschlüsselte Protokolle
-- TLS-Zertifikate im PEM-Format, etwa `fullchain.pem` und `privkey.pem` von Let's Encrypt, auch für die Weboberfläche. Zwischenzertifikate werden mitgesendet, verschlüsselte Schlüssel im PKCS#8-Format unterstützt. Zertifikat und Schlüssel werden auch nach einer Erneuerung über Symlinks automatisch neu geladen.
-- DDR (RFC 9462) ist eingebaut: Der Server beantwortet `_dns.resolver.arpa` SVCB mit den aktivierten verschlüsselten Diensten, ihren Ports und dem Namen im Zertifikat. Wahlweise nur über unverschlüsseltes DNS (Standard). Die erzeugten Einträge stehen in den Einstellungen.
-- 0-RTT (TLS Early Data) bietet der TLS- und QUIC-Stack von .NET serverseitig nicht an. Die Einstellungen erklären, wie sich 0-RTT für DoH über einen vorgeschalteten Reverse Proxy nutzen lässt.
+### Encrypted protocols
+- TLS certificates in PEM format, such as `fullchain.pem` and `privkey.pem` from Let's Encrypt, also for the web interface. Intermediate certificates are sent along, and encrypted keys in PKCS#8 format are supported. Certificate and key are reloaded automatically after a renewal, also via symlinks.
+- DDR (RFC 9462) is built in: the server answers `_dns.resolver.arpa` SVCB with the enabled encrypted services, their ports and the name in the certificate. Optionally only over unencrypted DNS (default). The generated records are shown in the settings.
+- 0-RTT (TLS early data) is not offered server-side by the TLS and QUIC stack of .NET. The settings explain how 0-RTT can be used for DoH through an upstream reverse proxy.
 
-### Selbsttest
-- Neuer Bereich „Selbsttest“: Er prüft lauschende Dienste, die Auflösung der Root-Zone samt DNSSEC-Validierung, IPv6, Zertifikate, Admin-Passwort, Erreichbarkeit der Weboberfläche, Rekursion, Ratenbegrenzung, Anfragefilter, Block- und Client-Sperrlisten, Apps, Systemzeit, Arbeitsspeicher, UDP-Puffer, Dateilimit und freien Speicherplatz. Schwere Probleme erscheinen zusätzlich auf der Übersicht. Neuer API-Aufruf `api/selftest/run`.
+### Self-test
+- New "Self-test" section: it checks listening services, resolution of the root zone including DNSSEC validation, IPv6, certificates, the admin password, reachability of the web interface, recursion, rate limiting, the request filter, block lists and client block lists, apps, system time, memory, UDP buffers, the file limit and free disk space. Serious problems also appear on the dashboard. New API call `api/selftest/run`.
 
 ### Resolver
-- Behoben: Autoritative Server wie die von Cloudflare beantworten nur eine Anfrage pro TCP-Verbindung. Wiederverwendete Verbindungen liefen deshalb in Timeouts, und große Antworten wie DNSKEY-Sätze mit ML-DSA-Signaturen scheiterten. Der TCP-Rückfall nach abgeschnittenen UDP-Antworten nutzt jetzt eigene Verbindungen, und Server ohne Verbindungswiederverwendung werden erkannt.
-- Die QNAME-Minimierung fragt eine Zone erneut mit dem vollen Namen, wenn keiner ihrer Nameserver auf die minimierte Anfrage antwortet.
-- Behoben: Mit „IPv6 bevorzugen“ ohne funktionierende IPv6-Anbindung scheiterten Downloads von Blocklisten und Apps nach 100 Sekunden. Downloads nutzen jetzt den tatsächlich verfügbaren IPv6-Modus und wechseln nach 5 Sekunden zur nächsten Adresse.
+- Fixed: Authoritative servers such as Cloudflare's only answer one query per TCP connection. Reused connections therefore ran into timeouts, and large responses such as DNSKEY sets with ML-DSA signatures failed. The TCP fallback after truncated UDP responses now uses its own connections, and servers without connection reuse are detected.
+- QNAME minimization queries a zone again with the full name if none of its name servers answers the minimized query.
+- Fixed: With "Prefer IPv6" and without working IPv6 connectivity, downloads of block lists and apps failed after 100 seconds. Downloads now use the IPv6 mode that is actually available and switch to the next address after 5 seconds.
 
-### Weitere Änderungen
-- Konfigurationsformat Version 9 für die DNS-Einstellungen und Version 5 für die Weboberfläche.
-- Die API-Dokumentation beschreibt die neuen Einstellungen und Aufrufe.
+### Other changes
+- Configuration format version 9 for the DNS settings and version 5 for the web interface.
+- The API documentation describes the new settings and calls.
 
 ## ZenitiumDNS 15.5.1
-Veröffentlicht: 26. September 2026
+Released: 26 September 2026
 
-### Abgleich mit Technitium DNS Server 15.5.1
-- Alle Korrekturen aus Technitium DNS Server 15.5.1 vom 26. September 2026 sind übernommen, soweit sie Teile betreffen, die es in ZenitiumDNS noch gibt:
-  - Der Resolver hat kein festes Limit für Hash-Operationen pro Anfrage mehr. Erreicht eine Auflösung ein anderes Resolver-Limit, nennen Fehlermeldung und Extended DNS Error (privater Code „ResolverLimitReached“) den Grund.
-  - RRSIG-Signaturen, deren Beginn nach ihrem Ablauf liegt, gelten als ungültig.
-  - Blockierte Antworten setzen das RA-Flag abhängig von „Blockierungsbericht ausgeben“, auch in der Advanced Blocking App (Version 11.2.1).
-  - Lokale Blocklisten (`file://`) werden direkt aus der Quelldatei gelesen statt kopiert. Fehlt die Datei, wird das protokolliert.
-  - Die Cache-Wartung stößt die Garbage Collection nur noch nach größeren Bereinigungen an. Server-GC ist fest eingestellt.
-  - Pfadvergleiche beim Log-Ordner und in der App-Verwaltung sind korrigiert.
-  - `api/user/session/delete` prüft die Länge des Teil-Tokens.
-  - XSS in der Liste der Logdateien ist behoben.
-  - `install.sh` ändert `/etc/resolv.conf` nur noch bei der Erstinstallation und setzt `umask 0022`.
+### Sync with Technitium DNS Server 15.5.1
+- All fixes from Technitium DNS Server 15.5.1 of 26 September 2026 have been adopted where they concern parts that still exist in ZenitiumDNS:
+  - The resolver no longer has a fixed limit for hash operations per query. If a resolution reaches another resolver limit, the error message and the Extended DNS Error (private code "ResolverLimitReached") name the reason.
+  - RRSIG signatures whose inception lies after their expiration are considered invalid.
+  - Blocked responses set the RA flag depending on "Return blocking report", also in the Advanced Blocking app (version 11.2.1).
+  - Local block lists (`file://`) are read directly from the source file instead of being copied. If the file is missing, this is logged.
+  - Cache maintenance only triggers garbage collection after larger cleanups. Server GC is configured permanently.
+  - Path comparisons for the log folder and in the app management have been corrected.
+  - `api/user/session/delete` checks the length of the partial token.
+  - XSS in the list of log files is fixed.
+  - `install.sh` only changes `/etc/resolv.conf` on the initial installation and sets `umask 0022`.
 
-### Anfragefilter für den öffentlichen Betrieb
-- Neuer Einstellungsbereich „Anfragefilter“ mit Regeln nach dem Vorbild von dnsdist. Alle Regeln sind standardmäßig aktiv und greifen vor jeder weiteren Verarbeitung:
-  - nicht lesbare Anfragen und Anfragen unter 12 Byte,
-  - Anfragen über 1232 Byte (einstellbar),
-  - Opcode ungleich QUERY,
-  - Klasse ungleich IN,
-  - Typ ANY,
-  - AXFR und IXFR,
-  - Anfragen ohne RD-Flag,
-  - EDNS-Version größer 0.
-- Über UDP werden Treffer stillschweigend verworfen, damit der Server nicht als Reflektor dient. Über TCP, DNS-over-TLS, DNS-over-HTTPS und DNS-over-QUIC antwortet er mit `REFUSED` und dem Extended DNS Error „Prohibited“. Wahlweise wird auch über UDP nur abgewiesen. Anfragen von Loopback-Adressen sind ausgenommen.
-- Trefferzähler je Regel stehen in den Einstellungen, in `api/dashboard/metrics/json` und als Prometheus-Metrik `request_filter_matches_total{rule}`.
+### Request filter for public operation
+- New settings section "Request filter" with rules modeled after dnsdist. All rules are active by default and apply before any further processing:
+  - unreadable queries and queries under 12 bytes,
+  - queries over 1232 bytes (adjustable),
+  - opcode other than QUERY,
+  - class other than IN,
+  - type ANY,
+  - AXFR and IXFR,
+  - queries without the RD flag,
+  - EDNS version greater than 0.
+- Over UDP, matches are dropped silently so that the server cannot be used as a reflector. Over TCP, DNS-over-TLS, DNS-over-HTTPS and DNS-over-QUIC it answers with `REFUSED` and the Extended DNS Error "Prohibited". Optionally, UDP queries are only refused as well. Queries from loopback addresses are exempt.
+- Match counters per rule are shown in the settings, in `api/dashboard/metrics/json` and as the Prometheus metric `request_filter_matches_total{rule}`.
 
 ### DNSSEC
-- Validierung des Post-Quantum-Algorithmus ML-DSA-44 (Algorithmus 18, draft-westerbaan-dnssec-mldsa) über BouncyCastle.
-- Schutz vor Downgrades: Kündigt der DS-Datensatz einer Zone einen Post-Quantum-Algorithmus an, akzeptiert der Resolver für diese Zone nur noch Post-Quantum-Schlüssel. Die Einstellung „Post-Quantum-Downgrade-Schutz“ ist standardmäßig aktiv.
-- Der DNS-Client der Weboberfläche erklärt, warum eine DNSSEC-Prüfung gegen diesen Server scheitert, wenn dessen DNSSEC-Validierung ausgeschaltet ist. Bisher erschien nur „Attack detected! RRSIGs missing“.
-- Das Umschalten der DNSSEC-Validierung leert immer den Cache.
+- Validation of the post-quantum algorithm ML-DSA-44 (algorithm 18, draft-westerbaan-dnssec-mldsa) via BouncyCastle.
+- Downgrade protection: if the DS record set of a zone announces a post-quantum algorithm, the resolver only accepts post-quantum keys for this zone. The "post-quantum downgrade protection" setting is active by default.
+- The DNS client of the web interface explains why a DNSSEC check against this server fails when its DNSSEC validation is turned off. Previously only "Attack detected! RRSIGs missing" appeared.
+- Toggling DNSSEC validation always clears the cache.
 
 ### Apps
-- Die mitgelieferten Apps werden beim ersten Start installiert, bleiben aber deaktiviert, bis sie in der Weboberfläche aktiviert werden. Bei Paket-Updates werden sie aktualisiert, ihre Konfiguration bleibt erhalten. Vom Benutzer deinstallierte Apps werden nicht erneut installiert.
-- Jede App lässt sich aktivieren und deaktivieren, auch über `api/apps/enable` und `api/apps/disable`. Deaktivierte Apps greifen nicht in die Verarbeitung ein, ihre Konfiguration bleibt bearbeitbar.
-- Neue Umgebungsvariable `DNS_SERVER_BUNDLED_APPS_PATH` für den Ordner mit den mitgelieferten Apps.
+- The bundled apps are installed on the first start but stay disabled until they are enabled in the web interface. On package updates they are updated and their configuration is kept. Apps uninstalled by the user are not installed again.
+- Every app can be enabled and disabled, also via `api/apps/enable` and `api/apps/disable`. Disabled apps do not take part in processing, and their configuration stays editable.
+- New environment variable `DNS_SERVER_BUNDLED_APPS_PATH` for the folder with the bundled apps.
 
-### Standardwerte für neue Installationen
-- Cache: höchstens 100.000 Einträge statt 10.000.
-- Blockierantworten: TTL 300 statt 30 Sekunden.
-- Netzwerk: Listen-Backlog 1024 statt 100, TCP-Empfangs-Timeout 5 statt 10 Sekunden, IPv6 für ausgehende Anfragen aktiviert.
-- Statistik- und Logdateien werden 30 statt 365 Tage aufbewahrt.
-- Die Rekursion bleibt auf private Netze beschränkt, bis sie bewusst für alle freigegeben wird.
-- Bestehende Konfigurationen bleiben unverändert.
+### Defaults for new installations
+- Cache: at most 100,000 entries instead of 10,000.
+- Blocking responses: TTL 300 instead of 30 seconds.
+- Network: listen backlog 1024 instead of 100, TCP receive timeout 5 instead of 10 seconds, IPv6 enabled for outgoing queries.
+- Statistics and log files are kept for 30 instead of 365 days.
+- Recursion stays restricted to private networks until it is deliberately opened to everyone.
+- Existing configurations stay unchanged.
 
 ### Performance
-- Statistikdaten laufen über eine lockfreie Warteschlange mit eigenem Verarbeitungs-Thread.
-- Eindeutige Clients werden per HyperLogLog mit festem Speicherbedarf gezählt. `clients_total` ist in den Prometheus-Metriken jetzt ein Gauge.
-- UDP-Empfangs-Threads wecken weitere Threads erst bei anhaltendem Rückstau, Sendepuffer werden wiederverwendet.
-- Antworttypen werden ohne Boxing markiert, die Ratenbegrenzung überspringt die Prüfung, solange kein Client ein Limit überschreitet.
-- Server-GC mit nebenläufiger Garbage Collection.
+- Statistics data runs through a lock-free queue with its own processing thread.
+- Unique clients are counted with HyperLogLog using a fixed amount of memory. `clients_total` is now a gauge in the Prometheus metrics.
+- UDP receive threads only wake further threads on a sustained backlog, and send buffers are reused.
+- Response types are tagged without boxing, and rate limiting skips the check as long as no client exceeds a limit.
+- Server GC with concurrent garbage collection.
 
-### Sicherheit
-- DNS-over-HTTPS per POST: Anfragen über 65.535 Byte werden mit Status 413 abgewiesen, der Inhalt wird begrenzt gelesen. Abgebrochene Verbindungen erzeugen keine Fehlerprotokolle mehr.
-- DNS-Nachrichten mit unplausiblen Eintragszahlen werden vor dem Parsen verworfen.
-- Die Weboberfläche maskiert Werte in Inline-Handlern für JavaScript, etwa im Cache-Browser, bei Weiterleitungszonen und in den Protokollen.
+### Security
+- DNS-over-HTTPS via POST: requests over 65,535 bytes are rejected with status 413, and the body is read with a limit. Aborted connections no longer produce error logs.
+- DNS messages with implausible record counts are dropped before parsing.
+- The web interface escapes values in inline JavaScript handlers, for example in the cache browser, in forwarder zones and in the logs.
 
-### Betrieb und Quellcode
-- Docker-Unterstützung entfernt: Dockerfile, Compose-Datei und die Umgebungsvariablen zur Erstkonfiguration, einschließlich SSO, LDAP und `DNS_SERVER_ADMIN_PASSWORD`. `DNS_SERVER_ADMIN_PASSWORD_FILE` bleibt erhalten.
-- Der Quellcode enthält keine Kommentare mehr, nur die Lizenzköpfe bleiben erhalten.
-- Die DNS-Einstellungen werden im Format Version 8 gespeichert, das ältere Builds nicht lesen können.
-- Quellcode und Releases: https://github.com/DNSBunker/ZenitiumDNS
+### Operation and source code
+- Docker support removed: Dockerfile, compose file and the environment variables for initial configuration, including SSO, LDAP and `DNS_SERVER_ADMIN_PASSWORD`. `DNS_SERVER_ADMIN_PASSWORD_FILE` is kept.
+- The source code no longer contains comments; only the license headers are kept.
+- The DNS settings are saved in format version 8, which older builds cannot read.
+- Source code and releases: https://github.com/DNSBunker/ZenitiumDNS
 
 ## ZenitiumDNS 15.5
-Veröffentlicht: 26. September 2026
+Released: 26 September 2026
 
-### Fork und Projektstruktur
-- Fork von Technitium DNS Server 15.5 unter dem Namen ZenitiumDNS. Die vollständige Liste der Änderungen gegenüber dem Original steht in [NOTICE.md](NOTICE.md).
-- DNS-Server und Bibliothek in einem gemeinsamen Quellbaum mit einer Solution (`ZenitiumDNS.slnx`) und Projektreferenzen zusammengeführt.
-- Update-Prüfung und DNS-App-Store sind standardmäßig deaktiviert und lassen sich über die neuen Umgebungsvariablen `DNS_SERVER_UPDATE_CHECK_URL` und `DNS_SERVER_APP_STORE_URL` auf eigene Endpunkte umstellen.
-- Linux-Installationen verwenden `/opt/zenitiumdns`, `/etc/zenitiumdns` und `/var/log/zenitiumdns` mit dem Dienst und Benutzer `zenitiumdns`.
-- Das Docker-Image wird mit einem mehrstufigen `Dockerfile` direkt aus dem Quellcode gebaut.
-- Die Weboberfläche und die Dokumentation sind auf Deutsch übersetzt.
+### Fork and project structure
+- Fork of Technitium DNS Server 15.5 under the name ZenitiumDNS. The complete list of changes from the original is in [NOTICE.md](NOTICE.md).
+- DNS server and library merged into one source tree with a single solution (`ZenitiumDNS.slnx`) and project references.
+- The update check and the DNS app store are disabled by default and can be pointed to your own endpoints via the new environment variables `DNS_SERVER_UPDATE_CHECK_URL` and `DNS_SERVER_APP_STORE_URL`.
+- Linux installations use `/opt/zenitiumdns`, `/etc/zenitiumdns` and `/var/log/zenitiumdns` with the service and user `zenitiumdns`.
+- The Docker image is built directly from source with a multi-stage `Dockerfile`.
+- The web interface and the documentation are translated into German.
 
-### Debian-Paket
-- Neues eigenständiges Debian-Paket für Debian 13 (`setup/debian/build-deb.sh`, amd64 und arm64). Es bringt die .NET-Laufzeit mit, sodass keine separate .NET-Installation nötig ist.
-- Gehärteter systemd-Dienst mit eigenem Systembenutzer und Start erst nach `network-online.target`.
-- Bei der Erstinstallation wird ein zufälliges Admin-Passwort erzeugt und ausgegeben, statt `admin`/`admin` zu verwenden.
-- Ist systemd-resolved aktiv, wird dessen Stub-Listener automatisch deaktiviert, damit Port 53 frei ist. Beim Entfernen des Pakets wird das rückgängig gemacht.
-- Alle mitgelieferten DNS-Apps liegen als ZIP-Dateien in `/usr/share/zenitiumdns/apps` und können über die Weboberfläche installiert werden.
+### Debian package
+- New self-contained Debian package for Debian 13 (`setup/debian/build-deb.sh`, amd64 and arm64). It bundles the .NET runtime, so no separate .NET installation is needed.
+- Hardened systemd service with its own system user, started only after `network-online.target`.
+- On the initial installation a random admin password is generated and printed instead of using `admin`/`admin`.
+- If systemd-resolved is active, its stub listener is disabled automatically so that port 53 is free. This is reverted when the package is removed.
+- All bundled DNS apps are provided as ZIP files in `/usr/share/zenitiumdns/apps` and can be installed via the web interface.
 
-### Ausrichtung als öffentlicher Resolver
-- ZenitiumDNS ist auf den Betrieb als öffentlicher rekursiver Resolver zugeschnitten. Folgende Funktionen des Originals wurden entfernt:
-  - autoritative Zonen vom Typ Primary, Secondary, Stub, Secondary Forwarder und Catalog samt DNSSEC-Signierung, Schlüsselverwaltung und SOA-Bearbeitung,
-  - Zonentransfers (AXFR, IXFR, XFR-over-TLS, XFR-over-QUIC), DNS NOTIFY, dynamische Updates (RFC 2136) und TSIG-Schlüssel,
-  - der DHCP-Server mit Bereichen, Leases und der Berechtigungsgruppe „DHCP Administrators“,
-  - das Clustering samt HTTP-API-Client und Cluster-Optionen in Sicherung und Wiederherstellung,
-  - die Übernahme von DNS-Client-Antworten in eine lokale Zone,
-  - die Apps für LAN- und Hosting-Szenarien: Auto PTR, Block Page, Default Records, DNS Block List, Failover, Filter AAAA, Geo Continent, Geo Country, Geo Distance, No Data, NX Domain Override, Split Horizon, Weighted Round Robin, What Is My DNS, Wild IP und Zone Alias,
-  - Windows-Dienst, Systemtray-App, Windows-Firewall-Bibliothek und Windows-Installer.
-- Erhalten bleiben Conditional-Forwarder-Zonen (in der Weboberfläche „Weiterleitungszonen“) mit lokal überschreibbaren Einträgen und Zugriffsbeschränkung pro Zone, Blocklisten, erlaubte und blockierte Domains sowie die Resolver-Apps.
-- Anfragen vom Typ AXFR und IXFR werden mit `REFUSED` und dem Extended DNS Error „Not Supported“ beantwortet, NOTIFY und UPDATE mit `NOTIMP`. Signierte Anfragen (TSIG) erhalten `BADKEY`.
-- Bestehende Installationen lassen sich weiterverwenden: Conditional-Forwarder-Zonen, Einstellungen, Benutzer und Statistiken werden übernommen. Zonendateien anderer Zonentypen bleiben unverändert im Konfigurationsordner liegen und werden beim Start mit einem Protokolleintrag übersprungen. Entfernte Einstellungen werden beim nächsten Speichern verworfen.
+### Focus on public resolvers
+- ZenitiumDNS is tailored to running as a public recursive resolver. The following features of the original were removed:
+  - authoritative zones of type primary, secondary, stub, secondary forwarder and catalog, including DNSSEC signing, key management and SOA editing,
+  - zone transfers (AXFR, IXFR, XFR-over-TLS, XFR-over-QUIC), DNS NOTIFY, dynamic updates (RFC 2136) and TSIG keys,
+  - the DHCP server with scopes, leases and the "DHCP Administrators" permission group,
+  - clustering including the HTTP API client and the cluster options in backup and restore,
+  - importing DNS client responses into a local zone,
+  - the apps for LAN and hosting scenarios: Auto PTR, Block Page, Default Records, DNS Block List, Failover, Filter AAAA, Geo Continent, Geo Country, Geo Distance, No Data, NX Domain Override, Split Horizon, Weighted Round Robin, What Is My DNS, Wild IP and Zone Alias,
+  - Windows service, system tray app, Windows firewall library and Windows installer.
+- Kept are conditional forwarder zones (called "forwarder zones" in the web interface) with locally overridable records and access restriction per zone, block lists, allowed and blocked domains, and the resolver apps.
+- Queries of type AXFR and IXFR are answered with `REFUSED` and the Extended DNS Error "Not Supported", NOTIFY and UPDATE with `NOTIMP`. Signed queries (TSIG) receive `BADKEY`.
+- Existing installations can be used further: conditional forwarder zones, settings, users and statistics are kept. Zone files of other zone types stay unchanged in the configuration folder and are skipped at startup with a log entry. Removed settings are discarded on the next save.
 
-### Statistik und Überwachung
-- Neue Antwortzeit-Messung vom Eingang einer Anfrage bis zum Versand der Antwort für UDP, TCP, DNS-over-TLS, DNS-over-HTTPS und DNS-over-QUIC. Ausgewertet werden Durchschnitt, Median, 95. und 99. Perzentil und Maximum sowie getrennte Durchschnitte für Antworten aus dem Cache und für rekursiv aufgelöste Antworten.
-- Die Übersicht zeigt Kennzahlen für Anfragen pro Sekunde, Antwortzeit, Cache-Trefferquote, Fehlerquote, Blockierquote und Clients, Statuschips für Blockierung, DNSSEC-Validierung, IPv6, Auflösungsart und Laufzeit, einen Antwortzeit-Verlauf pro Minute, Tabellen mit Anteilen sowie umschaltbare Verlaufsansichten (Übersicht, Antworten, Beantwortet durch, Clients).
-- Die Kreisdiagramme zeigen Anteile im Tooltip und einen Hinweis, wenn im Zeitraum keine Daten vorliegen. Diagramme passen sich dem hellen und dunklen Design an.
-- `api/dashboard/stats/get` liefert zusätzlich `live`, `lastHourResponseTime`, `responseTimeChartData` und `serverStatus`. Die Diagrammdaten enthalten keine Farbangaben mehr.
-- Die JSON-Metriken enthalten Antwortzeiten über 5 und 60 Minuten, die Zahl der Cache-Einträge und den Serverstatus. Die Prometheus-Metriken enthalten zusätzlich `cache_entries`, `ipv6_upstream_available`, `queries_per_second` und `response_time_milliseconds` für 1, 5 und 60 Minuten.
-- Neuer API-Aufruf `api/dashboard/ipv6/probe`, der die IPv6-Erreichbarkeit der Nameserver sofort prüft.
-- Behoben: In gekürzten Top-Listen und Diagrammen fehlte in der Summe „Andere“ der erste abgeschnittene Eintrag.
+### Statistics and monitoring
+- New response time measurement from the arrival of a query to sending the response for UDP, TCP, DNS-over-TLS, DNS-over-HTTPS and DNS-over-QUIC. Average, median, 95th and 99th percentile and maximum are evaluated, as well as separate averages for responses from the cache and for recursively resolved responses.
+- The dashboard shows key figures for queries per second, response time, cache hit rate, error rate, blocking rate and clients, status chips for blocking, DNSSEC validation, IPv6, resolution mode and uptime, a per-minute response time history, tables with shares, and switchable history views (Overview, Responses, Answered by, Clients).
+- The pie charts show shares in the tooltip and a note when there is no data in the time range. Charts adapt to the light and dark theme.
+- `api/dashboard/stats/get` additionally returns `live`, `lastHourResponseTime`, `responseTimeChartData` and `serverStatus`. The chart data no longer contains colors.
+- The JSON metrics contain response times over 5 and 60 minutes, the number of cache entries and the server status. The Prometheus metrics additionally contain `cache_entries`, `ipv6_upstream_available`, `queries_per_second` and `response_time_milliseconds` for 1, 5 and 60 minutes.
+- New API call `api/dashboard/ipv6/probe`, which checks the IPv6 reachability of name servers immediately.
+- Fixed: In truncated top lists and charts, the first truncated entry was missing from the "Others" sum.
 
-### Weboberfläche
-- Neues Erscheinungsbild: App-Rahmen mit Seitenleiste und Seitentitel, Farbsystem in Petrol passend zum Logo, lokal eingebundene Schriften Red Hat Text, Display und Mono (keine externen Abrufe), einheitlich gestaltete Formulare, Tabellen, Dialoge und Hinweise. Hell, Dunkel und Bernstein nutzen dasselbe Token-System, das Farbschema „wie Betriebssystem“ greift schon vor dem ersten Laden der Skripte.
-- Die Übersicht beginnt mit einer Messwertleiste: Anfragen pro Sekunde, Antwortzeit, Cache-Trefferquote, Fehler- und Blockierquote sowie Clients, jeweils mit Verlauf im gewählten Zeitraum und Statusangabe in Worten.
-- Diagrammfarben sind auf Unterscheidbarkeit bei Farbfehlsichtigkeit geprüft und folgen dem Farbschema. Jede Kategorie behält ihre Farbe über alle Ansichten.
-- Die Oberfläche ist auf Tablets und Smartphones bedienbar: Die Seitenleiste wird zur Symbolleiste, Tabellen lassen sich seitlich scrollen. Die feste Mindestbreite von 970 Pixeln entfällt.
-- Hinweise erscheinen als Einblendung oben rechts, Ladeanzeigen sind animierte Symbole statt GIF-Grafiken. Das DNS-Client-Formular ist neu angeordnet, Listen in Cache, Filter und Protokollen zeigen Aktionen mit Symbolen statt Klammer-Links.
-- Die Hauptnavigation ist nach Aufgaben gegliedert: Übersicht, Resolver (Weiterleitungszonen und Cache), Filter (blockierte und erlaubte Domains, Blocklisten), Apps, DNS-Client, Protokolle, Einstellungen, Verwaltung und Info.
-- Die Einstellungen sind in zehn Bereiche mit seitlicher Navigation, Erklärungstexten und einer stets sichtbaren Speicherleiste aufgeteilt: Server, Netzwerk, Resolver, Weiterleitung & Proxy, Cache, Blockierung, Ratenbegrenzung, Verschlüsselte Protokolle, Weboberfläche und Protokollierung.
-- Neue Einstellungen: automatischer IPv6-Rückfall mit Statusanzeige und Prüfknopf, Zahl der UDP-Empfangs-Threads je Socket und Obergrenze gleichzeitiger Anfragen je TCP-/TLS-Verbindung.
-- Nicht mehr benötigte Einstellungen für SOA, Zonentransfer, NOTIFY und TSIG wurden entfernt.
-- Datumsangaben erscheinen einheitlich im deutschen Format, Forwarder-Einträge zeigen Proxy-Art und DNSSEC-Validierung lesbar an.
-- Die Übersicht wird beim Zurückwechseln auf den Tab sofort aktualisiert.
+### Web interface
+- New look: app frame with sidebar and page titles, a petrol color system matching the logo, locally embedded Red Hat Text, Display and Mono fonts (no external requests), consistently styled forms, tables, dialogs and notices. Light, Dark and Amber use the same token system, and the "same as operating system" color scheme applies even before the scripts have loaded.
+- The dashboard starts with a readout band: queries per second, response time, cache hit rate, error and blocking rate as well as clients, each with its history over the selected time range and a status in words.
+- Chart colors are checked for distinguishability with color vision deficiencies and follow the color scheme. Every category keeps its color across all views.
+- The interface can be used on tablets and smartphones: the sidebar turns into a toolbar, and tables can be scrolled sideways. The fixed minimum width of 970 pixels is gone.
+- Notices appear as a toast at the top right, and loading indicators are animated icons instead of GIF images. The DNS client form is rearranged, and lists in the cache, filters and logs show actions as icons instead of bracketed links.
+- The main navigation is organized by task: Dashboard, Resolver (forwarder zones and cache), Filter (blocked and allowed domains, block lists), Apps, DNS client, Logs, Settings, Administration and About.
+- The settings are split into ten sections with side navigation, explanatory texts and an always visible save bar: Server, Network, Resolver, Forwarding & proxy, Cache, Blocking, Rate limiting, Encrypted protocols, Web interface and Logging.
+- New settings: automatic IPv6 fallback with status display and check button, the number of UDP receive threads per socket and a limit for concurrent queries per TCP/TLS connection.
+- Settings that are no longer needed for SOA, zone transfers, NOTIFY and TSIG have been removed.
+- Dates consistently appear in German format, and forwarder entries show the proxy type and DNSSEC validation in readable form.
+- The dashboard refreshes immediately when you switch back to its tab.
 
-### Rekursiver Resolver
-- Behoben: `SERVFAIL` mit „No valid response from name servers“ bei Domains, die über CNAME-Ketten oder Nameserver ohne Glue-Records aufgelöst werden (z. B. `www.bbc.com`, `x.com`). Die Resolver-Limits pro Anfrage wurden angehoben (Upstream-Issue #2175).
-- Behoben: Die QNAME-Minimierung schickte vor der eigentlichen Anfrage für das letzte Label eine zusätzliche Anfrage vom Typ `A`, sogar nach einer NXDOMAIN-Antwort.
-- Behoben: Die rekursive Auflösung fiel komplett aus, wenn die Root-Priming-Anfrage fehlschlug oder keine Glue-Records lieferte. Der Resolver greift jetzt auf die Root-Hints zurück. Die Priming-Anfrage wird ohne RD-Flag gesendet.
-- Behoben: Doppelte Nameserver-Einträge in der Nameserver-Liste des Resolvers.
-- Behoben: Antworten mit abweichender Groß-/Kleinschreibung des QNAME (DNS 0x20) wurden als allgemeiner Fehler statt als Spoofing-Versuch behandelt. Der Resolver wiederholt die Anfrage jetzt sofort über TCP.
-- Behoben: Mit der Einstellung „IPv6 bevorzugen“ schlug die Auflösung für Zonen, deren Nameserver per IPv6 nicht erreichbar sind, bei jeder Anfrage fehl, weil IPv6-Adressen immer zuerst abgefragt wurden. Nicht erreichbare Adressen werden jetzt erkannt und hinter funktionierende IPv4-Adressen einsortiert.
-- Neuer automatischer IPv6-Rückfall (Einstellung „IPv6 bei Störungen automatisch aussetzen“, standardmäßig an): Nach 8 aufeinanderfolgenden IPv6-Zeitüberschreitungen werden ausgehende IPv6-Anfragen für eine Minute ausgesetzt, bei wiederholten Störungen bis zu 30 Minuten. Eine Prüfung gegen die IPv6-Root-Server alle zwei Minuten nimmt IPv6 wieder auf, sobald es funktioniert.
-- Die Statistik zur Nameserver-Auswahl (RTT, Fehlerrate) wird jetzt getrennt für IPv4 und IPv6 geführt. Eine defekte IPv6-Adresse wertet dadurch nicht mehr die funktionierende IPv4-Adresse desselben Nameservers ab.
-- Die Antwortquote der Nameserver wird als gleitender Durchschnitt statt über die gesamte Laufzeit berechnet. Ausgefallene Nameserver werden dadurch innerhalb weniger Anfragen nach hinten sortiert und nach ihrer Erholung wieder bevorzugt.
-- Behoben: Die mehrfachen instabilen Sortierungen der Nameserver-Liste konnten die Reihenfolge nach Antwortzeit wieder zerstören. Die Auswahl verwendet jetzt eine einzige kombinierte Sortierung.
-- Die Cache-Ansicht zeigt die Nameserver-Statistik zusätzlich getrennt für IPv6 und die aktuelle Antwortquote an.
+### Recursive resolver
+- Fixed: `SERVFAIL` with "No valid response from name servers" for domains that are resolved via CNAME chains or name servers without glue records (for example `www.bbc.com`, `x.com`). The resolver limits per query have been raised (upstream issue #2175).
+- Fixed: QNAME minimization sent an additional query of type `A` for the last label before the actual query, even after an NXDOMAIN response.
+- Fixed: Recursive resolution failed completely when the root priming query failed or returned no glue records. The resolver now falls back to the root hints. The priming query is sent without the RD flag.
+- Fixed: Duplicate name server entries in the name server list of the resolver.
+- Fixed: Responses with a different letter case of the QNAME (DNS 0x20) were treated as a general error instead of a spoofing attempt. The resolver now repeats the query over TCP immediately.
+- Fixed: With the "Prefer IPv6" setting, resolution failed on every query for zones whose name servers cannot be reached over IPv6, because IPv6 addresses were always queried first. Unreachable addresses are now detected and sorted behind working IPv4 addresses.
+- New automatic IPv6 fallback (setting "Suspend IPv6 automatically when it fails", on by default): after 8 consecutive IPv6 timeouts, outgoing IPv6 queries are suspended for one minute, for up to 30 minutes on repeated failures. A check against the IPv6 root servers every two minutes resumes IPv6 as soon as it works.
+- The statistics for name server selection (RTT, error rate) are now kept separately for IPv4 and IPv6. A broken IPv6 address therefore no longer penalizes the working IPv4 address of the same name server.
+- The answer rate of name servers is calculated as a moving average instead of over the entire uptime. Failed name servers are therefore sorted to the back within a few queries and preferred again after they recover.
+- Fixed: The multiple unstable sorts of the name server list could destroy the order by response time again. The selection now uses a single combined sort.
+- The cache view additionally shows the name server statistics separately for IPv6 and the current answer rate.
 
 ### Cache
-- Behoben: Schlug die DNSSEC-Validierung an den Root-Servern fehl, etwa hinter einer Firewall, die DNS abfängt, blieben die Root-Server fünf Minuten lang gesperrt. Das galt auch nach dem Abschalten der Validierung und nach „Cache leeren“. Beide Aktionen setzen die Sperre jetzt zurück, das Umschalten der DNSSEC-Validierung leert den Cache in beide Richtungen.
-- Behoben: Abgelaufene Fehler-Cache-Einträge wurden als veraltete Antworten (Serve Stale) ausgeliefert und verlängerten so Auflösungsfehler nach Ausfällen.
-- Behoben: Das Cache-Prefetching löste bei Einträgen mit kurzer TTL bei fast jeder Anfrage eine Upstream-Anfrage aus.
-- Behoben: Die Cache-Wartung führte jede Minute eine blockierende vollständige Garbage Collection aus, die die Anfragebearbeitung für bis zu 250 ms anhielt (Upstream-Issue #2174). Auch das Neuladen von Statistiken, Blocklisten und der Advanced-Forwarding-App nutzt jetzt eine Garbage Collection im Hintergrund.
-- Behoben: Eine Race Condition in der Cache-Wartung konnte frisch zwischengespeicherte Einträge verwerfen und den Eintragszähler aufblähen, wenn eine leere Cache-Zone genau dann entfernt wurde, als neue Einträge hinzukamen.
-- Behoben: Bei A- und AAAA-RRsets mit mehreren Einträgen wurde der Zeitpunkt der letzten Nutzung nie aktualisiert. Bei vollem Cache wurden so gerade häufig genutzte Einträge zuerst verdrängt.
+- Fixed: If DNSSEC validation failed at the root servers, for example behind a firewall that intercepts DNS, the root servers stayed blocked for five minutes. This also applied after turning off validation and after "Clear cache". Both actions now reset the block, and toggling DNSSEC validation clears the cache in both directions.
+- Fixed: Expired failure cache entries were served as stale answers (serve stale), which prolonged resolution failures after outages.
+- Fixed: Cache prefetching triggered an upstream query on almost every query for records with a short TTL.
+- Fixed: Cache maintenance ran a blocking full garbage collection every minute, which halted query processing for up to 250 ms (upstream issue #2174). Reloading statistics, block lists and the Advanced Forwarding app now also uses a background garbage collection.
+- Fixed: A race condition in cache maintenance could discard freshly cached entries and inflate the entry counter when an empty cache zone was removed exactly while new entries were being added.
+- Fixed: For A and AAAA record sets with several records, the last-used time was never updated. With a full cache, frequently used entries were therefore evicted first.
 
 ### Performance
-- UDP-Anfragen werden von dedizierten Empfangs-Threads gelesen und bei Cache-Treffern direkt auf demselben Thread beantwortet, ohne Wechsel über den Thread-Pool. Bei 100.000 Anfragen pro Sekunde sinkt die CPU-Zeit pro Anfrage um rund 70 % und die mittlere Latenz von 70–85 µs auf 19 µs.
-- Antworten per UDP werden synchron gesendet. Das spart pro Anfrage eine asynchrone Socket-Operation samt Allokationen.
-- Die interne Verarbeitungskette nutzt `ValueTask` statt `Task`, sodass bei synchron abgeschlossenen Anfragen keine Task-Objekte mehr entstehen.
-- Die Namenskompression beim Serialisieren von DNS-Nachrichten kopiert keine Domainnamen mehr und verwendet eine wiederverwendbare Offset-Liste.
-- Die Prüfung auf spezielle Zonen (z. B. `.local`, `.test`) erzeugt keine temporären Strings mehr.
-- Der Zeitpunkt der letzten Nutzung von Cache- und Zoneneinträgen wird höchstens einmal pro Sekunde geschrieben. Das vermeidet Konflikte zwischen den CPU-Kernen.
-- Insgesamt sinken die Allokationen pro Anfrage um etwa 65 % und die Pausenzeit der Garbage Collection unter Volllast von 22 % auf 7 %. Der Spitzendurchsatz steigt um 5 bis 12 %.
+- UDP queries are read by dedicated receive threads and answered directly on the same thread on cache hits, without a detour through the thread pool. At 100,000 queries per second, the CPU time per query drops by about 70 % and the mean latency from 70–85 µs to 19 µs.
+- Responses over UDP are sent synchronously. This saves one asynchronous socket operation including allocations per query.
+- The internal processing chain uses `ValueTask` instead of `Task`, so no task objects are created for queries that complete synchronously.
+- Name compression when serializing DNS messages no longer copies domain names and uses a reusable offset list.
+- The check for special zones (for example `.local`, `.test`) no longer creates temporary strings.
+- The last-used time of cache and zone entries is written at most once per second. This avoids contention between CPU cores.
+- Overall, allocations per query drop by about 65 % and the garbage collection pause time under full load from 22 % to 7 %. Peak throughput rises by 5 to 12 %.
 
-### Verschlüsselte Protokolle
-- Behoben: Über eine einzelne DNS-over-TCP- oder DNS-over-TLS-Verbindung konnte ein Client unbegrenzt viele Anfragen gleichzeitig offen halten. Pro Verbindung sind jetzt standardmäßig höchstens 100 laufende Anfragen erlaubt (einstellbar von 1 bis 10.000), weitere werden erst nach Abschluss gelesen.
-- Bei DNS-over-HTTPS wird als Serveradresse jetzt die Endpunkt-URL ohne den Anfrageinhalt (`?dns=…`) gespeichert und protokolliert.
+### Encrypted protocols
+- Fixed: Over a single DNS-over-TCP or DNS-over-TLS connection, a client could keep an unlimited number of queries open at the same time. By default, at most 100 running queries per connection are now allowed (adjustable from 1 to 10,000); further queries are only read after earlier ones complete.
+- For DNS-over-HTTPS, the endpoint URL without the query content (`?dns=…`) is now stored and logged as the server address.
 
-### Sicherheit
-- Behoben: Die in `DNS_SERVER_AUTH_STATIC_SESSIONS` festgelegten API-Tokens wurden beim allerersten Start ohne vorhandene `auth.config` nicht geladen und funktionierten erst nach einem Neustart.
-- Behoben: Der Filter nach Server in den Query-Log-Apps für MySQL, PostgreSQL und SQL Server wurde nicht als Parameter übergeben (SQL-Injection).
-- Behoben: Mehrere Stellen in der Weboberfläche gaben App-Namen ohne HTML-Kodierung aus (XSS).
-- Behoben: Benutzer ohne Admin-Rechte konnten fremde Sitzungen löschen.
-- Behoben: Beim Wiederherstellen einer Sicherung konnten ZIP-Einträge außerhalb des Zielordners geschrieben werden.
-- Behoben: TLS-Zertifikatspfade in Ordnern, deren Name mit dem Namen des Konfigurationsordners beginnt (z. B. `/etc/dnscert` neben `/etc/dns`), wurden als falscher relativer Pfad gespeichert. Das Zertifikat ließ sich nach einem Neustart nicht mehr laden (Upstream-Issue #2162).
+### Security
+- Fixed: The API tokens defined in `DNS_SERVER_AUTH_STATIC_SESSIONS` were not loaded on the very first start without an existing `auth.config` and only worked after a restart.
+- Fixed: The server filter in the query log apps for MySQL, PostgreSQL and SQL Server was not passed as a parameter (SQL injection).
+- Fixed: Several places in the web interface output app names without HTML encoding (XSS).
+- Fixed: Users without admin rights could delete sessions of other users.
+- Fixed: When restoring a backup, ZIP entries could be written outside the target folder.
+- Fixed: TLS certificate paths in folders whose name starts with the name of the configuration folder (for example `/etc/dnscert` next to `/etc/dns`) were saved as a wrong relative path. The certificate could no longer be loaded after a restart (upstream issue #2162).
 
-### Web-API und Weboberfläche
-- Behoben: Die API-Aufrufe zum Hinzufügen, Abrufen, Ändern und Löschen von Einträgen ignorierten `zone=.`. Einträge für die Root-Zone landeten dadurch in einer untergeordneten Zone.
-- Behoben: Die Seitengröße der Log-Abfrage wurde nicht begrenzt, und die Größenbegrenzung beim Herunterladen von Logs konnte überlaufen.
-- Behoben: Ausstehende Änderungen an Zonen- und Konfigurationsdateien wurden vor dem Erstellen einer Sicherung und beim Beenden nicht immer geschrieben.
+### Web API and web interface
+- Fixed: The API calls for adding, getting, updating and deleting records ignored `zone=.`. Records for the root zone therefore ended up in a subordinate zone.
+- Fixed: The page size of the log query was not limited, and the size limit for downloading logs could overflow.
+- Fixed: Pending changes to zone and configuration files were not always written before a backup was created and on shutdown.
 
-### Apps und Stabilität
-- Behoben: Das Syslog-Ziel der Log-Exporter-App formatierte jede Nachricht zweimal nach RFC 5424 (Upstream-Issue #2173).
-- Behoben: Der Timer des Load-Balancing-Proxys konnte nach dem Entsorgen noch auslösen und Ausnahmen werfen.
-- Behoben: Schlug das Laden einer Zonendatei beim Start fehl, führte das Aufräumen zu einer `LockRecursionException`.
+### Apps and stability
+- Fixed: The syslog target of the Log Exporter app formatted every message twice according to RFC 5424 (upstream issue #2173).
+- Fixed: The timer of the load balancing proxy could still fire after it was disposed and throw exceptions.
+- Fixed: If loading a zone file failed at startup, the cleanup led to a `LockRecursionException`.
 
-# Technitium DNS Server Änderungsprotokoll
+# Technitium DNS Server changelog
 
-Die folgenden Einträge stammen aus dem ursprünglichen Projekt Technitium DNS Server, auf dem ZenitiumDNS basiert. Namen von Einstellungen und Menüs beziehen sich auf die jeweilige Version des Originals.
+The following entries come from the original Technitium DNS Server project that ZenitiumDNS is based on. Names of settings and menus refer to the respective version of the original.
 
 ## Version 15.5
-Veröffentlicht: 19. September 2026
+Release Date: 19 September 2026
 
-- Unterstützung für LDAP-Authentifizierung hinzugefügt. Danke an Roy Hagland (@Hemsby) für den PR #1869.
-- Unterstützung für [draft-farrokhi-dnsop-ede-nta](https://datatracker.ietf.org/doc/html/draft-farrokhi-dnsop-ede-nta) umgesetzt. Ein NTA wird angelegt, indem eine Conditional-Forwarder-Zone für den Domainnamen mit deaktivierter DNSSEC-Validierung erstellt wird. Die Kommentare des FWD-Eintrags werden als Extended DNS Error (EDE) in die Antwort übernommen.
-- Zonendatei-Editor für Primary- und Conditional-Forwarder-Zonen hinzugefügt.
-- Unterstützung für vordefinierte statische API-Sitzungen hinzugefügt, die über die neue Umgebungsvariable `DNS_SERVER_AUTH_STATIC_SESSIONS` konfiguriert werden.
-- Neue Umgebungsvariable `DNS_SERVER_WEB_SERVICE_WWW_FOLDER_PATH` hinzugefügt, mit der der www-Stammordner des Webdienstes geändert werden kann, um eine eigene Weboberfläche zu verwenden. Danke an Adrián García (@byGarcia) für den PR #2138.
-- Docker Compose um eine Health-Check-Option ergänzt, die den Health-Check-API-Aufruf verwendet.
-- Die Health-Check-API darf jetzt von Loopback-Adressen ohne Authentifizierung aufgerufen werden, um den Docker-Health-Check zu unterstützen.
-- Von Qifan Zhang (Palo Alto Networks) gemeldete Multi-Hop-Amplification-Schwachstelle behoben, die über mehrere CNAME- und Delegations-Hops einen Paketverstärkungsfaktor von 4.096:1 erreichte.
-- Von Qifan Zhang (Palo Alto Networks) gemeldete Cache-Poisoning-Schwachstelle behoben, die das Zwischenspeichern von DNAME-Einträgen außerhalb des Zuständigkeitsbereichs (out-of-bailiwick) aus einer vom Angreifer kontrollierten Zone für beliebige Domainnamen erlaubte.
-- Von Qifan Zhang (Palo Alto Networks) gemeldete Umgehung der DNSSEC-Validierung behoben, bei der eine vom Angreifer kontrollierte Zone DS-Einträge außerhalb ihres Zuständigkeitsbereichs in Referral-Antworten einschleusen konnte, um den Resolver-Cache zu vergiften und die DNSSEC-Validierung für beliebige signierte Zonen auszuhebeln.
-- Von Xuanchao Xie gemeldete Denial-of-Service-Schwachstelle (DoS) behoben, bei der ein Angreifer die DNS-over-HTTPS/3-Implementierung (DoH/3) ausnutzen konnte, damit der DNS-Server große Datenmengen im Speicher puffert und mit einem Out-Of-Memory-Fehler (OOM) abstürzt.
-- Von Tao Pan (@pant0m) gemeldete Umgehung der Berechtigungsprüfung behoben, bei der über die Option `ptr` in den API-Aufrufen zum Hinzufügen, Ändern und Löschen von Einträgen PTR-Einträge in beliebigen Reverse-Zonen angelegt, überschrieben oder gelöscht werden konnten, für die der Benutzer keine Schreibrechte hatte.
-- Dauerhafte Denial-of-Service-Schwachstelle (DoS) für einen vom Angreifer gewählten Domainnamen behoben, gemeldet von Abdullah Al Ishtiaq, Kai Tu, Matthew Carter, Xiaotian Zhou, Ananna Rahman, Yilu Dong, Tianwei Yu, Ali Ranjbar und Syed Rafiul Hussain vom SyNSec Lab der Pennsylvania State University. Der Angreifer konnte den Domainnamen des Opfers in einen fehlschlagenden Hintergrund-Resolver-Task einreihen, sodass der DNS-Server neu gestartet werden musste.
-- Off-Path-Cache-Poisoning-Schwachstelle behoben, gemeldet von Lior Shafir, Ameer Saleh, Prof. Raja Giryes und Prof. Avishai Wool von der Universität Tel Aviv. Ein Angreifer konnte einen CNAME-Eintrag in den Cache einschleusen, der alle Anfragen für den Domainnamen des Opfers auf die im CNAME angegebene Domain des Angreifers umleitete.
-- Mehrere gespeicherte XSS-Schwachstellen behoben, gemeldet von Yuqi Qiu und Xiang Li vom AOSP Lab der Nankai University.
-- Umgehung der Zonennamen-Validierung in den API-Aufrufen „Zone klonen“ und „DNS-Client-Import“ behoben, gemeldet von Yuqi Qiu und Xiang Li vom AOSP Lab der Nankai University.
-- Schwerer Fehler in der Bereinigung von Antworten im DNS-Client behoben, der bei bestimmten Antworten eine Out-Of-Memory-Ausnahme auslöste und den DNS-Server abstürzen ließ.
-- Die Funktion Auto-Prefetch wurde entfernt, da sie kaum wirksam war und zu viele Systemressourcen benötigte. Das einfache Prefetching bleibt verfügbar.
-- Wild IP App: Unterstützung für Hex-Strings bei IPv4 hinzugefügt. Danke an Marty Cannon (@swimlane-marty) für den PR #2056.
-- Mehrere weitere kleinere Fehlerbehebungen und Verbesserungen.
+- Added support for LDAP authentication. Thanks to Roy Hagland (@Hemsby) for the PR #1869.
+- Implemented support for [draft-farrokhi-dnsop-ede-nta](https://datatracker.ietf.org/doc/html/draft-farrokhi-dnsop-ede-nta). NTA can be added by creating a Conditional Forwarder zone for the domain name with DNSSEC validation disabled. The FWD record's comments are used with the Extended DNS Error (EDE) included in the response.
+- Added Zone File Editor option for Primary and Conditional Forwarder zones.
+- Added support for predefined static API sessions that are configured using new `DNS_SERVER_AUTH_STATIC_SESSIONS` environment variable.
+- Added new `DNS_SERVER_WEB_SERVICE_WWW_FOLDER_PATH` environment variable that allows changing the web service www root folder to allow using custom web service GUI. Thanks to Adrián García (@byGarcia) for PR #2138.
+- Updated docker compose to add health check option that uses the Health Check API call.
+- Updated Health Check API to be allowed to be called from loopback addresses without requiring authentication to support Docker health check.
+- Fixed multi-hop amplification vulnerability reported by Qifan Zhang from Palo Alto Networks, that used multiple CNAME and delegation hops achieving a 4,096:1 packet amplification factor.
+- Fixed cache poisoning vulnerability reported by Qifan Zhang from Palo Alto Networks, that allowed caching out-of-bailiwick DNAME record received from an attacker controlled zone targeting any domain name.
+- Fixed DNSSEC validation bypass vulnerability reported by Qifan Zhang from Palo Alto Networks, that allowed an attacker controlled zone to inject out-of-bailiwick DS (Delegation Signer) records in referral responses to poison the resolver cache and disable DNSSEC validation for arbitrary signed zones.
+- Fixed Denial of Service (DoS) vulnerability reported by Xuanchao Xie, that allowed an attacker to exploit DNS-over-HTTPS/3 (DoH/3) protocol service implementation to cause the DNS server to buffer large amount of data in memory causing the server to crash with Out Of Memory (OOM) error.
+- Fixed authorization bypass vulnerability reported by Tao Pan (@pant0m), that allowed using `ptr` option feature in Add Record and Update Record API calls, and Delete Record API call to add/overwrite/delete PTR record in arbitrary reverse zone that the current user did not have modify permissions to.
+- Fixed persistent Denial of Service (DoS) vulnerability affecting attacker selected victim domain name reported by Abdullah Al Ishtiaq, Kai Tu, Matthew Carter, Xiaotian Zhou, Ananna Rahman, Yilu Dong, Tianwei Yu, Ali Ranjbar, and Syed Rafiul Hussain from SyNSec Lab, The Pennsylvania State University. This vulnerability caused the attacker to add victim domain name to the background resolver task which fails to execute and requires the DNS Server to restart to recover.
+- Fixed off-path cache poisoning vulnerability reported by Lior Shafir, Ameer Saleh, Prof. Raja Giryes, and Prof. Avishai Wool from Tel-Aviv University, that allowed an attacker to inject CNAME record in cache that caused all queries for the victim domain name to get redirected to the attacker's domain name that the CNAME specified.
+- Fixed multiple stored XSS vulnerabilities reported by Yuqi Qiu and Xiang Li from AOSP Lab, Nankai University.
+- Fixed zone name validation bypass vulnerability in Clone Zone and DNS Client Import API calls reported by Yuqi Qiu and Xiang Li from AOSP Lab, Nankai University.
+- Fixed severe bug in DNS Client response sanitization function that caused Out Of Memory (OOM) exception resulting the DNS server to crash when specific types of response was received.
+- Removed Auto Prefetch feature since it was not really effective while requiring too many system resources to function. Note that basic Prefetch feature is still available.
+- Wild IP App: Updated app to add hex string support for IPv4. Thanks to Marty Cannon (@swimlane-marty) for the PR #2056.
+- Multiple other minor bug fixes and improvements.
 
 ## Version 15.4
-Veröffentlicht: 11. Juli 2026
+Release Date: 11 July 2026
 
-- Fehler beim Binden von UDP-Sockets behoben, der in einigen Einsatzszenarien zu falsch gerouteten Antworten führte.
-- Probleme mit RFC-Konformitätsprüfungen behoben, die in einigen Fällen die Auflösung und Zonentransfers störten.
-- Unterstützung für Unix Domain Sockets (UDS) für den Webdienst über HTTPS und für das optionale Protokoll DNS-over-HTTPS hinzugefügt.
-- Weitere kleinere Fehlerbehebungen und Verbesserungen.
+- Fixed issue with UDP socket binding that cause response routing issues for a few of deployment scenarios.
+- Fixed issues with RFC compliance checks causing issues with resolution and zone transfer in some cases.
+- Added support for Unix Domain Sockets (UDS) for Web Service over HTTPS and DNS-over-HTTPS optional protocol.
+- Other minor bug fixes and improvements.
 
 ## Version 15.3
-Veröffentlicht: 5. Juli 2026
+Release Date: 5 July 2026
 
-- Mehrere RFC-Konformitätsprobleme behoben, gemeldet von Yuxiao Wu, Yunyi Zhang, Baojun Liu und Haixin Duan von der Tsinghua University.
-- Von Lawrence LUO Junhua gemeldetes Problem in den Standardberechtigungen des Bereichs Apps behoben: Die Berechtigung `Delete` für die Gruppe `DNS Administrators` wurde entfernt. Sie konnte zur Rechteausweitung auf den Administrationsbereich des DNS-Servers missbraucht werden. Bei bestehenden Installationen wird empfohlen, diese Berechtigung für den Bereich Apps manuell zu entfernen.
-- Problem in den Standardberechtigungen des Bereichs Einstellungen behoben: Die Berechtigung `Delete` für die Gruppe `DNS Administrators` wurde entfernt. Über Sicherung und Wiederherstellung von Konfigurationsdateien konnten sonst Optionen im Administrationsbereich geändert werden. Bei bestehenden Installationen wird empfohlen, diese Berechtigung für den Bereich Einstellungen manuell zu entfernen.
-- Mehrere gespeicherte XSS-Schwachstellen in der Weboberfläche behoben, gemeldet von Daniel Goldberg und Anner Klein von Tenzai.
-- Das automatische Linux-Installationsskript unterstützt jetzt Alpine Linux mit OpenRC-Dienst. Danke an @Wrong-Code für den PR #1889.
-- Unterstützung für Unix Sockets für den Webdienst und das optionale Protokoll DNS-over-HTTP hinzugefügt. Danke an Ingmar Stein (@IngmarStein) für den PR #1753.
-- Der Bereich Zonen unterstützt jetzt Suche und Filter sowie das gleichzeitige Löschen mehrerer Zonen.
-- Im Benutzermenü gibt es eine Option zum Deaktivieren der Update-Benachrichtigung. Sie verhindert die Update-Prüfung der Weboberfläche nur für den aktuellen Benutzer und wird im lokalen Speicher des Browsers abgelegt.
-- Option „Update-Prüfung aktivieren“ unter Einstellungen > Allgemein hinzugefügt. Damit prüft der DNS-Server beim Aufruf der Update-API, die meist nach der Anmeldung an der Weboberfläche erfolgt, ob ein Update verfügbar ist. Ist die Option deaktiviert, meldet die API für alle Benutzer ohne Prüfung, dass kein Update verfügbar ist.
-- Option „CSP-Frame-Ancestors-Header“ unter Einstellungen > Webdienst hinzugefügt, um den Wert des Content-Security-Policy-Headers Frame Ancestors festzulegen.
-- Option „Weiterleitung zur Hilfeseite aktivieren“ unter Einstellungen > Optionale Protokolle hinzugefügt. Sie steuert, ob beim Aufruf des DoH-Endpunkts `/dns-query` im Browser die DoH-Hilfeseite angezeigt wird.
-- Option „Kein Stack-Trace“ unter Einstellungen > Protokollierung hinzugefügt, um nur kurze Fehlermeldungen statt des vollständigen Stack-Traces zu protokollieren.
-- SSO-Implementierung aktualisiert, um für unterstützte Claim-Typen eine JSON-Schlüsselzuordnung für den User-Info-Endpunkt einzurichten.
-- Unterstützung für lokal bereitgestellte DNS-Zonen (RFC 6303) und Domainnamen für besondere Zwecke (RFC 6761) umgesetzt. Die bisherigen `internal`-Zonen wurden entfernt und werden jetzt über diese neue Implementierung verwaltet. Unter Einstellungen > Rekursion gibt es die neue Option „Lokal bereitgestellte DNS-Zonen“, um diese Zonen vollständig zu deaktivieren. Eine einzelne Zone lässt sich deaktivieren oder überschreiben, indem eine Stub- oder Conditional-Forwarder-Zone dafür angelegt wird.
-- TXT-Einträge unterstützen jetzt generische Zeichenketten und damit auch Unicode.
-- Fehler in der DNSSEC-Validierung behoben, der in bestimmten Fällen bei Verwendung von Forwardern zum Validierungsfehler „missing RRSIG“ führte.
-- Neue Health-Check-API `/api/dnsClient/healthCheck` hinzugefügt, mit der der DNS-Server automatisiert geprüft werden kann, ohne Einträge im Query-Log zu erzeugen.
-- Neue Status-API `/api/status` hinzugefügt. Sie ersetzt die SSO-Status-API `/api/sso/status`.
-- Die API `/api/zones/list` kann Zonen jetzt nach Name und Typ filtern.
-- Block Page App: Die App unterstützt jetzt Online-Signierung mit einem in der App-Konfiguration hinterlegten eigenen CA-Zertifikat, sowohl mit RSA als auch mit ECDSA. Danke an Roy Hagland (@Hemsby) für den PR #1897.
-- Geo Continent App und Geo Country App: Beide Apps unterstützen eigene Gruppen in der App-Konfiguration, die in der JSON-Konfiguration von APP-Einträgen verwendet werden können.
-- Mehrere weitere kleinere Fehlerbehebungen und Verbesserungen.
+- Fixed multiple RFC compliance issues reported by Yuxiao Wu, Yunyi Zhang, Baojun Liu, and Haixin Duan from Tsinghu University.
+- Fixed an issue reported by Lawrence LUO Junhua in the Apps section default permissions by removing the `Delete` permission for `DNS Administrators` group. This permissions can be misused by users in the `DNS Administrators` group to perform privilege escalation to get access to the DNS server's Administration section. For existing installations, it is recommended to manually remove the `Delete` permission for `DNS Administrators` group for the Apps section.
+- Fixed an issue in the Settings section default permissions by removing the `Delete` permission for `DNS Administrators` group. This permission can be misused by users in the `DNS Administrators` to use backup/restore config files allowing to change options in the DNS Server's Administration section. For existing installations, it is recommended to manually remove the `Delete` permission for `DNS Administrators` group for the Settings section.
+- Fixed multiple Stored XSS vulnerabilities in the Web Console reported by Daniel Goldberg and Anner Klein from Tenzai.
+- The Linux automated installer script now supports Alpine Linux with OpenRC service. Thanks to @Wrong-Code for the PR #1889.
+- Added Unix Socket support for the Web Service and DNS-over-HTTP Optional protocol. Thanks to Ingmar Stein (@IngmarStein) for the PR #1753. 
+- The Zones section now support search/filtering options along with option to delete multiple zones at once.
+- Added option in user drop down menu to disable Update Notification. This option will prevent the Web Console from checking for updates only for the current user. This option is stored in web browser's local storage.
+- Added "Enable Check For Update" option in Settings > General section which enables the DNS Server to check if an update is available when the Check For Update API is called which usually occurs after a user logs into the Web Console. Disabling this option will disable check for software update for all users such that the API will always return no update available response without actually checking for updates.
+- Added "CSP Frame Ancestors Header" option in Settings > Web Service section to allow configuring the Content Security Policy (CSP) Frame Ancestors header value.
+- Added "Enable Redirect To Help Page" option in Setting > Optional Protocols section to control if the DoH help page should be shown when a user visits the `/dns-query` DoH end point with a web browser.
+- Added "No Stack Trace" option in Settings > Logging section to enable logging only short error messages instead of full exception stack trace.
+- Updated SSO implementation to setup user info endpoint JSON key map for supported claim types.
+- Implemented support for Locally Served DNS Zones (RFC 6303) & Special-Use Domain Names (RFC 6761). The default `internal` zones are removed and they are now managed under this new implementation. A new option "Locally Served DNS Zones" is added in Settings > Recursion section to allow completely disabling these local zones. A single zone can be disabled/overridden by adding a Stub or Conditional Forwarder zone for it.
+- Updated TXT record implementation to allow configuring generic character-strings enabling support for Unicode strings.
+- Fixed issue in DNSSEC validation that caused the "missing RRSIG" validation failure issue in certain cases when the DNS server is configured to use forwarders.
+- Added new Health Check API `/api/dnsClient/healthCheck` to enable automated health check for the DNS server without causing query log entries.
+- Added new Status API `/api/status` obsoleting the SSO Status API `/api/sso/status`.
+- Updated List Zones API `/api/zones/list` to allow filtering zones by name and type.
+- Block Page App: Updated the app to support online signing for custom CA certificate configured in the app's config. Online signing now supports both RSA and ECDSA algorithms. Thanks to Roy Hagland (@Hemsby) for PR #1897.
+- Geo Continent & Geo Country Apps: Updated both apps to support creating custom groups in app config which can then be used with APP record's JSON config.
+- Multiple other minor bug fixes and improvements.
 
 ## Version 15.2
-Veröffentlicht: 9. Mai 2026
+Release Date: 9 May 2026
 
-- SSO-Implementierung aktualisiert: Claims werden, falls verfügbar, vom User-Info-Endpunkt gelesen, und `HttpClientNetworkHandler` wird als Backchannel verwendet.
-- Neue Option „Reverse-Proxy-Adressen des Webdienstes“ hinzugefügt, mit der erlaubte Reverse-Proxys festgelegt werden. Der Real-IP-Header wird nur noch für diese Proxys ausgewertet.
-- In der Einstellungs-API wurde die Option `reverseProxyNetworkACL` in `dnsReverseProxyNetworkACL` umbenannt, da sie nur für die optionalen DNS-Protokolle gilt.
-- Mehrere weitere kleinere Fehlerbehebungen und Verbesserungen.
+- Updated SSO implementation to read claims from user info endpoint when available and to use `HttpClientNetworkHandler` as backchannel.
+- Added new Web Service Reverse Proxy Addresses option to allow defining reverse proxies that are allowed such that Real IP header only works for these proxies.
+- The Settings API has been updated to rename `reverseProxyNetworkACL` option to `dnsReverseProxyNetworkACL` to avoid confusion since this option is used only with DNS Optional Protocols.
+- Multiple other minor bug fixes and improvements.
 
 ## Version 15.1
-Veröffentlicht: 3. Mai 2026
+Release Date: 3 May 2026
 
-- Option hinzugefügt, um SSO-Scopes nach den Anforderungen des SSO-Anbieters zu konfigurieren.
-- Die Textausgabe der Prometheus-Metrik-API verwendet jetzt die korrekte Namenskonvention.
-- Mehrere weitere kleinere Fehlerbehebungen und Verbesserungen.
+- Added option to allow configuring SSO Scopes as required by the SSO provider.
+- Updated Prometheus metrics API text output to use correct naming convention.
+- Multiple other minor bug fixes and improvements.
 
 ## Version 15.0.1
-Veröffentlicht: 26. April 2026
+Release Date: 26 April 2026
 
-- Fehler behoben, durch den das Cluster-API-Token beim Beitritt eines sekundären Knotens nicht synchronisiert wurde.
-- Falscher Synchronisationsstatus der SSO-Gruppenzuordnung auf sekundären Knoten behoben.
-- Von einigen SSO-Anbietern benötigte SSO-Scopes hinzugefügt.
-- Tippfehler in der Textausgabe der Prometheus-Metrik-API behoben.
+- Fixed issue that caused cluster API token to fail to sync when a secondary node joins a cluster.
+- Fixed issue of incorrect sync state for SSO group map on secondary nodes.
+- Added SSO scopes required by some SSO providers.
+- Fixed typo in Prometheus metrics API text output.
 
 ## Version 15.0
-Veröffentlicht: 25. April 2026
+Release Date: 25 April 2026
 
-- Codebasis auf die .NET-10-Laufzeit umgestellt. Wer den DNS-Server oder die .NET-Laufzeit bisher manuell installiert hat, muss vor dem Upgrade die .NET-10-Laufzeit manuell installieren.
-- Das Linux-Installationsskript installiert den DNS-Server jetzt als systemd-Dienst ohne Root-Rechte. Bestehende Installationen funktionieren nach dem Upgrade unverändert. Um die neue Installationsart zu nutzen, wird empfohlen, vor dem Installationsskript das Deinstallationsskript auszuführen. Hinweis: Vor dem Upgrade sollte im Bereich Einstellungen eine Sicherung der Konfiguration als ZIP-Datei exportiert werden.
-- Der Windows-Installer installiert den DNS-Server jetzt als Dienst ohne Systemrechte. Bestehende Installationen funktionieren nach dem Upgrade unverändert. Um die neue Installationsart zu nutzen, wird empfohlen, den DNS-Server zu deinstallieren und den Ordner „config“ im Installationsordner zu löschen, bevor der neue Installer ausgeführt wird. Achtung: Vorher muss im Bereich Einstellungen eine Sicherung der Konfiguration als ZIP-Datei exportiert und nach der Neuinstallation wiederhergestellt werden.
-- Die HTTP-API akzeptiert das Sitzungstoken jetzt im HTTP-Header `Authorization: Bearer <token>`. Der ältere Parameter `token` in Query-String und Formulardaten wird aus Kompatibilitätsgründen weiter unterstützt.
-- Wer einen DNS-Server-Cluster betreibt, muss wegen einiger inkompatibler Änderungen alle Knoten aktualisieren.
-- Unterstützung für Single Sign-On (SSO) mit OpenID Connect (OIDC) hinzugefügt. Danke an Zach Stinnett (@zstinnett) für den PR #1678.
-- Neue Funktion „EDNS-Client-Subnet-Quelladresse“: Die Quell-IP-Adresse des Clients wird aus der EDNS-Client-Subnet-Option (ECS) von DNS-Anfragen über DNS-over-UDP und DNS-over-TCP gelesen. So kann ein DNS-Proxy die Quell-IP-Adresse des Clients per ECS an den DNS-Server weitergeben.
-- Neue Option beim Zonenimport, mit der die gesamte Zone überschrieben wird, sodass nach dem Import nur noch die importierten Einträge (und der SOA-Eintrag der Zone) vorhanden sind.
-- Option hinzugefügt, um den Status des Key Signing Key (KSK) einer Primary-Zone manuell zu aktivieren, damit der DNS-Server nicht regelmäßig nach DS-Einträgen in der übergeordneten Zone sucht.
-- Neue Option unter Einstellungen > Allgemein, um die Sende- und Empfangspuffergröße der UDP-Listener-Sockets festzulegen.
-- Unterstützung für Prometheus mit einem neuen Metrik-API-Aufruf hinzugefügt, der Zähler über die gesamte Laufzeit liefert.
-- UDP-Listener werden bei der ersten Anfrage an eine ANY-Adresse dynamisch an die lokale IP-Adresse der Schnittstelle gebunden. Dadurch wird die Antwort über die Schnittstelle gesendet, auf der die Anfrage einging.
-- Die DNS-Eintragsverwaltung des DHCP-Servers erlaubt jetzt dauerhafte DNS-Einträge für reservierte Leases mit Hostname, auch wenn der reservierte Lease nicht vergeben wurde.
-- Neue Option „IPv6-Modus“ für bessere Performance in Dual-Stack-Netzen umgesetzt.
-- Unterstützung für die EDNS-Option EXPIRE (RFC 7314) umgesetzt.
-- Fehler im optionalen Protokoll DNS-over-QUIC (DoQ) behoben, durch den der DoQ-Dienst keine neuen Verbindungen mehr annahm.
-- Von Shuhan Zhang, Dan Li und Baojun Liu (Tsinghua University) gemeldete DNS-Amplification-Schwachstelle durch selbstreferenzierende Glue-Einträge behoben.
-- Von Shuhan Zhang, Dan Li und Baojun Liu (Tsinghua University) gemeldete DNS-Amplification-Schwachstelle durch aggressives Abrufen von DNSSEC-Einträgen behoben.
-- Von Qifan Zhang (Palo Alto Networks) gemeldete DNS-Amplification-Schwachstelle durch zyklische Nameserver-Delegation behoben.
-- Neues Menü zum Wechseln des Designs mit automatischem Dunkel-/Hellmodus nach dem Design des Systems umgesetzt.
-- Neues Design „Amber“ für bessere visuelle Ergonomie und Barrierefreiheit hinzugefügt. Danke an DaeDae (@daedaevibin) für den PR #1810.
-- Der Bereich Logs > Query-Logs unterstützt jetzt eine Live-Aktualisierung der Ergebnisse.
-- Im Dashboard lässt sich das Blockieren jetzt direkt bei den am häufigsten blockierten Domains aktivieren oder deaktivieren.
-- Query Logs (PostgreSQL) App: Neue App, die PostgreSQL als Datenbank für Query-Logs unterstützt. Danke an Chloe Surett (@scj643) für den PR #1600.
-- Query Logs (Sqlite) App: Die Seitenaufteilung wurde überarbeitet und die Abfragen sind deutlich schneller. Danke an Jim Strang (@jimstrang) für den PR #1702.
-- Query Logs (MySQL) App: Die Seitenaufteilung wurde überarbeitet und die Abfragen sind deutlich schneller. Danke an Jim Strang (@jimstrang) für den PR #1702.
-- Query Logs (SQL Server) App: Die Seitenaufteilung wurde überarbeitet und die Abfragen sind deutlich schneller. Danke an Jim Strang (@jimstrang) für den PR #1702.
-- Block Page App: Online-Signierung von SSL-Zertifikaten umgesetzt, sodass die App SSL-MiTM durchführen kann, wenn ihr selbstsigniertes Stammzertifikat auf den Clients installiert ist.
-- Wild IP App: Neue Option `allowedNetworks` in der Datenkonfiguration von APP-Einträgen, um erlaubte Netze festzulegen und Missbrauch zu verhindern.
-- Drop Requests App: Neue Option `allowedLocalEndPoints`, die nur Anfragen über die aufgeführten lokalen Endpunkte des DNS-Servers zulässt und Anfragen über alle anderen lokalen Endpunkte verwirft.
-- Geo Continent App: Unterstützung für Einträge nach Autonomous System Number (ASN) in den Daten von APP-Einträgen.
-- Geo Country App: Unterstützung für Einträge nach Autonomous System Number (ASN) in den Daten von APP-Einträgen.
-- MISP Connector App: Die App wurde entfernt, da ihre Pflege nicht tragbar ist.
-- Alle DNS-Apps unterstützen jetzt Kommentare in ihrer JSON-Konfiguration. Auch die JSON-Daten von APP-Einträgen dürfen Kommentare enthalten.
-- Alle DNS-Apps enthalten jetzt eine Read-Me-Datei im MD-Format. Danke an Zafer Balkan (@zbalkan) für den PR #1704.
-- Neuinstallationen verwenden jetzt einen plattformspezifischen Log-Ordner.
-- Mehrere weitere kleinere Fehlerbehebungen und Verbesserungen.
+- Upgraded codebase to use .NET 10 runtime. If you had manually installed the DNS Server or .NET Runtime earlier then you must install .NET 10 Runtime manually before upgrading the DNS Server.
+- Updated the DNS Server's install script for Linux to install the DNS Server to run as a non-root systemd service. However, existing installations would work the same after the upgrade. It is recommended to use the uninstall script before running the install script to take advantage of the new non-root systemd service installation. Note! It is recommended to export a backup zip file of the DNS Server's config from the Settings section on the panel before the upgrade.
+- Updated the DNS Server's Installer for Windows to install the DNS Server to run as a non-system service. However, existing installations would work the same after the upgrade. It is recommended to uninstall the DNS Server and delete the "config" folder from the installation folder, before using the new installer to take advantage of the new non-system service installation. Warning! You must export a backup zip file of the DNS Server config from the Settings section on the panel before uninstalling the old version and deleting the existing "config" folder, and use the said backup zip file to restore config after the new installation.
+- The HTTP API now supports passing session token via the `Authorization: Bearer <token>` HTTP header. The older `token` parameter in query string and form data is supported for backward compatibility.
+- If you have DNS Server Cluster setup, make sure to upgrade all nodes for the Cluster to work due to a few breaking changes.
+- Added support for Single Sign-On (SSO) with OpenID Connect (OIDC). Thanks to Zach Stinnett (@zstinnett) for the PR #1678.
+- Added new EDNS Client Subnet (ECS) Source Address feature to read client's source IP address from the EDNS Client Subnet (ECS) option in the DNS requests coming via DNS-over-UDP or DNS-over-TCP protocols. This option allows a DNS proxy to pass the client's source IP address via ECS option to the DNS Server.
+- Added new option in Import Zone feature to allow overwriting entire zone such that only the records being imported will exist (along with zone's SOA record) after the import process.
+- Added option to manually activate primary zone's Key Signing Key (KSK) status to prevent the DNS Server from regularly looking up for DS records in parent zone.
+- Added new option in Setting > General section to allow configuring UDP listener socket send and receive buffer size.
+- Added support for Prometheus with new metrics API call that returns lifetime counters.
+- Updated DNS Server to dynamically bind UDP listeners to local interface IP address on first request to ANY address. This allows sending response to the correct interface the request was received on.
+- Updated DHCP Server's DNS entry management implementation to allow having persistent DNS records for reserved leases with hostname configured even when reserved lease was not allocated.
+- Implemented new IPv6 Mode option in DNS Server for better performance on dual-stack networks.
+- Implemented support for EDNS EXPIRE option (RFC 7314).
+- Fixed bug in DNS-over-QUIC (DoQ) optional protocol that caused the DoQ service to fail to accept new connections.
+- Fixed DNS amplification vulnerability reported by Shuhan Zhang, Dan Li, and Baojun Liu from Tsinghua University, caused by Self-Pointed Glue Records.
+- Fixed DNS amplification vulnerability reported by Shuhan Zhang, Dan Li, and Baojun Liu from Tsinghua University, caused by Aggressive Fetching of DNSSEC Records.
+- Fixed a DNS amplification vulnerability reported by Qifan Zhang, Palo Alto Networks, caused by Cyclic Name Server Delegation.
+- Implemented new Change Theme menu feature with support for automatic dark/light mode based on host system's theme. 
+- Added a new Amber theme for improved visual ergonomics and accessibility. Thanks to DaeDae (@daedaevibin) for the PR #1810.
+- The Logs > Query Logs section now support Live Update feature for automatically refreshing query logs in results.
+- The Dashboard now includes a convenient option at Top Blocked Domains to enable/disable blocking.
+- Query Logs (PostgreSQL) App: Added new app to support PostgreSQL as the backend database for query logs. Thanks to Chloe Surett (@scj643) for the PR #1600.
+- Query Logs (Sqlite) App: Updated the app's pagination logic to significantly improve query performance. Thanks to Jim Strang (@jimstrang) for the PR #1702.
+- Query Logs (MySQL) App: Updated the app's pagination logic to significantly improve query performance. Thanks to Jim Strang (@jimstrang) for the PR #1702.
+- Query Logs (SQL Server) App: Updated the app's pagination logic to significantly improve query performance. Thanks to Jim Strang (@jimstrang) for the PR #1702.
+- Block Page App: Updated the app to implement online SSL certificate signing feature to allow it to do SSL MiTM when app's self-signed root certificate is installed on client systems.
+- Wild IP App: Added new `allowedNetworks` option in the APP record data config for configuring allowed networks to prevent misuse/abuse.
+- Drop Requests App: Added new `allowedLocalEndPoints` option to allow requests coming only from the listed DNS Server Local End Points while dropping requests coming from any other DNS Server Local End Point.
+- Geo Continent App: Updated app to support Autonomous System Number (ASN) entries in APP record data.
+- Geo Country App: Updated app to support Autonomous System Number (ASN) entries in APP record data.
+- MISP Connector App: Removed the app since it is not feasible to be supported.
+- All DNS Apps now support comments in its JSON config. The APP record data JSON too now supports comments.
+- All DNS Apps now include a Read Me file in MD format. Thanks to Zafer Balkan (@zbalkan) for the PR #1704.
+- Fresh installation of DNS Server now uses platform specific log folder path.
+- Multiple other minor bug fixes and improvements.
 
 ## Version 14.3
-Veröffentlicht: 20. Dezember 2025
+Release Date: 20 December 2025
 
-- Unterstützung für den Dunkelmodus hinzugefügt. Danke an @skidoodle für den PR.
-- Catalog-Zonen erlauben jetzt Secondary-Zonen als Mitglieder.
-- Beim Wiederherstellen von Einstellungen können jetzt auch Sicherungen älterer DNS-Server-Versionen importiert werden.
-- Neue Einstellungen für die Standard-TTL von NS- und SOA-Einträgen hinzugefügt.
-- Neue Option in DHCP-Bereichen, mit der dynamische Leases einen vorhandenen DNS-A-Eintrag für den Domainnamen des Clients überschreiben dürfen.
-- Advanced Blocking App: Neue Option, um das Aktualisierungsintervall der Blocklisten in Minuten festzulegen.
-- Split Horizon App: Domainnamen können für die Adressübersetzung jetzt Gruppen zugeordnet werden.
-- Mehrere weitere kleinere Fehlerbehebungen und Verbesserungen.
+- Added support for Dark Mode. Thanks to @skidoodle for the PR.
+- Updated Catalog zones implementation to allow adding Secondary zones as members.
+- Updated Restore Settings option to allow importing backup zip files from older DNS Server versions.
+- Added new options in Settings to configure default TTL values for NS and SOA records.
+- Added DNS record overwrite option in DHCP Scopes to allow dynamic leases to overwrite any existing DNS A record for the client domain name.
+- Advanced Blocking App: Added new option to allow configuring block list update interval in minutes.
+- Split Horizon App: Updated app to support mapping domain names to group for address translation feature.
+- Multiple other minor bug fixes and improvements.
 
 ## Version 14.2
-Veröffentlicht: 22. November 2025
+Release Date: 22 November 2025
 
-- Fehler im Clustering behoben, der die gemeinsame Verwendung von IPv4- und IPv6-Adressen verhinderte. Danke an @ruifung für den PR.
-- Das Clustering enthält außerdem eine inkompatible Änderung, daher müssen alle Clusterknoten auf diese Version aktualisiert werden.
-- Die Option „Allow-/Block-Listen-URLs“ unterstützt jetzt Kommentarzeilen.
-- Advanced Blocking App: Neue Option `blockingAnswerTtl`, mit der die TTL in blockierten Antworten festgelegt wird.
-- Log Exporter App: Unterstützung für die Protokollierung von EDNS hinzugefügt. Danke an @zbalkan für den PR.
-- MISP Connector App: Neue App, die aus MISP-Feeds bezogene schädliche Domainnamen blockiert. Danke an @zbalkan für den PR.
-- Mehrere weitere kleinere Fehlerbehebungen und Verbesserungen.
+- Fixed bug in Clustering implementation which prevented using IPv4 and IPv6 addresses together. Thanks to @ruifung for the PR. 
+- There is also a breaking change in clustering and thus all cluster nodes must be upgraded to this release to avoid issues.
+- Updated the "Allow / Block List URLs" option implementation to support comment entries.
+- Advanced Blocking App: Updated app to implement `blockingAnswerTtl` option to allow specifying the TTL value used in blocked response.
+- Log Exporter App: Updated the app to add EDNS logging support. Thanks to @zbalkan for the PR.
+- MISP Connector App: Added new app that can block malicious domain names pulled from MISP feeds. Thanks to @zbalkan for the PR.
+- Multiple other minor bug fixes and improvements.
 
 ## Version 14.1
-Veröffentlicht: 16. November 2025
+Release Date: 16 November 2025
 
-- Clustering erlaubt jetzt mehrere eigene IP-Adressen. Dadurch ändert sich die API inkompatibel, und alle Clusterknoten müssen auf diese Version aktualisiert werden, damit sie zusammenarbeiten.
-- Probleme bei der Prüfung von Benutzer- und Gruppenberechtigungen mit aktiviertem Clustering behoben, die beim Zugriff auf einen anderen Knoten eine Umgehung der Berechtigungen ermöglichten.
-- Fehler behoben, durch den die Advanced Blocking App nicht mehr funktionierte.
-- Umgebungsvariablen für TLS-Zertifikatspfad, Zertifikatspasswort und die Weiterleitung von HTTP auf HTTPS hinzugefügt. Danke an @simonvandermeer für den PR.
-- URLs der Hagezi-Blocklisten aktualisiert. Danke an @hagezi für den PR.
-- Weitere kleinere Änderungen und Verbesserungen.
+- Updated Clustering implementation to allow configuring multiple custom IP addresses. This introduces a breaking change in the API and thus all cluster nodes must be upgraded to this release for them to work together.
+- Fixed issues related to user and group permission validation when Clustering is enabled which caused permission bypass when accessing another node.
+- Fixed bug that caused the Advanced Blocking app to stop working.
+- Added environment variables for TLS certificate path, certificate password, and HTTP to HTTPS redirect option. Thanks to @simonvandermeer for the PR.
+- Updated Hagezi block list URLs. Thanks to @hagezi for the PR.
+- Other minor changes and improvements.
 
 ## Version 14.0.1
-Veröffentlicht: 9. November 2025
+Release Date: 9 November 2025
 
-- Fehler in den API-Aufrufen „Blocklisten-Update erzwingen“ und „Blockieren vorübergehend deaktivieren“ behoben.
-- Umgehung der Sitzungsprüfung beim Weiterleiten von Anfragen an einen anderen Knoten mit aktiviertem Clustering behoben.
-- Fehler beim Laden von App-Konfigurationen aufgrund von Zeichenkodierungsproblemen behoben.
-- Fehler behoben, durch den ältere Versionen von Konfigurationsdateien in einigen Fällen wegen Validierungsfehlern nicht geladen wurden.
-- Dokumentation der Weboberfläche zum Initialisieren eines Clusters und zum Beitritt aktualisiert.
-- Weitere kleinere Änderungen und Verbesserungen.
+- Fixed bugs in the Force Update Block List and Temporary Disable Blocking API calls.
+- Fixed session validation bypass bug during proxying request to another node when Clustering is enabled.
+- Fixed issue of failing to load app config due to text encoding issues.
+- Fixed issue of failure to load old config file versions due to validation failures in some cases.
+- Updated GUI docs for Cluster initialization and joining.
+- Other minor changes and improvements.
 
 ## Version 14.0
-Veröffentlicht: 8. November 2025
+Release Date: 8 November 2025
 
-- Codebasis auf die .NET-9-Laufzeit umgestellt. Wer den DNS-Server oder die .NET-8-Laufzeit bisher manuell installiert hat, muss vor dem Upgrade die .NET-9-Laufzeit manuell installieren.
-- Diese Hauptversion enthält inkompatible Änderungen an der HTTP-API zum Ändern des Passworts. Eigene API-Clients sollten vor dem produktiven Einsatz getestet werden.
-- Denial-of-Service-Schwachstelle (DoS) in der Ratenbegrenzung behoben, gemeldet von Shiming Liu vom Network and Information Security Lab der Tsinghua University. Die Ratenbegrenzung wurde neu entworfen und bietet in den Einstellungen verschiedene Optionen für Anfragen pro Minute (QPM), die das Problem entschärfen.
-- Cache-Poisoning-Schwachstelle über einen IP-Fragmentierungsangriff behoben, gemeldet von Yuxiao Wu vom NISL Lab Security der Tsinghua University. Dazu wurden fehlende Bailiwick-Prüfungen für NS-Einträge in Referral-Antworten ergänzt.
-- [DNSSEC-Downgrade](https://dnssec-downgrade.net/)-Schwachstelle behoben, über die die Validierung umgangen werden konnte, wenn einer der DNSSEC-Algorithmen einer Domain vom DNS-Server nicht unterstützt wurde.
-- Clustering umgesetzt: Zwei oder mehr DNS-Server-Instanzen lassen sich zu einem Cluster zusammenschließen und über die Weboberfläche eines beliebigen Knotens gemeinsam verwalten. Das Dashboard zeigt dabei zusammengefasste Daten des gesamten Clusters.
-- Unterstützung für Zwei-Faktor-Authentifizierung (2FA) per TOTP hinzugefügt.
-- Optionen zur Konfiguration des UDP-Socket-Poolings in den Einstellungen hinzugefügt.
-- Fehler beim Einlesen von Zonendateien behoben, durch den Einträge nicht gelesen wurden, deren Name kein FQDN war und einem Eintragstyp entsprach.
-- Der interne HTTP-Client versucht es jetzt auch über IPv4, wenn „IPv6 bevorzugen“ aktiviert ist und die Verbindung über IPv6 fehlschlägt.
-- Fehlende NSEC-/NSEC3-Einträge in Antworten für Wildcard- und Empty-Non-Terminal-Einträge (ENT) in Primary-Zonen ergänzt.
-- Mehrere Probleme in Prefetch und Auto-Prefetch behoben, die in bestimmten Fällen zu unerwünscht häufigen Aktualisierungen zwischengespeicherter Daten führten.
-- Query Logs (Sqlite) App: Verwendet jetzt Channels für bessere Performance.
-- Query Logs (MySQL) App: Verwendet jetzt Channels für bessere Performance. Überlauf durch einen Fehler im Schema für den Protokollparameter behoben.
-- Query Logs (SQL Server) App: Verwendet jetzt Channels für bessere Performance.
-- NX Domain App: Unterstützung für Extended-DNS-Error-Meldungen hinzugefügt.
-- Mehrere weitere kleinere Fehlerbehebungen und Verbesserungen.
-
+- Upgraded codebase to use .NET 9 runtime. If you had manually installed the DNS Server or .NET 8 Runtime earlier then you must install .NET 9 Runtime manually before upgrading the DNS Server.
+- This major release has a breaking changes in the Change Password HTTP API so its advised to test your API client once before deploying to production.
+- Fixed Denial of Service (DoS) vulnerability in the DNS Server's rate limiting implementation reported by Shiming Liu from the Network and Information Security Lab, Tsinghua University. The DNS Server now has a redesigned rate limiting implementation with different Queries Per Minute (QPM) options in Settings that help mitigate this issue.
+- Fixed Cache Poisoning vulnerability achieved using a IP fragmentation attack reported by Yuxiao Wu from the NISL Lab Security, Tsinghua University. The DNS Server fixes this issue by adding missing bailiwick validations for NS record in referral responses.
+- Fixed [DNSSEC Downgrade](https://dnssec-downgrade.net/) vulnerability that made it possible to bypass validation when one of domain name's DNSSEC algorithm was not supported by the DNS Server.
+- Implemented Clustering feature where you can now create a cluster of two or more DNS Server instances and manage all of them from a single DNS admin web console by logging into anyone of the Cluster nodes. It also features showing aggregate Dashboard data for the entire cluster.
+- Added TOTP based Two-factor authentication (2FA) support.
+- Added options to configure UDP Socket pooling feature in Settings.
+- Fixed bug in zone file parsing that failed to parse records when their names were not FDQN and matched with name of a record type.
+- Fixed issue with internal Http Client to retry for IPv4 addresses too when `Prefer IPv6` option is enabled and IPv6 address failed to connect.
+- Fixed bug of missing NSEC/NSEC3 record in response for wildcard and Empty Non-terminal (ENT) records in Primary zones.
+- Fixed multiple issues in Prefetch and Auto Prefetch implementation that caused undesirable frequent refreshing of cached data in certain cases.
+- Query Logs (Sqlite) App: Updated app to use Channels for better performance.
+- Query Logs (MySQL) App: Updated app to use Channels for better performance. Fixed bug in schema for protocol parameter causing overflow.
+- Query Logs (SQL Server) App: Updated app to use Channels for better performance.
+- NX Domain App: Updated app to support Extended DNS Error messages.
+- Multiple other minor bug fixes and improvements.
+ 
 ## Version 13.6
-Veröffentlicht: 26. April 2025
+Release Date: 26 April 2025
 
-- Beim Anlegen einer Primary- oder Forwarder-Zone kann jetzt eine Zonendatei importiert werden. So lassen sich Vorlagen für neue Zonen verwenden.
-- Die Weboberfläche unterstützt eigene Listen für die Serverliste des DNS-Clients, die Schnellauswahl zum Blockieren und die Schnellauswahl für Forwarder. Die Anleitung dazu steht in der Datei `www/json/readme.txt` im Installationsordner.
-- Der Eintragsfilter in der Zonenansicht unterstützt jetzt Suchen mit Platzhaltern.
-- Fehler im DNS-over-QUIC-Dienst behoben, durch den der Dienst nach fehlgeschlagenen Verbindungsaufbauten nicht mehr funktionierte.
-- Query Logs (Sqlite) App: Unterstützt jetzt VACUUM, um die Datenbankdatei auf der Festplatte zu verkleinern.
-- Geo Continent App und Geo Country App: Beide Apps unterstützen Makrovariablen, um die JSON-Konfiguration von APP-Einträgen zu vereinfachen.
-- Mehrere weitere kleinere Fehlerbehebungen und Verbesserungen.
+- Added option to import a zone file when adding a Primary or Forwarder zone. This allows using a template zone file when creating new zones.
+- Updated the web GUI to support custom lists for DNS Client server list, quick block drop down list and quick forwarders drop down list. To create a customized list, read the instructions given in the `www/json/readme.txt` file found in the installation folder.
+- Updated the record filtering option in zone edit view to support wildcard based search.
+- Fixed issue in DNS-over-QUIC service that caused the service to stop working due to failed connection handshake.
+- Query Logs (Sqlite) App: Updated app to support VACCUM option to allow trimming database file on disk to reduce its size.
+- Geo Continent App and Geo Country App: Updated both apps to support macro variable to simplify APP record data JSON configuration.
+- Multiple other minor bug fixes and improvements.
 
 ## Version 13.5
-Veröffentlicht: 6. April 2025
+Release Date: 6 April 2025
 
-- [RFC 8080](https://datatracker.ietf.org/doc/rfc8080/) umgesetzt: Die DNSSEC-Algorithmen Ed25519 (15) und Ed448 (16) werden jetzt zum Signieren und Validieren unterstützt.
-- Unterstützung für selbst angegebene private DNSSEC-Schlüssel hinzugefügt. Beim Signieren einer Zone oder bei einem Schlüsselwechsel kann ein privater Schlüssel im PEM-Format angegeben werden.
-- Im Zoneneditor lassen sich Einträge jetzt nach Name oder Typ filtern, um in großen Zonen leichter zu suchen.
-- DNS-Logs können zusätzlich zur Datei auch auf die Konsole (STDOUT) geschrieben werden.
-- Beim Zonenimport kann jetzt direkt eine Datei importiert werden, zusätzlich zur Eingabe im Texteditor.
-- Der Parser für Zonendateien unterstützt jetzt das erweiterte Zonendateiformat von BIND.
-- Die Query-Log-Ansicht färbt Einträge je nach Art des Logeintrags ein.
-- [draft-fujiwara-dnsop-resolver-update](https://datatracker.ietf.org/doc/draft-fujiwara-dnsop-resolver-update/) umgesetzt: NS-Einträge der übergeordneten Zone und autoritative NS-Einträge der untergeordneten Zone werden im Cache getrennt gespeichert.
-- Die Funktion [NS Revalidation (draft-ietf-dnsop-ns-revalidation)](https://datatracker.ietf.org/doc/draft-ietf-dnsop-ns-revalidation/) wurde entfernt. Sie erhöhte die Komplexität und die Zahl der Anfragen an Nameserver und damit die Last auf dem Resolver. Außerdem ließen sich damit einige Domains nicht mehr auflösen, wenn sich die NS-Einträge der untergeordneten Zone von denen der übergeordneten unterschieden. Einen Nutzen für Betreiber brachte sie nicht, wohl aber Betriebsprobleme. Die Hintergründe stehen in [dieser Diskussion](https://mailarchive.ietf.org/arch/msg/dnsop/s8KBhilK4bCrmSBRMyKaxll02lk/).
-- Schnittstelle `IDnsApplicationPreference` hinzugefügt, damit Apps nach einem vom Benutzer festgelegten Präferenzwert sortiert werden können.
-- Advanced Forwarding App, DNS64 App, NXDOMAIN App, Split Horizon App und Zone Alias App: Neue Option `appPreference` in der Konfiguration für die App-Präferenz.
-- Log Exporter App: HTTP-Header können ohne Validierung konfiguriert werden, um auch nicht standardkonforme Werte zu setzen.
-- Die Weboberfläche verwendet relative Pfade und funktioniert damit hinter einem Reverse Proxy unter beliebigen URL-Pfaden.
-- Mehrere weitere kleinere Fehlerbehebungen und Verbesserungen.
+- Implemented [RFC 8080](https://datatracker.ietf.org/doc/rfc8080/) to add support for Ed25519 (15) and Ed448 (16) DNSSEC algorithms for both signing and validation.
+- Added support for user specified DNSSEC private keys. This adds option to specify private key in PEM format when signing zone or when doing a key rollover.
+- Added feature to filter records in the zone editor based on its name or type to allow ease of searching records in large zones.
+- Added support for writing DNS logs to Console (STDOUT) along with existing option to write to a file.
+- Updated Import Zone option to allow importing directly from a given file along with existing option to enter records to import with a text editor.
+- Updated zone file parser to support BIND extended zone file format.
+- Updated Query Logs view to show records with background color based on the type of log entry.
+- Implemented [draft-fujiwara-dnsop-resolver-update](https://datatracker.ietf.org/doc/draft-fujiwara-dnsop-resolver-update/) to cache parent side NS records and child side authoritative NS records separately in DNS cache.
+- Removed [NS Revalidation (draft-ietf-dnsop-ns-revalidation)](https://datatracker.ietf.org/doc/draft-ietf-dnsop-ns-revalidation/) feature implementation. This featured caused increase in complexity and number of requests to name servers increasing load on the resolver. It also caused few domain names to fail to resolve when the zone's child NS records were different from parent NS records which would have otherwise resolved correctly. It did not add any benefit for the resolver operator but created operational issues. Read the discussion thread [here](https://mailarchive.ietf.org/arch/msg/dnsop/s8KBhilK4bCrmSBRMyKaxll02lk/) to understand more about this decision.
+- Added `IDnsApplicationPreference` interface to allow applications to be ordered based on their user configured app preference value.
+- Advanced Forwarding App, DNS64 App, NXDOMAIN App, Split Horizon App and Zone Alias App: Updated these apps to implement app preference feature in config with new `appPreference` option.
+- Log Exporter App: Updated app to allow configuring HTTP headers without validation to allow adding non-standard header values.
+- Updated the DNS admin panel web app to use relative paths to allow using the DNS admin panel with any URL path on a reverse proxy.
+- Multiple other minor bug fixes and improvements.
 
 ## Version 13.4.3
-Veröffentlicht: 23. Februar 2025
+Release Date: 23 February 2025
 
-- Hoher Speicherverbrauch bei der Option „Letztes Jahr“ im Dashboard behoben.
-- Mehrere DNSSEC-Validierungsfehler für bestimmte Domains bei Verwendung von Forwardern behoben.
-- Mehrere weitere kleinere Fehlerbehebungen und Verbesserungen.
+- Fixed issue of high memory usage when "Last Year" option is used on Dashboard.
+- Fixed multiple issues of DNSSEC validation failures for certain domain names when using forwarders.
+- Multiple other minor bug fixes and improvements.
 
 ## Version 13.4.2
-Veröffentlicht: 15. Februar 2025
+Release Date: 15 February 2025
 
-- In einem bestimmten Fall wurde das CD-Flag nicht behandelt, wenn in der Anfrage das DO-Flag nicht gesetzt war. Behoben.
-- Block Page App: Problem mit lokalen Kestrel-Adressen behoben, das auf Linux-Systemen das Binden verhinderte.
-- Query Logs (MySQL) App: Verwendet jetzt den Treiber MySqlConnector und funktioniert damit auch mit MariaDB.
-- Query Logs (SQL Server) App: Problem beim Masseneinfügen durch das Parameterlimit pro Abfrage und Problem beim Filtern nach Anfragetyp behoben.
-- Mehrere weitere kleinere Fehlerbehebungen und Verbesserungen.
+- Fixed issue of unhandled CD flag condition when DO flag is unset in requests for a specific case.
+- Block Page App: Fixed issue with Kestrel local addresses that caused failure to bind on Linux systems.
+- Query Logs (MySQL) App: Updated app to use MySqlConnector driver which allows the app to work with MariaDB too.
+- Query Logs (SQL Server) App: Fixed issue with bulk insert due to limit on parameters per query. Fixed issue with qtype filtering.
+- Multiple other minor bug fixes and improvements.
 
 ## Version 13.4.1
-Veröffentlicht: 2. Februar 2025
+Release Date: 2 February 2025
 
-- Das CD-Flag wurde nicht behandelt, wenn in der Anfrage das DO-Flag nicht gesetzt war. Behoben.
-- Block Page App: Die Blockierseite zeigt jetzt Details zur Blockierung an.
-- Query Logs (MySQL) App: Die Server-Domain wird mitprotokolliert, sodass mehrere Instanzen dieselbe Datenbank nutzen können.
-- Query Logs (SQL Server) App: Die Server-Domain wird mitprotokolliert, sodass mehrere Instanzen dieselbe Datenbank nutzen können.
-- Mehrere weitere kleinere Fehlerbehebungen und Verbesserungen.
+- Fixed issue of unhandled CD flag condition when DO flag is unset in requests.
+- Block Page App: Updated app to show blocking info details on the block page.
+- Query Logs (MySQL) App: Updated app to add server domain to db logs to allow using same db with multiple instances.
+- Query Logs (SQL Server) App: Updated app to add server domain to db logs to allow using same db with multiple instances.
+- Multiple other minor bug fixes and improvements.
 
 ## Version 13.4
-Veröffentlicht: 26. Januar 2025
+Release Date: 26 January 2025
 
-- Gefälschte DNS-Antworten über UDP werden erkannt, woraufhin auf TCP gewechselt wird, um Cache-Poisoning-Versuche abzuwehren. Das schützt vor dem RebirthDay-Angriff [CVE-2024-56089], gemeldet von Xiang Li, AOSP Lab der Nankai University.
-- Minutenstatistiken können jetzt für einen frei wählbaren Zeitraum (maximal 2 Stunden) abgerufen werden.
-- HTTP-API und Option in der Weboberfläche zum Export der Query-Logs als CSV-Datei hinzugefügt.
-- Drop Requests App: Fehler behoben, durch den bei einem unbekannten Eintragstyp alle Anfragen erfasst wurden.
-- Log Exporter App: Neue App zum Export von Query-Logs in Dateien, per HTTP und an Syslog. Die App wurde von [Zafer Balkan](https://github.com/zbalkan) entworfen und umgesetzt.
-- Query Logs (SQL Server) App: Neue App, die Query-Logs in Microsoft SQL Server speichert.
-- Query Logs (MySQL) App: Neue App, die Query-Logs in einem MySQL-Datenbankserver speichert.
-- Mehrere weitere kleinere Fehlerbehebungen und Verbesserungen.
+- Added implementation to detect spoofed DNS responses over UDP transport and switch to TCP transport to mitigate cache poisoning attempts. This is a mitigation for RebirthDay Attack [CVE-2024-56089] reported by Xiang Li, AOSP Lab of Nankai University.
+- Added support for reading minute stats for given custom date time range (for max 2 hours range difference).
+- Added HTTP API and GUI option to export Query Logs as a CSV file.
+- Drop Requests App: Fixed bug that caused matching all requests when unknown record type was configured.
+- Log Exported App: Added new app that supports exporting query logs to file, HTTP, and Syslog sinks. The app was designed and implemented by [Zafer Balkan](https://github.com/zbalkan).
+- Query Logs (SQL Server) App: Added new app that supports logging query logs to Microsoft SQL Server.
+- Query Logs (MySQL) App: Added new app that supports logging query logs to MySQL database server.
+- Multiple other minor bug fixes and improvements.
 
 ## Version 13.3
-Veröffentlicht: 21. Dezember 2024
+Release Date: 21 December 2024
 
-- Warteschlange für den Resolver umgesetzt, um Zeitüberschreitungen bei großen Installationen mit sehr vielen gleichzeitigen ausgehenden Auflösungen zu vermeiden. Unter Einstellungen > Allgemein legt die neue Option „Maximale gleichzeitige Auflösungen“ fest, wie viele asynchrone Auflösungen pro CPU-Kern gleichzeitig laufen.
-- Neue Optionen „Minimaler SOA-Refresh“ und „Minimaler SOA-Retry“ unter Einstellungen > Allgemein. Sie überschreiben kleinere SOA-Werte von Secondary-, Stub-, Secondary-Forwarder- und Secondary-Catalog-Zonen.
-- Das selbstsignierte Zertifikat enthält jetzt Subject-Alternative-Name-Einträge (SAN) für die lokalen Unicast-Adressen des Webdienstes.
-- Fehler in der Erzeugung von NSEC3-Nichtexistenzbeweisen behoben, der alle DNS-Protokolldienste lahmlegte (DoS), wenn bestimmte Primary- und Secondary-Zonen mit NSEC3 signiert waren.
-- Unbehandelte Ausnahme behoben, die den DNS-over-QUIC-Dienst lahmlegte (DoS) [CVE-2024-56946], gemeldet von Michael Wedl, Fachhochschule St. Pölten.
-- Fehler beim Neuladen des SSL/TLS-Zertifikats für den Webdienst und den DNS-over-HTTPS-Dienst behoben.
-- Problem mit der SOA-Anfrage für Catalog-Zonen behoben, durch das Zonentransfers mit BIND fehlschlugen.
-- Query Logs (Sqlite) App: Die Antwortzeit (RTT) wird jetzt mitprotokolliert.
-- Mehrere weitere kleinere Fehlerbehebungen und Verbesserungen.
+- Implemented resolver queue mechanism to avoid request timeout error issues caused when too many outbound resolutions were being processed concurrently for large deployments. A new Max Concurrent Resolutions option is now available in Settings > General section to configure the maximum number of concurrent async resolutions per CPU core.
+- Added new Minimum SOA Refresh and Minimum SOA Retry options in Settings > General section to override any Secondary, Stub, Secondary Forwarder, or Secondary Catalog zone SOA values that are smaller than these configured minimum values.
+- Added feature to include Subject Alternative Name (SAN) entry for DNS admin web service local unicast addresses in the self-signed certificate.
+- Fixed bug in NSEC3 non-existent proof generation implementation that caused Denial of Service (DoS) for all DNS protocol services when certain primary and secondary zones are DNSSEC signed using NSEC3.
+- Fixed issue of unhandled exception that caused Denial of Service (DoS) for DNS-over-QUIC service [CVE-2024-56946] reported by Michael Wedl, St. Poelten University of Applied Sciences.
+- Fixed bug in reloading SSL/TLS certificate for DNS admin web service and DNS-over-HTTPS service.
+- Fixed issue with Catalog zone SOA request that caused zone transfer to fail with BIND.
+- Query Logs (Sqlite): Updated the app to support logging response RTT value.
+- Multiple other minor bug fixes and improvements.
 
 ## Version 13.2.2
-Veröffentlicht: 2. Dezember 2024
+Release Date: 2 December 2024
 
-- Fehler behoben, durch den DNS-Antworten gefälschte Einträge enthielten, obwohl in der Anfrage Checking Disabled (CD) nicht gesetzt war.
+- Fixed bug that caused DNS response to include bogus records even when Checking Disabled (CD) is set to false in request.
 
 ## Version 13.2.1
-Veröffentlicht: 30. November 2024
+Release Date: 30 November 2024
 
-- Der DNS-over-HTTPS-Dienst liest jetzt den X-Real-IP-Header von Reverse-Proxys, die in der ACL erlaubt sind.
-- Problem mit HTTP/2 auf Windows-Versionen vor Windows 10 behoben, durch das HTTPS für den Webdienst und den DNS-over-HTTPS-Dienst nicht aktiviert werden konnte.
-- Problem bei der Behandlung abgebrochener Verbindungen in DNS-over-QUIC behoben.
-- Problem mit einer Wildcard-Anfrage für ENT-Subdomains in lokalen Zonen behoben.
-- Problem beim Forwarding behoben, durch das ein CNAME nicht separat aufgelöst wurde, wenn der Upstream-Server einen SOA-Eintrag im Authority-Abschnitt lieferte.
-- Problem beim Laden von DNS-App-Assemblys behoben, durch das in einigen Fällen Abhängigkeiten nicht geladen wurden.
-- Mehrere weitere kleinere Fehlerbehebungen und Verbesserungen.
+- Updated server to allow DNS-over-HTTPS service to read X-Real-IP header from reverse proxy that are allowed by the ACL.
+- Fixed issue with HTTP/2 on OS versions older than Windows 10 that caused failure to enable HTTPS for admin web service and DNS-over-HTTPS service.
+- Fixed issue with handling connection abort condition for DNS-over-QUIC.
+- Fixed issue with handling a wildcard query case for ENT subdomain names in local zones.
+- Fixed issue with Forwarding where CNAME was not being resolved separately when upstream returned SOA in response authority section.
+- Fixed issue in DNS Application assembly loading implementation that caused issue loading dependencies for some scenarios.
+- Multiple other minor bug fixes and improvements.
 
 ## Version 13.2
-Veröffentlicht: 16. November 2024
+Release Date: 16 November 2024
 
-- Neue Einstellung für eine Netzwerk-ACL für Reverse Proxys, die mit den optionalen Protokollen DNS-over-UDP-PROXY, DNS-over-TCP-PROXY und DNS-over-HTTP verwendet wird.
-- Fehler im DNS-over-QUIC-Client behoben, durch den das Forwarding in einigen Fällen nach einiger Zeit mit einer Zeitüberschreitung ausfiel.
+- Added new option in Settings to allow configuring reverse proxy network ACL to use with DNS-over-UDP-PROXY, DNS-over-TCP-PROXY, AND DNS-over-HTTP optional protocols.
+- Fixed issue in DNS-over-QUIC protocol client which caused the forwarding to fail to work with timeout error after a while in some cases.
 
 ## Version 13.1.1
-Veröffentlicht: 9. November 2024
+Release Date: 9 November 2024
 
-- Fehler behoben, durch den HTTP/3 weder für den Webdienst noch für DNS-over-HTTPS/3 funktionierte. Ursache war eine geänderte Verwendung der Anwendungsprotokoll-Option im Kestrel-Webserver.
-- Der DNS-over-HTTPS-Client unterstützt mit dem Schema `https` jetzt HTTP/2 und HTTP/1.1 und mit dem Schema `h3` ausschließlich HTTP/3 ohne Rückfall auf andere Protokolle.
-- Problem im DNS-over-TCP- und DNS-over-TLS-Client behoben, das auf Plattformen ohne Unterstützung für TCP-Keepalive-Socket-Optionen auftrat.
-- Der rekursive Resolver versucht jetzt immer, AAAA für Nameserver ohne IPv6-Glue-Eintrag aufzulösen, damit die Auflösung auch in reinen IPv6-Netzen funktioniert.
-- Filter AAAA App: Neue Option für die Standard-TTL.
-- DNS Rebinding Protection App: Neue Option für Netze, die von der Prüfung ausgenommen sind.
-- Mehrere weitere kleinere Fehlerbehebungen und Verbesserungen.
+- Fixed issue with HTTP/3 protocol not working for both admin web service and DNS-over-HTTPS/3 service caused due to changes in how Kestrel web server uses application protocol option.
+- Updated DNS-over-HTTPS client implementation such that it will support HTTP/2 and HTTP/1.1 protocols with `https` scheme and only support HTTP/3 protocol with `h3` scheme with no protocol fallback.
+- Fixed issue in DNS-over-TCP and DNS-over-TLS client caused due to some platforms not supporting TCP keep alive socket options.
+- Updated recursive resolver implementation to always attempt to resolve AAAA for name server with missing IPv6 glue record to allow resolution over IPv6 only networks.
+- Filter AAAA App: added new option to configuring default TTL value.
+- DNS Rebinding Protection App: added new option to configure bypass networks.
+- Multiple other minor bug fixes and improvements.
 
 ## Version 13.1
-Veröffentlicht: 19. Oktober 2024
+Release Date: 19 October 2024
 
-- Eine Secondary-Root-Zone kann jetzt direkt hinzugefügt werden.
-- Neue Notify-Option für Catalog-Zonen, um eigene Nameserver nur für Aktualisierungen der Catalog-Zone anzugeben.
-- Option für die TTL blockierter Antworten in den Einstellungen hinzugefügt.
-- Der Header `X-Real-IP` lässt sich für den Webdienst und das optionale Protokoll DNS-over-HTTP anpassen.
-- Mehrere weitere kleinere Fehlerbehebungen und Verbesserungen.
-- Filter AAAA App: Die zu filternden Domainnamen lassen sich jetzt explizit angeben.
+- Added new option to add Secondary Root Zone directly.
+- Added new notify option for Catalog zones to specify separate name servers only for Catalog zone updates.
+- Added option to configure blocking answer's TTL value in Settings.
+- Added option to make the `X-Real-IP` header customizable for admin web service and for DNS-over-HTTP optional protocol.
+- Multiple other minor bug fixes and improvements.
+- Filter AAAA App: updated app to support option to explicitly specify filter domain names.
 
 ## Version 13.0.2
-Veröffentlicht: 28. September 2024
+Release Date: 28 September 2024
 
-- Problem mit DNS-over-TLS und DNS-over-TCP behoben, durch das die zugrunde liegende Verbindung geschlossen wurde, wenn die ursprüngliche Anfrage abgebrochen wurde.
-- Mehrere weitere kleinere Fehlerbehebungen und Verbesserungen.
+- Fixed issue with DNS-over-TLS and DNS-over-TCP protocols that would cause the underlying connection to close if original request gets canceled.
+- Multiple other minor bug fixes and improvements.
 
 ## Version 13.0.1
-Veröffentlicht: 23. September 2024
+Release Date: 23 September 2024
 
-- Problem bei der Verwendung eines Proxys mit Forwardern behoben, durch das DNS-over-TOR mit dem Hidden Service von Cloudflare nicht funktionierte.
+- Fixed issue in using proxy with forwarders that caused failure to use DNS-over-TOR with Cloudflare's hidden service.
 
 ## Version 13.0
-Veröffentlicht: 22. September 2024
+Release Date: 22 September 2024
 
-- Catalog-Zonen nach [RFC 9432](https://datatracker.ietf.org/doc/rfc9432/) umgesetzt, um DNS-Zonen automatisch auf einem oder mehreren Secondary-Nameservern bereitzustellen. Unterstützt werden Primary-, Stub- und Conditional-Forwarder-Zonen mit automatischer Bereitstellung der jeweiligen Secondary-Zonen.
-- Neue Zonenart Secondary Forwarder, um Secondaries für Conditional-Forwarder-Zonen einzurichten. Conditional-Forwarder-Zonen unterstützen dafür Zonentransfer und Notify und enthalten jetzt einen Platzhalter-SOA-Eintrag.
-- Neue Funktion „Abfragezugriff“, um den Zugriff für jede Zone einzeln festzulegen. So lassen sich Anfragen auf Clients aus bestimmten Netzen beschränken, auch wenn der DNS-Server öffentlich erreichbar ist.
-- Für Einträge in Zonen kann eine Ablauf-TTL angegeben werden, nach der der DNS-Server die Einträge automatisch löscht.
-- Der rekursive Resolver unterstützt Parallelität und fragt mehrere Nameserver gleichzeitig ab, um die Auflösung zu beschleunigen.
-- Latenzbasierte Auswahl der Nameserver hinzugefügt, die zusammen mit der Parallelität für rekursive Auflösung und Forwarder die Auflösung deutlich beschleunigt.
-- Prioritäten für FWD-Einträge in Conditional-Forwarder-Zonen umgesetzt. So lassen sich einzelne Forwarder bevorzugen und bei Bedarf ein niedrig priorisierter FWD-Eintrag „This Server“ für die rekursive Auflösung verwenden.
-- ZONEMD-Validierung nach [RFC 8976](https://datatracker.ietf.org/doc/rfc8976/) für Secondary-Zonen umgesetzt, gedacht für eine lokale Secondary-Root-Zone. Damit wird die vollständige Zone nach jedem Zonentransfer geprüft.
-- Unterstützung für den Eintragstyp Responsible Person (RP) nach [RFC 1183](https://www.rfc-editor.org/rfc/rfc1183) hinzugefügt.
-- Option zum Aktivieren oder Deaktivieren des parallelen Forwardings hinzugefügt, um auch sequenzielles Forwarding zu ermöglichen.
-- Der DNS-Server unterstützt Netzwerk-Zugriffslisten (ACL) für Rekursion, Zonentransfer und dynamische Updates in der Weboberfläche und der HTTP-API.
-- Die Behandlung nicht unterstützter NSEC3-Iterationswerte wurde geändert, weil die bisherige Umsetzung in einigen Fällen die Validierung fehlschlagen ließ.
-- Der Schutz des Webdienstes vor Brute-Force-Angriffen wurde für IPv6-Netze verbessert.
-- Ereignisse der Ratenbegrenzung pro Client-Subnetz werden jetzt ins Log geschrieben.
-- Diese Hauptversion enthält inkompatible Änderungen an den HTTP-API-Aufrufen für SOA-Einträge und Zonenoptionen. Einige Optionen des SOA-Eintrags wurden in API und Weboberfläche zu den Zonenoptionen verschoben. Auch die DNS-Client-Bibliothek enthält einige inkompatible Änderungen, daher sollten eigene DNS-Apps vor dem Upgrade getestet werden.
-- Mehrere weitere kleinere Fehlerbehebungen und Verbesserungen.
+- Implemented Catalog Zones [RFC 9432](https://datatracker.ietf.org/doc/rfc9432/) support to allow automatic DNS zone provisioning to one or more secondary name servers. The implementation supports Primary, Stub, and Conditional Forwarder zones for automatic provisioning of their respective secondary zones.
+- Added new Secondary Forwarder zone support to allow configuring secondaries for Conditional Forwarder zones. Conditional Forwarder zones now support zone transfer and notify features to support secondaries and will now contain a dummy SOA record.
+- Added Query Access feature to allow configuring access to each individual zone. This allows limiting query access to only clients on configured networks even when the DNS Server is publicly accessible.
+- Added support for specifying Expiry TTL for records in zones that will cause the DNS Server to automatically delete the records when Expiry TTL elapses.
+- Added support for concurrency in recursive resolver to allow querying more than one name server at a time to improve resolution performance.
+- Added support for latency based name server selection algorithm that works with concurrency feature for both recursive resolution and forwarders to significantly improve resolution performance.
+- Implemented priority support for Conditional Forwarder FWD records which can be used to prioritize some forwarders and have a low priority "This Server" FWD record to perform recursive resolution if needed.
+- Implemented ZONEMD [RFC 8976](https://datatracker.ietf.org/doc/rfc8976/) validation support for Secondary zones which is intended to be used with local secondary ROOT zone. This feature allows validating complete zone after each zone transfer.
+- Added support for Responsible Person (RP) record [RFC 1183](https://www.rfc-editor.org/rfc/rfc1183).
+- Added option to enable/disable Concurrent Forwarding feature so as to allow having sequential forwarding support.
+- The DNS Server now supports Network Access Control Lists for Recursion, Zone Transfer, and Dynamic Updates in both the GUI and HTTP API.
+- Changed the Unsupported NSEC3 Iteration Value implementation due to bug in previous implementation that caused failure to validate in some cases.
+- Improved brute force protection implementation for admin web service for IPv6 networks.
+- Added feature to write client subnet query rate limiting events to log file to allow tracking.
+- This major update has some breaking changes with SOA record and Zone Options related HTTP API calls. Some options in SOA record have been moved to Zone Options in both HTTP API and GUI. There are few breaking changes with the DNS Client library code too so any custom DNS App should be tested before upgrading the DNS Server.
+- Multiple other minor bug fixes and improvements.
 
 ## Version 12.2.1
-Veröffentlicht: 15. Juni 2024
+Release Date: 15 June 2024
 
-- Problem im DHCP-Server behoben, durch das wegen abweichender Hashcodes keine Leases vergeben wurden.
-- Problem behoben, durch das nach dem Löschen einer Zone leere Zonendateien entstehen konnten.
+- Fixed issue in DHCP server that caused failure to allocate lease due to hash code mismatch.
+- Fixed issue that may create empty zone files after the zone was deleted.
 
 ## Version 12.2
-Veröffentlicht: 15. Juni 2024
+Release Date: 15 June 2024
 
-- Unterstützung für den Eintragstyp NAPTR hinzugefügt.
-- Neue Einstellung „Standard-Verantwortlicher“ für neu angelegte Primary-Zonen.
-- Serve Stale wurde überarbeitet: Antwort-TTL, Reset-TTL und maximale Wartezeit lassen sich in den Einstellungen festlegen.
-- SVCB-/HTTPS-Einträge unterstützen jetzt automatische IP-Adresshinweise.
-- TXT-Einträge behalten jetzt die einzelnen Zeichenketten bei, wie für [RFC 6763](https://www.rfc-editor.org/rfc/rfc6763) nötig.
-- Die Systemtray-App unter Windows hat einen neuen Kontextmenüeintrag, um automatische Firewall-Regeln zu konfigurieren.
-- Problem mit NSEC-Beweisen für Wildcard-ENT-Fälle behoben.
-- Problem in der QNAME-Minimierung behoben, das bei einer nicht unterstützten NSEC3-Iterationszahl während der Auflösung auftrat.
-- Neben der Dateiendung .pfx wird jetzt auch .p12 für Zertifikate unterstützt.
-- Filter AAAA App: Neue App, die AAAA-Einträge herausfiltert und NO DATA liefert, wenn für denselben Domainnamen A-Einträge vorhanden sind. So nutzen Clients mit Dual-Stack-Anschluss für Webseiten bevorzugt IPv4 und IPv6 nur dann, wenn eine Seite kein IPv4 anbietet.
-- Query Logs (Sqlite) App: Problem behoben, durch das die App unter Alpine Linux nicht geladen wurde.
-- Mehrere weitere kleinere Fehlerbehebungen und Verbesserungen.
+- Added support for NAPTR record type.
+- Added Default Responsible Person option in Settings to use when adding Primary Zones.
+- Updated Serve Stale implementation to allow configuring Answer TTL, Reset TTL, and Max Wait Time options in Settings.
+- Updated SVCB/HTTPS record implementation to add support for automatic IP address hints.
+- Updated TXT record implementation to allow preserving the character-strings for a given TXT record to allow support for [RFC 6763](https://www.rfc-editor.org/rfc/rfc6763).
+- Updated DNS Server's System Tray app on Windows with new context menu option to allow configuring Automatic Firewall entry feature.
+- Fixed issue with NSEC proof validation for wildcard empty non-terminal (ENT) cases.
+- Fixed issue with QNAME minimization implementation caused when NSEC3 unsupported iteration count event is encountered while resolving.
+- Added support for .p12 certificate file extension along with existing .pfx extension.
+- Filter AAAA App: Added new app that allows filtering AAAA records by returning NO DATA response when A records for the same domain name are available. This allows clients with dual-stack (IPv4 and IPv6) Internet connection to prefer using IPv4 to connect to websites and use IPv6 only when a website has no IPv4 support.
+- Query Logs (Sqlite) App: Fixed issue of failing to load the app on Alpine Linux.
+- Multiple other minor bug fixes and improvements.
 
 ## Version 12.1
-Veröffentlicht: 16. März 2024
+Release Date: 16 March 2024
 
-- [Key-Trap](https://www.athene-center.de/en/keytrap)-[Schwachstelle](https://www.athene-center.de/fileadmin/content/PDF/Technical_Report_KeyTrap.pdf) [CVE-2023-50387] in der DNSSEC-Validierung behoben, die per DoS die Namensauflösung des DNS-Servers beeinträchtigen konnte. Mit den Gegenmaßnahmen arbeitet der DNS-Server auch bei hoher CPU-Last weiter.
-  - Es sind höchstens 4 DNSKEY-Einträge mit kollidierendem Key-Tag erlaubt.
-  - Kryptografische Fehlschläge sind auf höchstens 16 begrenzt.
-  - Mehr als 8 RRSIG-Validierungen pro Antwort unterbrechen den Task. Nach höchstens 16 Unterbrechungen wird die Validierung der Antwort abgebrochen.
-- Schwachstelle im NSEC3-Closest-Encloser-Beweis [CVE-2023-50868] in der DNSSEC-Validierung behoben, die per DoS die Namensauflösung beeinträchtigen konnte. Mit den Gegenmaßnahmen arbeitet der DNS-Server auch bei hoher CPU-Last weiter.
-  - Mehr als 8 NSEC3-Hashberechnungen pro Antwort unterbrechen den Task.
-  - Nach 16 Unterbrechungen wird die Validierung der Antwort abgebrochen.
-- Schwachstelle [Non-Responsive Delegation Attack](https://www.usenix.org/system/files/sec23fall-prepub-309-afek.pdf) (NRDelegation-Angriff) [CVE-2022-3204] behoben.
-- Schwachstelle [NXNSAttack](https://arxiv.org/abs/2005.09107) [CVE-2020-12662] behoben.
-- NSEC3-Iterationen sind auf 100 begrenzt. NSEC3 mit mehr als 100 Iterationen gilt als fehlender Beweis.
-- Neue Funktion zum Überschreiben von EDNS Client Subnet (ECS): Der DNS-Server verwendet das angegebene Subnetz per ECS für alle ausgehenden Anfragen.
-- In den Zonenoptionen von Secondary-Zonen lassen sich jetzt Berechtigungen für dynamische Updates festlegen.
-- Beim Zonenimport kann die SOA-Seriennummer aus dem importierten SOA-Eintrag übernommen werden.
-- Der DNS-Client unterstützt jetzt die Option EDNS Client Subnet (ECS), um ECS-Probleme einfach zu testen.
-- Cache-Einträge zeigen jetzt Metadaten der Anfrage, etwa welcher Nameserver die Daten geliefert hat.
-- DHCP-Bereiche können die Client-Identifier-Option in Anfragen ignorieren und Leases über die Hardwareadresse des Clients verwalten.
-- Advanced Blocking App: Die Zuordnung lokaler Endpunkte zu Gruppen unterstützt jetzt Domainnamen und funktioniert damit auch mit Anfragen über DoT, DoH und DoQ.
-- Advanced Forwarding App: Die AdGuard-Upstream-Implementierung unterstützt jetzt mehrere Forwarder.
-- Geo Continent App: Unterstützt die MaxMind-ISP/ASN-Datenbank, um in Antworten ein passendes ECS-Scope-Präfix zu liefern.
-- Geo Country App: Unterstützt die MaxMind-ISP/ASN-Datenbank, um in Antworten ein passendes ECS-Scope-Präfix zu liefern.
-- Geo Distance App: Unterstützt die MaxMind-ISP/ASN-Datenbank, um in Antworten ein passendes ECS-Scope-Präfix zu liefern.
-- Fehler beim Wildcard-Abgleich in autoritativen Zonen behoben.
-- Mehrere weitere kleinere Fehlerbehebungen und Verbesserungen.
+- Fixed [Key Trap](https://www.athene-center.de/en/keytrap) [vulnerability](https://www.athene-center.de/fileadmin/content/PDF/Technical_Report_KeyTrap.pdf) [CVE-2023-50387] that affected DNSSEC validation which can cause DoS affecting the DNS Server's ability to resolve domain names. The mitigations will allow the DNS Server to work even with high CPU usage.
+  - The mitigation now allows max 4 DNSKEY records with key tag collision.
+  - Limits cryptographic failures to max 16. 
+  - More that 8 RRSIG validation attempts per response will cause suspension of the task with max 16 suspensions allowed before the validation stops for the response.
+- Fixed vulnerability in NSEC3 closest encloser proof [CVE-2023-50868] that affected DNSSEC validation which can cause DoS affecting the DNS Server's ability to resolve domain names. The mitigations will allow the DNS Server to work even with high CPU usage.
+  - More than 8 NSEC3 hash calculation per response will cause suspension of the task.
+  - After 16 suspensions the the validation will stop for the response.
+- Fixed [Non-Responsive Delegation Attack](https://www.usenix.org/system/files/sec23fall-prepub-309-afek.pdf) (NRDelegation Attack) vulnerability [CVE-2022-3204].
+- Fixed [NXNSAttack](https://arxiv.org/abs/2005.09107) vulnerability [CVE-2020-12662].
+- Implemented NSEC3 iteration limit of 100. NSEC3 with iterations of more than 100 will be treated as No Proof.
+- Added EDNS Client Subnet (ECS) override feature to allow the DNS Server to use the provided network subnet with ECS for all outbound requests.
+- Secondary zones now allow configuring Dynamic Updates permissions in Zone Options.
+- Import zone feature now supports option to overwrite SOA serial from SOA record being imported.
+- DNS Client now supports EDNS Client Subnet (ECS) option to allow testing ECS related issues with ease.
+- DNS cache entries now show request meta data to allow knowing the name server that provided the record data.
+- DHCP Scope now supports option to ignore Client Identifier option in requests to allow using the client's hardware address for lease management.
+- Advanced Blocking App: Updated implementation to support using domain names for local endpoint group map feature which will work with requests over DoT, DoH and DoQ protocols.
+- Advanced Forwarding App: Updated AdGuard upstream implementation to support multiple forwarders.
+- Geo Continent App: Updated app to support MaxMind ISP/ASN database to allow returning optimal ECS scope prefix in response.
+- Geo Country App: Updated app to support MaxMind ISP/ASN database to allow returning optimal ECS scope prefix in response.
+- Geo Distance App: Updated app to support MaxMind ISP/ASN database to allow returning optimal ECS scope prefix in response.
+- Fixed bug in authoritative zone wildcard matching.
+- Multiple other minor bug fixes and improvements.
 
 ## Version 12.0.1
-Veröffentlicht: 8. Februar 2024
+Release Date: 8 February 2024
 
-- Fehler beim Wildcard-Abgleich für Empty-Non-Terminal-Einträge (ENT) in autoritativen Zonen behoben.
-- Weitere kleinere Probleme behoben.
+- Fixed bug in authoritative zone wildcard matching for empty non-terminal (ENT) records.
+- Fixed other minor issues.
 
 ## Version 12.0
-Veröffentlicht: 4. Februar 2024
+Release Date: 4 February 2024
 
-- Codebasis auf die .NET-8-Laufzeit umgestellt. Wer den DNS-Server oder die .NET-7-Laufzeit bisher manuell installiert hat, muss vor dem Upgrade die .NET-8-Laufzeit manuell installieren.
-- Pulsing-DoS-Schwachstelle [CVE-2024-33655] behoben, gemeldet von Xiang Li, [Network and Information Security Lab, Tsinghua University](https://netsec.ccert.edu.cn/). Die Standardwerte des DNS-Servers wurden angepasst, um die Auswirkungen zu begrenzen.
-- Das Dashboard und das Hauptdiagramm zeigen die Statistik „Verworfen“: die Zahl der Anfragen, die wegen Ratenbegrenzung oder durch die Drop Requests App verworfen wurden.
-- Diagramm der Transportprotokolle im Dashboard hinzugefügt, das die Protokollstatistik der eingehenden Anfragen zeigt.
-- Für ausgehende DNS-Anfragen lassen sich eine oder mehrere Quelladressen angeben, wenn der Server mit mehreren Netzen verbunden ist.
-- IP-Adressen oder Netze, von denen Notify-Anfragen angenommen werden, lassen sich jetzt zentral festlegen, statt sie für jede Zone einzeln zu konfigurieren.
-- Ausnahmeliste für die QPM-Ratenbegrenzung hinzugefügt, mit der IP-Adressen oder Netze von der Begrenzung ausgenommen werden.
-- Statistiken können nur im Arbeitsspeicher gehalten werden. Dann zeigt das Dashboard nur die letzte Stunde, und es werden keine Statistikdaten auf die Festplatte geschrieben.
-- DNS-over-HTTPS funktioniert mit HTTP/3 (URL mit dem Schema `h3`) jetzt auch über einen SOCKS5-Proxy.
-- Die Liste der Root-Server wird automatisch per Priming-Anfragen nach [RFC 8109](https://datatracker.ietf.org/doc/rfc8109/) initialisiert.
-- Conditional-Forwarder-Zonen unterstützen jetzt dynamische Updates nach [RFC 2136](https://datatracker.ietf.org/doc/rfc2136/).
-- DNS Rebinding Protection App: Neue App, die anhand konfigurierter privater Domains und Netze vor DNS-Rebinding-Angriffen schützt.
-- NX Domain Override App: Neue App, die NX-Domain-Antworten für konfigurierte Domainnamen durch eigene A-/AAAA-Antworten ersetzt.
-- Block Page App: Verwendet jetzt den Kestrel-Webserver und erlaubt mehrere Webserver auf verschiedenen IP-Adressen.
-- Mehrere weitere kleinere Fehlerbehebungen und Verbesserungen.
+- Upgraded codebase to use .NET 8 runtime. If you had manually installed the DNS Server or .NET 7 Runtime earlier then you must install .NET 8 Runtime manually before upgrading the DNS Server.
+- Fixed pulsing DoS vulnerability [CVE-2024-33655] reported by Xiang Li, [Network and Information Security Lab, Tsinghua University](https://netsec.ccert.edu.cn/) by updating the default configured values for the DNS Server which mitigates the impact.
+- Added "Dropped" request stats on the Dashboard and main chart which shows the number of request that were dropped by the DNS Server due to rate limiting or by the Drop Requests app.
+- Added transport protocol types chart on Dashboard which shows the protocol stats for the requests received by the DNS Server.
+- Added feature to specify one or more source addresses for outbound DNS requests when the server is connected to two or more networks.
+- Added option to allow IP address or networks to allow accepting Notify requests from to avoid having to configure the same individually for each zone.
+- Added option to specify QPM bypass list to allow IP addresses or networks to bypass rate limiting restrictions.
+- Added feature to enable In-Memory stats such that only Last Hour data to be available on Dashboard and no stats data will be stored on disk.
+- Updated DNS-over-HTTPS implementation to work over SOCKS5 proxy when using HTTP/3 protocol (URL with `h3` scheme).
+- Added support for automatic initializing of DNS Server root servers list with priming queries [RFC 8109](https://datatracker.ietf.org/doc/rfc8109/).
+- Conditional Forwarder Zones now support Dynamic Updates [RFC 2136](https://datatracker.ietf.org/doc/rfc2136/).
+- DNS Rebinding Protection App: A new app available that protects from DNS rebinding attacks using configured private domains and networks.
+- NX Domain Override App: New app to allow overriding NX Domain response to with custom A/AAAA record response for configured domain names.
+- Block Page App: Updated the app to use Kestrel web server and allow configuring multiple web servers that listen on different IP addresses.
+- Multiple other minor bug fixes and improvements.
 
 ## Version 11.5.3
-Veröffentlicht: 7. November 2023
+Release Date: 7 November 2023
 
-- Fehler beim Wildcard-Abgleich in autoritativen Zonen behoben, der bei einigen Subdomain-Anfragen zu NXDOMAIN führte.
+- Fixed bug in authoritative zone wildcard matching which caused NXDOMAIN response for some subdomain name requests.
 
 ## Version 11.5.2
-Veröffentlicht: 31. Oktober 2023
+Release Date: 31 October 2023
 
-- Fehler bei den für dynamische Updates erlaubten IP-Adressen und Netzen einer Zone behoben, durch den die IP-Adresse der Anfrage nicht erkannt wurde.
+- Fixed bug in zone Dynamic Updates allowed IP/network addresses that caused failure to match with request IP address.
 
 ## Version 11.5.1
-Veröffentlicht: 30. Oktober 2023
+Release Date: 30 October 2023
 
-- Fehler im Validierungscode der DNS-over-TLS-Bibliothek behoben, durch den das Protokoll nicht verwendet werden konnte.
-- Advanced Blocking App: Kleineres Problem bei der Initialisierung behoben.
+- Fixed bug in validation code for DNS-over-TLS library that caused failure when trying to use the protocol.
+- Advanced Blocking App: Fixed minor issue in initializing the app.
 
 ## Version 11.5
-Veröffentlicht: 29. Oktober 2023
+Release Date: 29 October 2023
 
-- Zonen können im Standard-Textformat nach RFC 1035 importiert und exportiert werden.
-- Eine bestehende Zone lässt sich mit allen Einträgen und Zonenoptionen klonen.
-- Neue DS-Info-Ansicht, die alle für die Aktualisierung der DS-Einträge einer signierten Primary-Zone nötigen Angaben an einer Stelle zeigt.
-- Option für IP-Adressen und Netze, die für alle lokalen Zonen ohne TSIG-Authentifizierung Zonentransfers durchführen dürfen.
-- Option für IP-Adressen und Netze, die von der Domain-Blockierung ausgenommen sind.
-- HTTP/3 lässt sich für den Webdienst unabhängig konfigurieren.
-- Resolver-Fehler können vom Log ausgenommen werden, um die Größe der Logdatei zu begrenzen.
-- Zeitstempel der letzten Änderung einer Zone hinzugefügt.
-- Vor dem Speichern geänderter lokaler Endpunkte des Webdienstes wird geprüft, ob sie gebunden werden können, damit man sich nicht aus der Weboberfläche aussperrt.
-- Lässt sich ein neuer lokaler Endpunkt des Webdienstes nicht binden, wird der alte Endpunkt wiederhergestellt.
-- Die Zonenoptionen für Nameserver bei Zonentransfers und für IP-Adressen bei dynamischen Updates akzeptieren jetzt auch Netzadressen.
-- Conditional-Forwarder-Zonen können den in den Einstellungen konfigurierten Standard-Proxy umgehen.
-- Neue Schnittstelle `IDnsRequestBlockingHandler`, mit der DNS-Apps Blockierungen im gleichen Umfang wie die eingebaute Blockierung des DNS-Servers umsetzen können.
-- Advanced Blocking App: Setzt die neue Schnittstelle `IDnsRequestBlockingHandler` um. Die Gruppe lässt sich jetzt nach dem lokalen Endpunkt wählen, auf dem die Anfrage einging.
-- Split Horizon App: Die Adressübersetzung von extern nach intern unterstützt jetzt auch Netzadressen.
-- Default Records App: Neue App, die für konfigurierte lokale Zonen einen oder mehrere Standard-Einträge setzt.
-- Mehrere weitere kleinere Fehlerbehebungen und Verbesserungen.
+- Added support to import and export zones in standard RFC 1035 text file format.
+- Added feature to clone an existing zone with all its records and zone options.
+- Added DS Info viewer that shows all the info needed for updating DS records for the signed primary zone in a single view.
+- Added option to configure IP/network addresses that are allowed to perform zone transfer for all local zones without any TSIG authentication.
+- Added option to configure IP/network addresses that are allowed to bypass domain name blocking.
+- Added option to independently configure HTTP/3 protocol for DNS web service.
+- Added option to ignore resolver error logs so as to limit the log file size.
+- Added zone last modified date time stamp.
+- Added check for DNS web service local end point changes to ensure that the new end points are available to bind before saving settings to avoid locking out of the DNS admin web panel.
+- Updated DNS web service to revert to old local end point if new end point fails to bind.
+- Zone Options for zone transfer name servers and dynamic updates IP addresses can now accept network addresses too.
+- Updated conditional forwarder zones to allow bypassing default proxy configured in the DNS Server Settings.
+- Added new `IDnsRequestBlockingHandler` interface for DNS apps to allow the same level of blocking support as that of the DNS Server's built-in blocking feature.
+- Advanced Blocking App: Updated app to implement the new `IDnsRequestBlockingHandler` interface. Added support to allow selecting group based on the DNS Server local end point on which the request was received.
+- Split Horizon App: Address translation now supports using network addresses too for external to internal translation.
+- Default Records App: New app added that allows setting one or more default records for configured local zones.
+- Multiple other minor bug fixes and improvements.
 
 ## Version 11.4.1
-Veröffentlicht: 13. August 2023
+Release Date: 13 August 2023
 
-- Problem behoben, durch das Sicherungen fehlschlugen.
-- Kleineres Problem beim inkrementellen Zonentransfer behoben, durch das leere Knoten nicht aus Secondary-Zonen entfernt wurden.
+- Fixed issue that caused backup operations to fail.
+- Fixed minor issue with incremental zone transfer which caused empty nodes to not get removed from secondary zones.
 
 ## Version 11.4
-Veröffentlicht: 12. August 2023
+Release Date: 12 August 2023
 
-- Unterstützung für DNS über das [PROXY-Protokoll](https://www.haproxy.org/download/1.8/doc/proxy-protocol.txt) in Version 1 und 2 für UDP und TCP hinzugefügt. So kann ein Load Balancer oder Reverse Proxy vor dem DNS-Server die IP-Adresse des Clients weitergeben. Damit lässt sich auch DNS-over-TLS über einen TLS-terminierenden Reverse Proxy anbieten, der Anfragen an den TCP-PROXY-Port weiterreicht.
-- Beim TLS-Handshake wird jetzt immer die vollständige Zertifikatskette gesendet.
-- Sicherung und Wiederherstellung schließen jetzt die Zertifikatsdateien für den Webdienst und die optionalen Protokolle ein, sofern sie im Konfigurationsordner liegen.
-- Die Laufzeit des DNS-Servers wird im Bereich „Über“ angezeigt.
-- Mehrere weitere kleinere Fehlerbehebungen und Verbesserungen.
+- Added support for DNS over [PROXY protocol](https://www.haproxy.org/download/1.8/doc/proxy-protocol.txt) version 1 and 2 for both UDP and TCP transports. This feature allows using a load balancer or reverse proxy in front of the DNS Server such that the client's IP address information is passed to the DNS Server. This can also be used to provide DNS-over-TLS service with a TLS terminating reverse proxy that forwards request to TCP-PROXY protocol port.
+- Updated TLS certificate implementation to allow the TLS handshake to always send the certificate chain.
+- Updated Backup and Restore feature to include Web Service and Optional Protocols certificate files when they exist within the DNS Server's config folder.
+- Added DNS Server uptime info in the About section.
+- Multiple other minor bug fixes and improvements.
 
 ## Version 11.3
-Veröffentlicht: 2. Juli 2023
+Release Date: 2 July 2023
 
-- Unterstützung für den Eintragstyp URI ([RFC 7553](https://www.rfc-editor.org/rfc/rfc7553.html)) hinzugefügt.
-- Unterstützung für den Parameter `dohpath` beim Eintragstyp SVCB ([draft-ietf-add-svcb-dns](https://datatracker.ietf.org/doc/draft-ietf-add-svcb-dns/)) hinzugefügt.
-- Generische Parameter für SVCB- und HTTPS-Einträge lassen sich in der Weboberfläche konfigurieren.
-- Zonen können in einen anderen Zonentyp umgewandelt werden, etwa um eine Secondary-Zone zur Primary-Zone zu machen, wenn die bisherige Primary-Zone stillgelegt wird.
-- Schlägt ein NOTIFY einer Primary-Zone fehl, wird es wiederholt, und die Weboberfläche zeigt den Fehlerstatus für den jeweiligen Nameserver an.
-- Zone Alias App: Neue App, mit der sich Aliase für beliebige interne oder externe Zonen anlegen lassen, die alle dieselben Einträge liefern.
-- Mehrere weitere kleinere Fehlerbehebungen und Verbesserungen.
+- Added support for URI record type ([RFC 7553](https://www.rfc-editor.org/rfc/rfc7553.html)).
+- Added support for `dohpath` parameter for SVCB record type ([draft-ietf-add-svcb-dns](https://datatracker.ietf.org/doc/draft-ietf-add-svcb-dns/)).
+- Added support for configuring generic parameter for SVCB & HTTPS record types in UI.
+- Added feature to allow converting zone from one type to another to help scenarios like upgrade of a secondary zone to primary zone when decommissioning the existing primary zone.
+- Updated primary zone NOTIFY implementation to keep rechecking when notify fails and explicitly show notify failed status against the specific name servers in the UI.
+- Zone Alias App: Added new DNS app that allows creating aliases for any zone (internal or external) such that they all return the same set of records.
+- Multiple other minor bug fixes and improvements.
 
 ## Version 11.2
-Veröffentlicht: 27. Mai 2023
+Release Date: 27 May 2023
 
-- Unterstützung für die Eintragstypen SVCB und HTTPS ([draft-ietf-dnsop-svcb-https](https://datatracker.ietf.org/doc/draft-ietf-dnsop-svcb-https/)) hinzugefügt.
-- Unbekannte, nicht unterstützte Eintragstypen lassen sich jetzt verwalten.
-- Auto PTR App: Neue App, die automatisch Antworten auf PTR-Anfragen erzeugt.
-- Weighted Round Robin App: Neue App für gewichtetes Round-Robin-Load-Balancing.
-- Mehrere weitere kleinere Fehlerbehebungen und Verbesserungen.
+- Added support for SVCB and HTTPS record types ([draft-ietf-dnsop-svcb-https](https://datatracker.ietf.org/doc/draft-ietf-dnsop-svcb-https/)).
+- Added support for managing unknown (unsupported) record types.
+- Auto PTR App: Added new DNS app that can generate automatic responses for PTR requests.
+- Weighted Round Robin App: Added new app to allow returning responses with weighted round robin load balancing.
+- Multiple other minor bug fixes and improvements.
 
 ## Version 11.1.1
-Veröffentlicht: 1. Mai 2023
+Release Date: 1 May 2023
 
-- Erschöpfung des UDP-Socket-Pools unter Windows behoben, durch die alle ausgehenden UDP-Anfragen fehlschlugen.
+- Fixed issue of UDP socket pool exhaustion on Windows platform causing all outbound UDP requests to fail.
 
 ## Version 11.1
-Veröffentlicht: 29. April 2023
+Release Date: 29 April 2023
 
-- Unterstützung für internationalisierte Domainnamen (IDN) hinzugefügt.
-- Die Seriennummer im SOA-Eintrag einer Primary-Zone kann nach dem Datumsschema vergeben werden.
-- Von Xiang Li, [Network and Information Security Lab, Tsinghua University](https://netsec.ccert.edu.cn/) gemeldetes Problem behoben, durch das der DNS-Server unter Windows wegen nicht zufälliger UDP-Quellports für ausgehende Anfragen anfällig für Cache Poisoning war.
-- Fehler in der Validierung beim Erneuern von RRSIG-Einträgen in mit NSEC3 signierten Primary-Zonen behoben.
-- Fehler im Typenfeld von NSEC3-Einträgen behoben, durch den der Eintrag für RRSIG fehlte.
-- Der Kestrel-Webserver liefert jetzt auch unbekannte Dateitypen aus, damit die Webroot-HTTP-Challenge von certbot funktioniert.
-- Advanced Forwarding App: Zwischengespeicherte Einträge werden jetzt korrekt pro Client-Subnetz aus der App-Konfiguration gespeichert. Unterstützung für Wildcard-Domains hinzugefügt.
-- Mehrere weitere kleinere Fehlerbehebungen und Verbesserungen.
+- Added support for Internationalized Domain Names (IDN).
+- Added support for primary zone's SOA record to have serial number date scheme.
+- Fixed issue reported by Xiang Li, [Network and Information Security Lab, Tsinghua University](https://netsec.ccert.edu.cn/) that made the DNS Server vulnerable to cache poisoning on Windows platform due to non-random UDP ports for outbound requests.
+- Fixed bug in validation check during refreshing RRSIG records when primary zone is signed with NSEC3.
+- Fixed bug in NSEC3 record's types field which caused missing of RRSIG type entry.
+- Fixed issue to allow Kestrel web server to serve unknown file types to allow certbot webroot HTTP challenge to work as expected.
+- Advanced Forwarding App: Fixed the implementation to correctly store cached records per client subnet defined in the app's config. Added wildcard domain support.
+- Multiple other minor bug fixes and improvements.
 
 ## Version 11.0.3
-Veröffentlicht: 11. März 2023
+Release Date: 11 March 2023
 
-- Von Xiang Li, [Network and Information Security Lab, Tsinghua University](https://netsec.ccert.edu.cn/) gemeldete DoS-Schwachstelle behoben: Wegen unzureichender Validierung konnte ein Angreifer mit fehlerhaften UDP-Paketen ausgehende Auflösungen scheitern lassen.
-- Von Xiang Li gemeldetes Problem behoben, durch das Conditional Forwarder das RD-Flag in Anfragen nicht beachteten.
-- Von Xiang Li gemeldetes Problem behoben, durch das die Antwortgrenze von maximal 4096 Byte Amplification-Angriffe begünstigte.
-- Problem beim Laden der Allowed- und Blocked-Zonen behoben, das wegen der im letzten Update eingeführten Indizierung autoritativer Zonen zu sehr langen Ladezeiten führte.
-- Bei MX-Antworten über UDP werden Glue-Einträge entfernt und das Senden erneut versucht, statt eine gekürzte Antwort zu schicken. Einige alte Mailserver stellten nach einer gekürzten Antwort keine Folgeanfrage über TCP.
-- Block Page App: Der Webserver lässt sich jetzt deaktivieren, ohne die App zu deinstallieren.
-- Mehrere weitere kleinere Fehlerbehebungen und Verbesserungen.
+- Fixed DoS vulnerability reported by Xiang Li, [Network and Information Security Lab, Tsinghua University](https://netsec.ccert.edu.cn/) that an attacker can use to send bad-formatted UDP packet to cause the outbound requests to fail to resolve due to insufficient validation.
+- Fixed issue reported by Xiang Li, [Network and Information Security Lab, Tsinghua University](https://netsec.ccert.edu.cn/) that caused conditional forwarder to not honoring RD flag in requests.
+- Fixed issue reported by Xiang Li, [Network and Information Security Lab, Tsinghua University](https://netsec.ccert.edu.cn/) that made amplification attacks more effective due to max 4096 bytes limit for responses.
+- Fixed issue in loading of Allowed and Blocked zones that resulted in loading to take too much time caused due to indexing feature added in last update for authoritative zones.
+- Updated DNS Server UDP response processing to remove glue records for MX responses and try again to send it instead of sending a truncated response that was causing issue with some old mail servers that did not perform follow up request over TCP.
+- Block Page App: Updated the app to support option to disable the web server without requiring to uninstall the app to stop the web server.
+- Multiple other minor bug fixes and improvements.
 
 ## Version 11.0.2
-Veröffentlicht: 26. Februar 2023
+Release Date: 26 February 2023
 
-- Problem mit der Prüfung auf private IP-Adressen bei DNS-over-HTTP behoben, die hinter einem Reverse Proxy zu Antworten mit Status 403 führte.
-- Problem mit der Seitenaufteilung der Zoneneinträge bei Zonen ohne Einträge behoben.
+- Fixed issue with DNS-over-HTTP private IP check that was causing 403 response when using with reverse proxy.
+- Fixed issue with zone record pagination caused when zone has no records.
 
 ## Version 11.0.1
-Veröffentlicht: 25. Februar 2023
+Release Date: 25 February 2023
 
-- Allow-Listen werden jetzt getrennt behandelt, und ihre Anzahl wird im Dashboard angezeigt.
-- Fehler in Conditional-Forwarder-Zonen für die Root-Zone behoben, durch den der DNS-Server RCODE=ServerFailure lieferte.
-- Probleme in der Reihenfolge der Anfragebearbeitung durch Apps behoben, die die Advanced Forwarding App betrafen.
-- Der Parser für Blocklisten erkennt jetzt Kommentare am Zeilenende.
-- Problem „URI too long“ beim Speichern eines DHCP-Bereichs behoben.
-- Das Linux-Installationsskript verwendet für Neuinstallationen den Installationspfad in `/opt` und den Konfigurationspfad `/etc/dns`.
-- Der Docker-Container verwendet den neuen Volume-Pfad `/etc/dns` für die Konfiguration.
-- Der Docker-Container behandelt das Stopp-Ereignis jetzt korrekt und fährt den DNS-Server sauber herunter.
-- Der Docker-Container enthält `libmsquic` für QUIC-Unterstützung.
-- Mehrere weitere kleinere Fehlerbehebungen und Verbesserungen.
+- Changed allow list implementation to handle them separately and show allow list count on Dashboard.
+- Fixed bug in conditional forwarder zone for root zone that caused the DNS Server to return RCODE=ServerFailure.
+- Fixed issues with DNS Server's App request query handling sequence to fix issues with Advanced Forwarding app.
+- Fixed issues with block list parser to detect in-line comments.
+- Fixed issue of "URI too long" in save DHCP scope action.
+- Updated Linux install script to use new install path in `/opt` and new config path `/etc/dns` for new installations.
+- Updated Docker container to use new volume path `/etc/dns` for config.
+- Updated Docker container to correctly handle container stop event to gracefully shutdown the DNS Server.
+- Updated Docker container to include `libmsquic` to allow QUIC support.
+- Multiple other minor bug fixes and improvements.
 
 ## Version 11.0
-Veröffentlicht: 18. Februar 2023
+Release Date: 18 February 2023
 
-- Unterstützung für DNS-over-QUIC (DoQ) nach [RFC 9250](https://www.ietf.org/rfc/rfc9250.html) hinzugefügt, als Dienst und für Forwarder. DoQ funktioniert auch über einen SOCKS5-Proxy mit UDP-Unterstützung.
-- Unterstützung für Zonentransfers über QUIC (XFR-over-QUIC) nach [RFC 9250](https://www.ietf.org/rfc/rfc9250.html) hinzugefügt.
-- DNS-over-HTTPS unterstützt jetzt HTTP/2 und HTTP/3. DNS-over-HTTP/3 lässt sich mit dem Schema `h3` statt `https` in der URL erzwingen.
-- Der Webdienst verwendet jetzt den Kestrel-Webserver, daher wird die ASP.NET-Core-Laufzeit benötigt. Der Webdienst unterstützt damit HTTP/2 und HTTP/3. Wer die HTTP-API nutzt, sollte eigenen Code oder Skripte mit dieser Version testen.
-- Der DNS-Cache kann beim Beenden auf die Festplatte geschrieben und beim Start wieder geladen werden.
-- Die Blockierung von Domainnamen unterstützt Extended DNS Errors, sodass ein Bericht zum blockierten Domainnamen angezeigt werden kann. Der Reiter DNS-Client in der Weboberfläche zeigt diesen Bericht für jede blockierte Domain an.
-- Die Blockierung unterstützt Blocklisten mit Platzhaltern und im Adblock-Plus-Format.
-- Der DNS-Server erkennt, wenn ein Upstream-Server eine Domain blockiert, und berücksichtigt das in Dashboard und Query-Logs. Das Blockiersignal von Quad9 wird erkannt und als Extended DNS Error angezeigt.
-- Der Bereich Zonen der Weboberfläche unterstützt Seitenaufteilung.
-- Advanced Blocking App: Unterstützt Blocklisten mit Platzhaltern. Ist eine Domain in der Konfiguration erlaubt, wird die CNAME-Cloaking-Prüfung dafür deaktiviert. Extended DNS Errors für Berichte zu blockierten Domains umgesetzt.
-- Advanced Forwarding App: Neue App für Conditional Forwarding in großer Zahl.
-- DNS Block List App: Neue App, um eigene DNSBL- oder RBL-Blocklisten nach [RFC 5782](https://www.rfc-editor.org/rfc/rfc5782) zu betreiben.
-- Unterstützung für die DHCP-Option „TFTP-Serveradresse“ (150) hinzugefügt.
-- Generische DHCP-Optionen hinzugefügt, um Optionen zu konfigurieren, die der DHCP-Server noch nicht direkt unterstützt.
-- Unterstützung für das nicht standardisierte DNS-over-HTTPS-Protokoll mit JSON entfernt.
-- Die Abhängigkeit von Newtonsoft.Json wurde aus dem DNS-Server und allen DNS-Apps entfernt.
-- Mehrere weitere kleinere Fehlerbehebungen und Verbesserungen.
+- Added support for DNS-over-QUIC (DoQ) [RFC 9250](https://www.ietf.org/rfc/rfc9250.html). This allows you to run DoQ service as well as use it with Forwarders. DoQ implementation supports running over SOCKS5 proxy server that provides UDP transport.
+- Added support for Zone Transfer over QUIC (XFR-over-QUIC) [RFC 9250](https://www.ietf.org/rfc/rfc9250.html).
+- Updated DNS-over-HTTPS protocol implementation to support HTTP/2 and HTTP/3. DNS-over-HTTP/3 can be forced by using `h3` instead of `https` scheme for the URL.
+- Updated DNS Server's web service backend to use Kestrel web server and thus the DNS Server now requires ASP.NET Core Runtime to be installed. With this change, the web service now supports both HTTP/2 and HTTP/3 protocols. If you are using HTTP API, it is recommended to test your code/script with the new release.
+- Added support to save DNS cache data to disk on server shutdown and to reload it at startup.
+- Updated DNS Server domain name blocking feature to support Extended DNS Errors to show report on the blocked domain name. With this support added, the DNS Client tab on the web panel will show blocking report for any blocked domain name.
+- Updated DNS Server domain name blocking feature to support wildcard block lists file format and Adblock Plus file format.
+- Updated DNS Server to detect when an upstream server blocks a domain name to reflect it in dashboard stats and query logs. It will now detect blocking signal from Quad9 and show Extended DNS Error for it.
+- Updated web panel Zones GUI to support pagination.
+- Advanced Blocking App: Updated DNS app to support wildcard block lists file format. Updated the app to disable CNAME cloaking when a domain name is allowed in config. Implemented Extended DNS Errors support to show blocked domain report.
+- Advanced Forwarding App: Added new DNS app to support bulk conditional forwarder.
+- DNS Block List App: Added new DNS app to allow running your own DNSBL or RBL block lists [RFC 5782](https://www.rfc-editor.org/rfc/rfc5782).
+- Added support for TFTP Server Address DHCP option (150).
+- Added support for Generic DHCP option to allow configuring option currently not supported by the DHCP server.
+- Removed support for non-standard DNS-over-HTTPS (JSON) protocol.
+- Removed Newtonsoft.Json dependency from the DNS Server and all DNS apps.
+- Multiple other minor bug fixes and improvements.
 
 ## Version 10.0.1
-Veröffentlicht: 4. Dezember 2022
+Release Date: 4 December 2022
 
-- Mehrere Probleme in der Umsetzung von EDNS Client Subnet (ECS) behoben.
-- Serialisierungsproblem beim Speichern von Berechtigungen bei mehr als 255 Zonen behoben.
-- Failover App: Problem mit Leerlaufverbindungen bei HTTP- und HTTPS-Prüfungen behoben.
-- QueryLogs (Sqlite) App: Problem mit geöffneter Datenbankdatei unter Windows behoben.
-- Mehrere weitere kleinere Fehlerbehebungen und Verbesserungen.
+- Fixed multiple issues in EDNS Client Subnet (ECS) implementation.
+- Fixed issue with serialization when saving permission data when there are more than 255 zones.
+- Failover App: Fixed issue with idle connection for HTTP/HTTPS probes.
+- QueryLogs (Sqlite) App: Fixes issue of open db file on windows installations.
+- Multiple other minor bug fixes and improvements.
 
 ## Version 10.0
-Veröffentlicht: 26. November 2022
+Release Date: 26 November 2022
 
-- Sicherheitsrichtlinien für dynamische Updates nach [RFC 2136](https://www.rfc-editor.org/rfc/rfc2136) hinzugefügt, die Updates nur für festgelegte Domainnamen und Eintragstypen erlauben. Die HTTP-API-Aufrufe für Zonenoptionen ändern sich dadurch inkompatibel. Wer diese API nutzt, sollte vor dem produktiven Einsatz testen.
-- Unterstützung für den Eintragstyp DANE TLSA nach [RFC 6698](https://datatracker.ietf.org/doc/html/rfc6698) hinzugefügt, einschließlich automatischer Hashberechnung aus Zertifikaten im PEM-Format.
-- Unterstützung für den Eintragstyp SSHFP nach [RFC 4255](https://www.rfc-editor.org/rfc/rfc4255.html) hinzugefügt.
-- EDNS Client Subnet (ECS) nach [RFC 7871](https://datatracker.ietf.org/doc/html/rfc7871) für rekursive Auflösung und Forwarding umgesetzt.
-- Die HTTP-API akzeptiert Datum und Uhrzeit für Dashboard und Query-Logs im Format ISO 8601. Wer diese API nutzt, sollte vor dem produktiven Einsatz testen.
-- Codebasis auf die .NET-7-Laufzeit umgestellt. Wer den DNS-Server oder die .NET-6-Laufzeit bisher manuell installiert hat, muss vor dem Upgrade die .NET-7-Laufzeit manuell installieren.
-- Self-CNAME-Schwachstelle [CVE-2022-48256] behoben, gemeldet von Xiang Li, [Network and Information Security Lab, Tsinghua University](https://netsec.ccert.edu.cn/). Der DNS-Server folgte einem CNAME in einer Schleife, sodass die Antwort bis zum Erreichen des Limits einige hundert Einträge enthielt.
-- Das App-Framework hat die neue Schnittstelle `IDnsPostProcessor`, mit der DNS-Apps ausgehende Antworten verändern können.
-- NO DATA App: Neue App, die in Conditional-Forwarder-Zonen NO-DATA-Antworten liefert, um für bestimmte Eintragstypen vorhandene Einträge des Forwarders zu überschreiben.
-- DNS64 App: Neue App für DNS64 nach [RFC 6147](https://www.rfc-editor.org/rfc/rfc6147) für reine IPv6-Clients.
-- Advanced Blocking App: Verbraucht weniger Speicher, wenn dieselben Blocklisten in mehreren Gruppen verwendet werden.
-- Geo Continent App, Geo Country App und Geo Distance App: Unterstützen jetzt EDNS Client Subnet (ECS) nach [RFC 7871](https://datatracker.ietf.org/doc/html/rfc7871).
-- Split Horizon App: Unterstützt jetzt 1:1-Übersetzung von IP-Adressen. Damit lassen sich externe, öffentliche IP-Adressen auf interne, private Adressen abbilden, sodass Clients im privaten Netz lokale Dienste über interne Adressen erreichen.
-- Unterstützung für die DHCP-Option „Domain Search“ nach [RFC 3397](https://www.rfc-editor.org/rfc/rfc3397) hinzugefügt.
-- Unterstützung für die DHCP-Option „CAPWAP Access Controller“ nach [RFC 5417](https://www.rfc-editor.org/rfc/rfc5417.html) hinzugefügt.
-- Option in DHCP-Bereichen, um DNS-Updates zu deaktivieren.
-- Die NTP-Option in DHCP-Bereichen akzeptiert Domainnamen, die der DHCP-Server automatisch auflöst und als IP-Adressen ausliefert.
-- Mehrere weitere kleinere Fehlerbehebungen und Verbesserungen.
+- Added Dynamic Updates [RFC 2136](https://www.rfc-editor.org/rfc/rfc2136) security policy support to allow updates only for specified domain names and record types. This adds breaking changes to the zone options HTTP API calls. Any implementation that uses the zone options API must test with new update before deploying to production.
+- Added support for DANE TLSA [RFC 6698](https://datatracker.ietf.org/doc/html/rfc6698) record type. This includes support for automatically generating the hash values using certificates in PEM format.
+- Added support for SSHFP [RFC 4255](https://www.rfc-editor.org/rfc/rfc4255.html) record type.
+- Implemented EDNS Client Subnet (ECS) [RFC 7871](https://datatracker.ietf.org/doc/html/rfc7871) support for recursive resolution and forwarding.
+- Updated HTTP API to accept date time in ISO 8601 format for dashboard and query logs API calls. Any implementation that uses these API must test with new update before deploying to production.
+- Upgraded codebase to .NET 7 runtime. If you had manually installed the DNS Server or .NET 6 Runtime earlier then you must install .NET 7 Runtime manually before upgrading the DNS Server.
+- Fixed self-CNAME vulnerability [CVE-2022-48256] reported by Xiang Li, [Network and Information Security Lab, Tsinghua University](https://netsec.ccert.edu.cn/) which caused the DNS Server to follow CNAME in loop causing the answer to contain couple of hundred records before the loop limit was hit.
+- Updated DNS Apps framework with `IDnsPostProcessor` interface to allow manipulating outbound responses by DNS apps.
+- NO DATA App: Added new app to allow returning NO DATA response in Conditional Forwarder zones to allow overriding existing records from the forwarder for specified record types.
+- DNS64 App: Added new app to support DNS64 function [RFC 6147](https://www.rfc-editor.org/rfc/rfc6147) for use by IPv6 only clients.
+- Advanced Blocking App: Upgraded the app code to use less memory when same block lists are used across multiple groups.
+- Geo Continent App, Geo Country App, and Geo Distance App: Upgraded the apps to support EDNS Client Subnet (ECS) [RFC 7871](https://datatracker.ietf.org/doc/html/rfc7871).
+- Split Horizon App: Upgraded the app to add 1:1 IP address translation support. This allows mapping external/public IP address to internal/private IP address such that clients in private network can access local services using internal/private IP addresses.
+- Added support for Domain Search DHCP option [RFC 3397](https://www.rfc-editor.org/rfc/rfc3397)
+- Added support for CAPWAP Access Controller DHCP option [RFC 5417](https://www.rfc-editor.org/rfc/rfc5417.html).
+- Added DHCP Scope option to disable DNS updates.
+- Added DHCP Scope option to support domain name for NTP option such that the DHCP server will automatically resolve the domain names and use the resolved IP addresses with the NTP option.
+- Multiple other minor bug fixes and improvements.
 
 ## Version 9.1
-Veröffentlicht: 9. Oktober 2022
+Release Date: 9 October 2022
 
-- Unterstützung für dynamische Updates nach [RFC 2136](https://www.rfc-editor.org/rfc/rfc2136) hinzugefügt. Damit lassen sich Werkzeuge wie `nsupdate` nutzen, DHCP-Server von Drittanbietern können DNS-Einträge aktualisieren, und das certbot-Plugin [certbot-dns-rfc2136](https://certbot-dns-rfc2136.readthedocs.io/en/stable/) kann TLS-Zertifikate per DNS-Challenge automatisch erneuern.
-- Das Hauptdiagramm im Dashboard verwendet die lokale Zeit des Clients statt der des Servers.
-- Fehler beim Anlegen einer neuen Secondary-Zone behoben.
-- Mehrere weitere kleinere Fehlerbehebungen und Verbesserungen.
+- Added Dynamic Updates [RFC 2136](https://www.rfc-editor.org/rfc/rfc2136) support. This allows using tools like `nsupdate`, allow 3rd party DHCP servers to update DNS records, and use certbot [certbot-dns-rfc2136](https://certbot-dns-rfc2136.readthedocs.io/en/stable/) plugin for automatic TLS certificate renewal using DNS challenge.
+- Updated dashboard to display main chart using client's local time instead of server's local time.
+- Fixed bug that caused error while adding new secondary zone.
+- Multiple other minor bug fixes and improvements.
 
 ## Version 9.0
-Veröffentlicht: 24. September 2022
+Release Date: 24 September 2022
 
-- Mehrbenutzerbetrieb mit rollenbasiertem Zugriff hinzugefügt: mehrere Benutzer und rollenbasierte Gruppen mit Berechtigungen.
-- Nicht ablaufende API-Tokens für Automatisierungsskripte hinzugefügt.
-- Berechtigungen auf Zonenebene, um den Zugriff auf ausgewählte Benutzer oder Gruppenmitglieder zu beschränken.
-- Im Benutzerprofil lässt sich das Sitzungs-Timeout für jeden Benutzer festlegen.
-- HTTP-API: Die API wurde umfassend überarbeitet und bleibt abwärtskompatibel. Wer die API nutzt, sollte vor dem produktiven Einsatz testen. Die Verwendung nicht ablaufender API-Tokens wird empfohlen.
-- Conditional-Forwarder-Zonen unterstützen APP-Einträge und damit DNS-Apps.
-- Option in den Einstellungen, um die automatische Aktualisierung der Blocklisten-URLs zu stoppen.
-- DNS-Apps: Die Methode IDnsAppRecordRequestHandler.ProcessRequestAsync() ändert sich inkompatibel. Eigene DNS-Apps müssen vor dem Update mit der aktuellen DnsServerCore.ApplicationCommon.dll neu kompiliert werden.
-- DNS-Apps werden automatisch aktualisiert. Der DNS-Server prüft alle 24 Stunden auf Updates und installiert sie.
-- Split Horizon App: Netzsammlungen lassen sich für die Daten von APP-Einträgen konfigurieren.
-- Wild IP App: Neue App, die A- und AAAA-Anfragen mit der IP-Adresse beantwortet, die im Subdomain-Namen der Anfrage steckt, ähnlich wie [sslip.io](https://sslip.io/).
-- Kleinere Probleme in der DNSSEC-Validierung von DNAME-Antworten und Wildcard-NO-DATA-Antworten behoben.
-- DHCP-Bereiche aktualisieren DNS-Einträge jetzt sowohl in Primary- als auch in Forwarder-Zonen.
-- DHCP-Bereiche können dynamische Vergabe an Geräte mit lokal verwalteter MAC-Adresse verhindern.
-- Mehrere weitere kleinere Fehlerbehebungen und Verbesserungen.
+- Added multi-user role based access support. This allows creating multiple users and multiple role based groups with permission based access controls.
+- Added support for non-expiring API tokens to use with automation scripts.
+- Added zone level permissions support to allow access only to selected users or group members.
+- User profile options available to update each user's session timeout values.
+- HTTP API: The API has been updated extensively keeping backward compatibility. Any implementation that uses the API must test with new update before deploying to production. Using the non-expiring API tokens is recommended.
+- Updated Conditional Forwarder zones to support APP records to allow using DNS Apps in these zones.
+- Option added in Settings to stop block list URL automatic update.
+- DNS Apps: There is a breaking change in the IDnsAppRecordRequestHandler.ProcessRequestAsync() method. If you have any custom DNS app deployed, you need to recompile it with the latest DnsServerCore.ApplicationCommon.dll before updating to this new release.
+- DNS Apps now support automatic updates. The DNS Server will check for updates and install them automatically every 24 hours.
+- Split Horizon App: Added feature to configure collection of networks to use with APP record data.
+- Wild IP App: Added new DNS App that returns a response A or AAAA queries with the IP address that is embedded in the subdomain name of the query. This app works similar to [sslip.io](https://sslip.io/).
+- Fixed minor issues in DNSSEC validation for DNAME responses and for wildcard NO DATA responses.
+- DHCP scopes now support updating DNS records in both Primary and Forwarder zones.
+- DHCP scopes now support blocking dynamic allocations to devices with locally administered MAC address.
+- Multiple other minor bug fixes and improvements.
 
 ## Version 8.1.4
-Veröffentlicht: 3. Juli 2022
-- Problem in der rekursiven Auflösung behoben, durch das die DNSSEC-Validierung fehlschlug, wenn der Nameserver mit Einträgen außerhalb seines Zuständigkeitsbereichs antwortete.
-- Der rekursive Resolver aktualisiert die Adressen aller NS-Einträge asynchron, um schneller zu sein.
-- Mehrere weitere kleinere Fehlerbehebungen und Verbesserungen.
+Release Date: 3 July 2022
+- Fixed issue in recursive resolution that caused DNSSEC validation to fail in cases when the name server responds with out-of-bailiwick records.
+- Updated recursive resolver to update addresses async for all NS records to improve performance.
+- Multiple other minor bug fixes and improvements.
 
 ## Version 8.1.3
-Veröffentlicht: 11. Juni 2022
-- DoH-Endpunkte von OpenDNS zur Schnellauswahl für DNS-Client und Forwarder hinzugefügt.
-- Fehlende Prüfung auf unterstützte Digest-Typen ergänzt, deren Fehlen eine Ausnahme auslösen und die Auflösung DNSSEC-signierter Domains verhindern konnte.
+Release Date: 11 June 2022
+- Added OpenDNS DoH end points to DNS Client and Forwarder quick select list.
+- Fixed issue of missing digest type support check that could cause exception to be thrown causing failure to resolve the DNSSEC signed domain name.
 
 ## Version 8.1.2
-Veröffentlicht: 28. Mai 2022
-- Problem im IXFR-Verlauf beim Hinzufügen und Ändern von Einträgen in Primary-Zonen behoben, wenn die TTL eines RRsets geändert wurde.
-- Problem in der DNSSEC-Validierung von MX- und SRV-Einträgen durch einen falschen Vergleich der Eintragsdaten behoben.
-- Problem beim Einlesen des Parameters „Verantwortlicher“ im SOA-Eintrag behoben.
-- Diese Version ändert die API-Aufrufe zum Löschen und Ändern von MX- und SRV-Einträgen. Clients von Drittanbietern können Probleme bekommen, wenn sie nicht vorher angepasst werden. Vor dem Einsatz sollte die API-Dokumentation auf Änderungen geprüft werden.
-- Mehrere weitere kleinere Fehlerbehebungen und Verbesserungen.
+Release Date: 28 May 2022
+- Fixed issue in Primary zone add and update record IXFR history when RRSet TTL was updated.
+- Fixed issue in DNSSEC validation for MX and SRV records caused due to incorrect comparison of record data.
+- Fixed issue in SOA record responsible person parameter parsing.
+- This release updates delete and update record API calls for MX and SRV records which may cause issues in 3rd party clients if they are not updated before deploying this new version. It is recommended to check the API documentation for changes before deploying this new release.
+- Multiple other minor bug fixes and improvements.
 
 ## Version 8.1.1
-Veröffentlicht: 21. Mai 2022
-- Zonenstatus „Synchronisierung fehlgeschlagen“ und „Notify fehlgeschlagen“ hinzugefügt, um Probleme bei der Synchronisierung zwischen Primary- und Secondary-Zonen anzuzeigen.
-- Weitere Zonenoptionen für Zonentransfer und Notify hinzugefügt.
-- Zeitprobleme beim Schlüsselwechsel DNSSEC-signierter Primary-Zonen nach [RFC 7583](https://datatracker.ietf.org/doc/html/rfc7583) behoben.
-- Problem im rekursiven Resolver durch eine Zonenschnitt-Prüfung für Glue-Einträge behoben.
-- Mehrere weitere kleinere Fehlerbehebungen und Verbesserungen.
+Release Date: 21 May 2022
+- Added Sync Failed and Notify Failed zone status to indicate issues between primary and secondary zones synchronization.
+- Added more options in zone options to configure zone transfer and notify settings.
+- Fixed DNSSEC signed primary zone key rollover timing issues as per [RFC 7583](https://datatracker.ietf.org/doc/html/rfc7583).
+- Fixed issue in recursive resolver by adding zone cut validation for glue records.
+- Multiple other minor bug fixes and improvements.
 
 ## Version 8.1
-Veröffentlicht: 8. Mai 2022
-- Zwei Ghost-Domain-Probleme behoben, CVE-2022-30257 (V1) und CVE-2022-30258 (V2), gemeldet von Xiang Li, [Network and Information Security Lab, Tsinghua University](https://netsec.ccert.edu.cn/). V1 wurde durch Änderungen an der NS-Revalidierung behoben, sodass die aktivierte Option in den Einstellungen das Problem entschärft. V2 wurde durch zusätzliche Prüfungen beim Zwischenspeichern von NS-Einträgen behoben.
-- Option für die maximale Zahl an Cache-Einträgen hinzugefügt, um den Speicherverbrauch durch Entfernen der am längsten ungenutzten Daten zu begrenzen.
-- NS-Revalidierung umgesetzt, die NS-Einträge der übergeordneten Zone nach Ablauf ihrer TTL erneut prüft.
-- Die Weboberfläche speichert das Sitzungstoken im lokalen Speicher, damit man beim Neuladen der Seite nicht abgemeldet wird.
-- DropRequests App: Für den konfigurierten QNAME lässt sich die gesamte Zone blockieren.
-- Fehler im IXFR-Verlauf von Primary-Zonen durch eine fehlende Prüfung der SOA-Seriennummer behoben.
-- Falsche IXFR-Verlaufseinträge für DNSKEY-Einträge in Primary-Zonen behoben.
-- Mehrere weitere kleinere Fehlerbehebungen und Verbesserungen.
+Release Date: 8 May 2022
+- Fixed two ghost domain issues, CVE-2022-30257 (V1) and CVE-2022-30258 (V2), reported by Xiang Li, [Network and Information Security Lab, Tsinghua University](https://netsec.ccert.edu.cn/). Issue V1 was fixed with some implementation changes in the NS Revalidation feature and thus having this option enabled in Settings will mitigate the issue. Issue V2 was fixed by implementing additional validation checks when caching NS records.
+- Added maximum cache entires option to limit memory usage by removing least recently used data from cache.
+- Implemented NS revalidation to revalidate parent side NS records when their TTL expires.
+- Updated the web console to store session token in local storage to prevent logging out on page reload.
+- DropRequests App: Added support to block entire zone for the configured QNAME.
+- Fixed bug in primary zone IXFR history caused due to missing SOA serial check.
+- Fixed issues with wrong IXFR history entries for DNSKEY records in primary zone.
+- Multiple other minor bug fixes and improvements.
 
 ## Version 8.0.2
-Veröffentlicht: 3. April 2022
-- Fehler in Conditional-Forwarder-Zonen behoben, der bei einigen Anfragen zu ServerFailure führte.
-- Problem behoben, durch das bei einer Änderung des SOA-Werts die Mindest-TTL für NSEC- und NSEC3-Einträge in signierten Primary-Zonen gesetzt wurde.
-- Problem beim Einlesen von JSON-Antworten von DNS-over-HTTPS für NSEC- und NSEC3-Einträge behoben.
-- Mehrere weitere kleinere Fehlerbehebungen und Verbesserungen.
+Release Date: 3 April 2022
+- Fixed bug in Conditional Forwarder zones that would cause ServerFailure responses for some queries.
+- Fixed issue of setting minimum TTL value to NSEC & NSEC3 records in Primary signed zones when SOA value is changed.
+- Fixed issue in parsing DNS-over-HTTPS JSON response for NSEC and NSEC3 records.
+- Multiple other minor bug fixes and improvements.
 
 ## Version 8.0.1
-Veröffentlicht: 29. März 2022
-- Fehler in Conditional-Forwarder-Zonen behoben: Die Zonenschnitt-Prüfung erzeugte negative Cache-Einträge für CNAME-Antworten, was zu unvollständigen Antworten führte.
-- Problem bei der Behandlung von FormatError-Antworten ohne Question-Abschnitt auf EDNS-Anfragen behoben.
-- Kleineres Problem bei der DNSSEC-Validierung unsignierter Zonen behoben, wenn der Forwarder leere NXDOMAIN-Antworten lieferte.
-- Problem bei der Behandlung von NODATA-Antworten für ANAME-Einträge behoben.
-- Problem bei der Prüfung von Eintragskommentaren behoben, das beim Speichern von SOA-Einträgen einen Fehler auslöste.
-- Mehrere weitere kleinere Fehlerbehebungen und Verbesserungen.
+Release Date: 29 March 2022
+- Fixed bug in Conditional Forwarder zones due to zone cut validation causing negative cache entry for CNAME responses which resulted in partial responses.
+- Fixed issue with handling FormatError response that were missing question section for EDNS requests.
+- Fixed minor issue with DNSSEC validation for unsigned zone when forwarder returns empty NXDOMAIN responses.
+- Fixed issue with NODATA response handling for ANAME records.
+- Fixed issue with record comment validation causing error when saving SOA records in zones.
+- Multiple other minor bug fixes and improvements.
 
 ## Version 8.0
-Veröffentlicht: 26. März 2022
-- Unterstützung für EDNS nach [RFC 6891](https://datatracker.ietf.org/doc/html/rfc6891) hinzugefügt.
-- Extended DNS Errors nach [RFC 8914](https://datatracker.ietf.org/doc/html/rfc8914) hinzugefügt.
-- DNSSEC-Validierung mit RSA und ECDSA für rekursiven Resolver, Forwarder und Conditional Forwarder hinzugefügt.
-- DNSSEC für alle unterstützten DNS-Transportprotokolle einschließlich der verschlüsselten Protokolle (DoT, DoH, DoH JSON) hinzugefügt.
-- Signieren von Zonen mit DNSSEC per RSA und ECDSA hinzugefügt.
-- Der DNS-Client unterstützt jetzt DNSSEC-Validierung.
-- Der eigene FWD-Eintragstyp für Conditional-Forwarder-Zonen unterstützt jetzt DNSSEC-Validierung und HTTP-/SOCKS5-Proxys.
-- Conditional-Forwarder-Zonen können als statische Stub-Zone arbeiten und eine Domain über NS-Einträge zwingend über bestimmte Nameserver auflösen.
-- Codebasis auf die .NET-6-Laufzeit umgestellt.
-- Query Logs App: Suche mit Platzhaltern für Domainnamen hinzugefügt.
-- Mehrere Probleme im DHCP-Server behoben.
-- Diese Version ändert viele API-Aufrufe. Clients von Drittanbietern können Probleme bekommen, wenn sie nicht vorher angepasst werden. Vor dem Einsatz sollte die API-Dokumentation auf Änderungen geprüft werden.
-- Mehrere weitere kleinere Fehlerbehebungen und Verbesserungen.
+Release Date: 26 March 2022
+- Added EDNS support [RFC 6891](https://datatracker.ietf.org/doc/html/rfc6891).
+- Added Extended DNS Errors [RFC 8914](https://datatracker.ietf.org/doc/html/rfc8914).
+- Added DNSSEC validation support with RSA & ECDSA algorithms for recursive resolver, forwarders, and conditional forwarders.
+- Added DNSSEC support for all supported DNS transport protocols including encrypted DNS protocols (DoT, DoH, DoH JSON).
+- Added DNSSEC zone signing support with RSA & ECDSA algorithms.
+- Updated DNS Client to support DNSSEC validation.
+- Updated proprietary FWD record which is used with Conditional Forwarder Zones for DNSSEC validation and HTTP/SOCKS5 proxy support.
+- Updated Conditional Forwarder Zones to support working as a static stub zone to force a domain name to resolve via given name servers using NS records.
+- Upgraded codebase to .NET 6 runtime.
+- Query Logs App: Added wildcard search support for domain names.
+- Fixed multiple issues with DHCP server.
+- This release updates many API calls which may cause issues in 3rd party clients if they are not updated before deploying this new version. It is recommended to check the API documentation for changes before deploying this new release.
+- Multiple other minor bug fixes and improvements.
 
 ## Version 7.1
-Veröffentlicht: 23. Oktober 2021
-- Option in den Einstellungen, um automatisch ein selbstsigniertes Zertifikat für den Webdienst einzurichten.
-- Cache-Poisoning-Schwachstelle [CVE-2021-43105] behoben, gemeldet von Xiang Li, [Network and Information Security Lab, Tsinghua University](https://netsec.ccert.edu.cn/), und Qifan Zhang, [Data-driven Security and Privacy (DSP) Lab, University of California, Irvine](https://faculty.sites.uci.edu/zhouli/research/). Sie trat auf, wenn eine Conditional-Forwarder-Zone einen vom Angreifer kontrollierten Forwarder nutzte oder ein UDP-/TCP-Forwarder-Protokoll, bei dem ein Man-in-the-Middle-Angriff möglich war.
-- Block Page App: Unterstützt automatische selbstsignierte Zertifikate, um die Blockierseite auch für HTTPS-Webseiten anzuzeigen.
-- Drop Requests App: Option zum Verwerfen fehlerhafter DNS-Anfragen hinzugefügt.
-- Query Logs App: Kleineres Problem behoben, durch das Abfragen fehlschlugen, wenn eine Domain mit ungültigem Zeichen in der Datenbank stand.
-- Advanced Blocking App: Fehler beim Laden von Regex-Blocklisten behoben, durch den Domains nicht wie erwartet blockiert wurden.
-- Der DNS-Server protokolliert jetzt, warum eine Anfrage für einen Zonentransfer abgelehnt wurde.
-- Weitere Umgebungsvariablen für Docker, um die Konfiguration des DNS-Servers zu initialisieren. Details stehen in der [Dokumentation der Umgebungsvariablen](https://github.com/TechnitiumSoftware/DnsServer/blob/master/DockerEnvironmentVariables.md).
-- Mehrere weitere kleinere Fehlerbehebungen und Verbesserungen.
+Release Date: 23 October 2021
+- Added option in settings to automatically configure a self signed certificate for DNS web service.
+- Fixed cache poisoning vulnerability [CVE-2021-43105] reported by Xiang Li, [Network and Information Security Lab, Tsinghua University](https://netsec.ccert.edu.cn/) and Qifan Zhang, [Data-driven Security and Privacy (DSP) Lab, University of California, Irvine](https://faculty.sites.uci.edu/zhouli/research/) when a conditional forwarder zone uses a forwarder controlled by an attacker or uses UDP/TCP forwarder protocol that the attacker can perform MiTM.
+- Block Page App: Added support for automatic self signed certificate to allow showing block page for HTTPS websites.
+- Drop Requests App: Added option to drop malformed DNS requests.
+- Query Logs App: Fixed minor issue which caused the query logs request to fail when a domain with invalid character was logged in the database.
+- Advanced Blocking App: Fixed bug in loading regex block list which caused the app to not block the domain names as expected.
+- Added logging in DNS Server to know why a zone transfer request was refused by the server.
+- Added more environment variables for use with Docker to initialize the DNS Server config. Read the [environment variable documentation](https://github.com/TechnitiumSoftware/DnsServer/blob/master/DockerEnvironmentVariables.md) for complete details.
+- Multiple other minor bug fixes and improvements.
 
 ## Version 7.0
-Veröffentlicht: 2. Oktober 2021
-- DNS-Apps können jetzt zusätzlich zu APP-Einträgen in autoritativen Zonen selbst als autoritative Zonen arbeiten, Anfragen verwerfen und Anfragen protokollieren.
-- Diese Version ändert das Design der DNS-Apps grundlegend, sodass bisher installierte Apps nach dem Update nicht mehr geladen werden. Sie müssen manuell über den DNS-App-Store aktualisiert werden.
-- Advanced Blocking App: Neue App, die Domainnamen abhängig von IP-Adresse oder Subnetz der Clients in Gruppen blockiert. Unterstützt auch Regex und Blocklisten im Adblock-Format.
-- Block Page App: Neue App mit eingebautem Webserver, der Clients bei blockierten Domains eine Blockierseite anzeigt.
-- Drop Requests App: Neue App, die Anfragen verwirft, die den konfigurierten Fragen entsprechen. So lassen sich DNS-Amplification-Angriffe mit bestimmten Domainnamen und Anfragetypen abwehren.
-- NX Domain App: Neue App, die Domainnamen mit einer NXDOMAIN-Antwort blockiert.
-- Query Logs (Sqlite): Neue App, die alle Anfragen an den DNS-Server in einer Sqlite-Datenbank protokolliert. Die Weboberfläche bietet dafür die Option Query-Logs zur Abfrage der Daten.
-- Failover App: Wartungsmodus umgesetzt, um anzuzeigen, dass eine Adresse wegen Wartung abgeschaltet ist.
-- Ping-Prüfung in DHCP-Bereichen, um vor der Vergabe festzustellen, ob eine IP-Adresse bereits verwendet wird.
-- Vergebene DHCP-Leases lassen sich entfernen.
-- Diese Version ändert viele API-Aufrufe. Clients von Drittanbietern können Probleme bekommen, wenn sie nicht vorher angepasst werden. Vor dem Einsatz sollte die API-Dokumentation auf Änderungen geprüft werden.
-- Mehrere weitere kleinere Fehlerbehebungen und Verbesserungen.
+Release Date: 2 October 2021
+- DNS Apps design updated to allow apps to act as authoritative zones, drop requests, and log queries in addition to the existing APP records in authoritative zones.
+- This release is a major update for DNS Apps design and thus any previously installed apps will fail to load after the update. A manual update is required to install the latest app update from the DNS App Store for these apps to work with this new release.
+- Advanced Blocking App: This new app allows blocking domain names based on IP address or subnet of the clients by creating groups. It also supports blocking using regex and also supports loading blocked domains from Adblock format lists.
+- Block Page App: This new app runs a built-in web server to allow serving a block page to clients when a domain name is blocked.
+- Drop Requests App: This new app allows dropping requests that match the blocked questions in the config allowing to block DNS amplification attacks that use specific domain name and query types.
+- NX Domain App: This new app allows blocking domain names with a NXDOMAIN response.
+- Query Logs (Sqlite): This new app allows logging all queries that the DNS Server receives into a Sqlite database. The DNS Server web panel adds an Query Logs option to allow querying the app for logged data.
+- Failover App: Implemented under maintenance feature to indicate if an address is taken down for maintenance.
+- Added Ping check option in DHCP scopes to allow detecting if an IP address is already in use before leasing it.
+- Added option to allow removing an allocated DHCP lease.
+- This release updates many API calls which may cause issues in 3rd party clients if they are not updated before deploying this new version. It is recommended to check the API documentation for changes before deploying this new release.
+- Multiple other minor bug fixes and improvements.
 
 ## Version 6.4.1
-Veröffentlicht: 21. August 2021
-- Delegation Revalidation nach [draft-ietf-dnsop-ns-revalidation-01](https://datatracker.ietf.org/doc/draft-ietf-dnsop-ns-revalidation/) im rekursiven Resolver umgesetzt.
-- Probleme mit DNS-over-TLS behoben, bei denen das ALPN „dot“ den SSL-Handshake mit NextDNS als Forwarder scheitern ließ.
-- Probleme beim Zählen eindeutiger Clients in der Dashboard-Statistik behoben. Künftige Daten werden korrekt angezeigt. Fehlerhafte Daten seit dem letzten Release lassen sich durch manuelles Löschen der Dateien '/etc/dns/config/stats/202108*.dstat' bereinigen.
-- Erlaubte Listen-URLs werden jetzt zonenweise geprüft, sodass auch Subdomains aus Blocklisten erlaubt werden.
-- DNS Failover App auf v1.4 aktualisiert, um Umsetzungsprobleme zu beheben.
-- Mehrere weitere kleinere Fehlerbehebungen und Verbesserungen.
+Release Date: 21 August 2021
+- Implemented Delegation Revalidation [draft-ietf-dnsop-ns-revalidation-01](https://datatracker.ietf.org/doc/draft-ietf-dnsop-ns-revalidation/) in recursive resolver.
+- Fixed issues with DNS-over-TLS due to "dot" ALPN causing SSL handshake to fail when using NextDNS as forwarder.
+- Fixed issues in counting total unique clients in dashboard stats. The future data for total clients will be displayed correctly however the bad data since last release can be fixed by deleting '/etc/dns/config/stats/202108*.dstat' files manually.
+- Updated allowed list URL implementation to check for domains zone wise so that subdomain names from blocked list URLs too are allowed.
+- Updated DNS Failover App to v1.4 to fix implementation issues.
+- Multiple other minor bug fixes and improvements.
 
 ## Version 6.4
-Veröffentlicht: 14. August 2021
-- Unterstützung für DNAME-Einträge nach [RFC 6672](https://datatracker.ietf.org/doc/html/rfc6672) hinzugefügt.
-- Inkrementeller Zonentransfer (IXFR) nach [RFC 1995](https://datatracker.ietf.org/doc/html/rfc1995) umgesetzt.
-- Transaktionsauthentifizierung mit geheimem Schlüssel (TSIG) nach [RFC 8945](https://datatracker.ietf.org/doc/html/rfc8945) für Zonentransfers umgesetzt.
-- Zonentransfer über TLS (XFR-over-TLS) nach [draft-ietf-dprive-xfr-over-tls](https://datatracker.ietf.org/doc/draft-ietf-dprive-xfr-over-tls/) umgesetzt.
-- Erweiterte Einstellungen für die TTL-Werte im Cache hinzugefügt.
-- Schaltfläche „Resync“ hinzugefügt, um Secondary- und Stub-Zonen erneut zu synchronisieren.
-- Die Ratenbegrenzung kann Anfragen jetzt pro Client-Subnetz begrenzen.
-- SplitHorizon App: Unterstützt jetzt CIDR-Netze.
-- Failover App: Mehrere Probleme behoben. Die Health-Check-URL kann aus dem Domainnamen des APP-Eintrags erzeugt oder in dessen Daten angegeben werden.
-- Probleme beim Rotieren der Logdateien bei Verwendung der lokalen Zeit behoben.
-- Mehrere weitere kleinere Fehlerbehebungen und Verbesserungen.
-- Einige API-Aufrufe wurden geändert. Clients von Drittanbietern können Probleme bekommen, wenn sie nicht vorher angepasst werden.
+Release Date: 14 August 2021
+- Added DNAME record [RFC 6672](https://datatracker.ietf.org/doc/html/rfc6672) support.
+- Implemented incremental zone transfer (IXFR) [RFC 1995](https://datatracker.ietf.org/doc/html/rfc1995) support.
+- Implemented secret key transaction authentication (TSIG) [RFC 8945](https://datatracker.ietf.org/doc/html/rfc8945) support for zone transfers.
+- Implemented zone transfer over TLS (XFR-over-TLS) [draft-ietf-dprive-xfr-over-tls](https://datatracker.ietf.org/doc/draft-ietf-dprive-xfr-over-tls/) support.
+- Added advance options in Settings to control TTL values in Cache.
+- Added Resync button to force resync Secondary and Stub zones.
+- Updated query rate limiting feature to allow limiting requests from the client's subnet.
+- Updated SplitHorizon App to support configuring CIDR networks.
+- Updated Failover App to fix multiple issues and added feature to auto generate health check URL from APP record domain name or specify the URL in the APP record data.
+- Fixed issues with log file rolling when using local time.
+- Multiple other minor bug fixes and improvements.
+- Updated few API calls which may cause issues in 3rd party clients if they are not updated before deploying this new version.
 
 ## Version 6.3
-Veröffentlicht: 6. Juni 2021
+Release Date: 6 June 2021
 
-- Failover App im DNS-App-Store hinzugefügt.
-- Kommentare für DNS-Einträge in Zonen hinzugefügt.
-- Rekursions-ACL hinzugefügt, um Netze festzulegen, die Rekursion nutzen dürfen oder nicht.
-- Zonenoptionen hinzugefügt, um Zonentransfer und Notify pro Zone zu konfigurieren.
-- Begrenzung der Anfragen pro Minute (QPM) pro IP-Adresse hinzugefügt.
-- Für blockierte Domainnamen lassen sich eigene IP-Adressen angeben.
-- Das Blockieren von Domainnamen lässt sich vorübergehend oder dauerhaft deaktivieren.
-- Startseite für den DNS-over-HTTPS-Dienst hinzugefügt, die beim Aufruf der DoH-URL im Browser grundlegende Konfigurationsinformationen zeigt.
-- Mehrere Probleme in der QNAME-Minimierung behoben.
-- Mehrere Probleme im DNS-Client behoben.
-- Mehrere weitere kleinere Fehlerbehebungen und Verbesserungen.
-- Einige API-Aufrufe wurden geändert. Clients von Drittanbietern können Probleme bekommen, wenn sie nicht vorher angepasst werden.
+- Added Failover App in DNS App Store.
+- Added comments option to DNS records in Zones.
+- Added Recursion ACL support to specify allowed and denied networks that can perform recursion.
+- Added Zone Options feature to allow configuring Zone Transfer and Notify settings per zone.
+- Added Queries Per Minute (QPM) Limit feature to limit the number of queries being made by an IP address.
+- Added feature to specify custom IP addresses for blocked domain names.
+- Added feature to temporarily/permanently disable blocking of domain names.
+- Added index page for DNS-over-HTTPS (DoH) web service that displays basic configuration information to user when DoH URL is visited using a web browser.
+- Fixed multiple issues in QNAME minimization implementation.
+- Fixed multiple DNS Client implementation issues.
+- Multiple other minor bug fixes and improvements.
+- Updated few API calls which may cause issues in 3rd party clients if they are not updated before deploying this new version.
 
 ## Version 6.2.3
-Veröffentlicht: 2. Mai 2021
+Release Date: 2 May 2021
 
-- Die Liste der installierten DNS-Apps zeigt an, ob Updates verfügbar sind.
-- Tägliche Statistikdaten werden gekürzt, um weniger Speicher zu verbrauchen.
-- Problem in der QNAME-Minimierung behoben, das durch eine fehlende Prüfung auf Antworten ohne Answer- und Authority-Abschnitt entstand.
-- Problem im Logger behoben, der unter bestimmten Bedingungen nicht startete.
-- DNS-Apps mischen die Adressen in Antworten, um Lastverteilung zu ermöglichen.
+- Improved DNS Apps interface to show if updates are available in the installed apps list.
+- Updated stats module to truncate daily stats data to optimize memory usage.
+- Fixed issue with QNAME minimization caused due to missing check when response contained no answer and no authority.
+- Fixed issue in logger which would fail to start in certain conditions.
+- Updated DNS Apps to shuffle addresses in response to allow load balancing.
 
 ## Version 6.2.2
-Veröffentlicht: 24. April 2021
+Release Date: 24 April 2021
 
-- Probleme in der rekursiven Auflösung behoben.
-- Problem beim Einlesen von AXFR-Antworten behoben.
-- Fehlende Markierungen in Antworten ergänzt, damit das Dashboard korrekte Statistiken zeigt.
-- Problem mit der Weiterleitung der Weboberfläche beim Speichern von Einstellungen hinter einem Reverse Proxy behoben.
-- Mehrere weitere kleinere Fehlerbehebungen und Verbesserungen.
+- Fixed issues with recursive resolution.
+- Fixed issue in parsing AXFR response.
+- Fixed missing tags in responses to reflect correct stats on dashboard.
+- Fixed issue with web console redirection on saving settings when using a reverse proxy.
+- Multiple other minor bug fixes and improvements.
 
 ## Version 6.2.1
-Veröffentlicht: 17. April 2021
+Release Date: 17 April 2021
 
-- Serve Stale im DNS-Cache für bessere Performance überarbeitet.
-- CNAME-Auflösung im DNS-Cache und in autoritativen Zonen optimiert.
-- Problem im DNS-Cache behoben, bei dem durch eine fehlende Typprüfung der RDATA von NS-Einträgen spezielle Cache-Einträge zurückgegeben wurden.
-- Problem im DNS-Client beim Empfang von Antworten behoben, die größer als der Puffer waren.
+- Updated DNS Cache serve stale implementation for better performance.
+- Implemented CNAME resolution optimization in DNS Cache and Auth Zone.
+- Fixed issue in DNS Cache caused due to missing check of the type of NS record's RDATA causing cache zone to return special cache RDATA record.
+- Fixed issue in DNS client caused when response greater than the buffer size is received.
 
 ## Version 6.2
-Veröffentlicht: 11. April 2021
+Release Date: 11 April 2021
 
-- Kritischen Fehler in der Blocklistenprüfung behoben, durch den der Server mit `RCODE=Refused` antwortete, wenn nur die Blocked-Zone verwendet wurde.
-- Option, blockierte Domains mit `RCODE=NxDomain` statt mit der Adresse `0.0.0.0` zu beantworten.
-- `NameError` wurde in `NxDomain` umbenannt, um deutlich zu machen, dass die Domain nicht existiert. Die Dashboard-API liefert JSON mit dem neuen Begriff, daher sollte eigener Code vor dem Update getestet werden.
+- Fixed critical bug in block list condition check causing server to respond with `RCODE=Refused` when only using Blocked zone.
+- Added option to respond with `RCODE=NxDomain` for blocked domains instead of returning `0.0.0.0` address.
+- Renamed `NameError` to `NxDomain` to make the terminology clear that the domain does not exists. Dashboard API returns JSON with new terminology so its advised to test your code before updating the server.
 
 ## Version 6.1
-Veröffentlicht: 10. April 2021
+Release Date: 10 April 2021
 
-- DNS-App-Store hinzugefügt, der alle verfügbaren Apps zur einfachen Installation und Aktualisierung auflistet.
-- Option „Überschreiben“ beim Hinzufügen von Einträgen in Zonen hinzugefügt.
-- Mehrere ANAME-Einträge werden unterstützt.
-- Erlaubte URLs für Blocklisten hinzugefügt, um zu verhindern, dass Domains in die Blocklistenzone aufgenommen werden.
-- Fehler in ZoneTree behoben.
-- Fehler in DNS-Apps behoben.
-- Die Standard-DNS-App wurde in 5 eigenständige Apps aufgeteilt, die im DNS-App-Store verfügbar sind.
-- Probleme im DNS-Cache behoben und den Code für geringeren Speicherverbrauch optimiert.
-- Alle Bibliotheksprojekte auf .NET 5 umgestellt.
-- Mehrere weitere kleinere Fehlerbehebungen und Verbesserungen.
+- Added DNS App Store feature that list all available apps for quick and easy installation and update.
+- Added 'Overwrite' option in Add Record for zones.
+- Multiple ANAME record support added.
+- Added block list allowed URL feature to prevent domain names from getting added to the block list zone.
+- Fixed bug in ZoneTree.
+- Fixed bugs in DNS Apps.
+- Split Default DNS App into 5 independent apps that are now available on the DNS App Store.
+- Fixed issues in DNS Cache and updated code for memory optimization.
+- Upgraded all library projects to .NET 5.
+- Multiple other minor bug fixes and improvements.
 
 ## Version 6.0
-Veröffentlicht: 13. März 2021
+Release Date: 13 March 2021
 
-- Die gesamte Codebasis wurde auf .NET 5 mit neuem Windows-Installer umgestellt. Das verbessert die Performance unter Windows.
-- Unterstützung für den eigenen Eintragstyp DNS Application (APP) mit DNS-Apps hinzugefügt. Damit können Drittanbieter mit .NET eigene Apps entwickeln, die auf dem DNS-Server laufen, DNS-Anfragen verarbeiten und nach beliebiger Geschäftslogik eigene Antworten liefern.
-- Eine separat herunterladbare Standard-App unterstützt APP-Einträge für Split Horizon und geolokalisierte Antworten mit den MaxMind-Datenbanken GeoIP2 City und Country.
-- Die Diagramme im Dashboard merken sich die Auswahl in der Legende.
-- Im Dashboard lässt sich ein eigener Zeitraum für die Statistik wählen.
-- Option für die maximale Zahl an Statistiktagen in den Einstellungen hinzugefügt.
-- Option zum Aktivieren oder Deaktivieren der QNAME-Minimierung hinzugefügt.
-- Option zum Löschen vorhandener Dateien beim Wiederherstellen von Einstellungen hinzugefügt.
-- Anfragestatistiken werden gespeichert, damit das automatische Prefetching den Cache nach einem Neustart auffrischen kann.
-- Selbstsignierte Zertifikate lassen sich für Weboberfläche, DoH und DoT verwenden.
-- Optionen zum Reservieren und Freigeben von DHCP-Leases hinzugefügt, um Leases für Clients schnell zu reservieren.
-- Reservierte DHCP-Leases können den Hostnamen des Clients überschreiben.
-- Probleme mit dem automatischen Prefetching im DNS-Cache behoben.
-- Mehrere Probleme im DNS-Cache behoben.
-- Mehrere Schwachstellen behoben, die Cache Poisoning ermöglichten.
-- Mehrere weitere kleinere Fehlerbehebungen und Verbesserungen.
+- Updated entire DNS code base to .NET 5 with new Windows installer. This upgrade will improve overall performance on Windows installations.
+- Added support for DNS Application (APP) propriety record with DNS Apps feature support. DNS Apps allows creating custom apps by 3rd party using .NET that run on the DNS Server allowing the apps to process DNS requests and provide custom DNS response based on any bussiness logic.
+- A default DNS app (available to download separately) supports APP records capable of Split Horizon and Geolocation based responses using MaxMind's GeoIP2 City & Country databases.
+- Updated dashboard charts to save legend selection state.
+- Updated dashboard with Custom date selection option to display stats.
+- Added option to configure max stats days in settings.
+- Added option to enable/disable QNAME minimization.
+- Added delete existing files option in Restore settings.
+- Added support to store query stats data to allow DNS cache auto prefetch to refresh cache when DNS Server restarts.
+- Updated TLS certificate implementation to allow using self signed certificates for web console, DoH, and DoT.
+- Added DHCP lease Reserve/Unreserve options to allow quickly reserving lease for clients.
+- Updated DHCP reserved lease option to allow overriding client's host name.
+- Fixed issues with DNS cache auto prefetch feature.
+- Fixed multiple issues in DNS cache.
+- Fixed multiple vulnerabilities causing DNS cache poisoning.
+- Multiple other minor bug fixes and improvements.
 
 ## Version 5.6
-Veröffentlicht: 2. Januar 2021
+Release Date: 2 January 2021
 
-- Die eigenständige Konsolenanwendung läuft jetzt auf .NET 5, die eigenständige .NET-Framework-Anwendung wird nicht mehr unterstützt. .NET 5 verbessert die Performance auf allen Plattformen.
-- DNS- und DHCP-Listener verwenden asynchrone Ein-/Ausgabe für bessere Performance.
-- HTTPS für den Webdienst der Weboberfläche hinzugefügt.
-- Die lokalen Adressen des Webdienstes lassen sich ändern.
-- Endpunkte des DNS-Servers und des Webdienstes sowie DoH und DoT lassen sich sofort ändern, ohne den Dienst manuell neu zu starten. Alle Einstellungen werden dynamisch übernommen.
-- HTTP-Komprimierung für den Webdienst hinzugefügt.
-- HTTP-Komprimierung beim Herunterladen von Blocklisten hinzugefügt.
-- Option zum Löschen aller Dashboard-Statistiken und automatisches Aufräumen alter Statistikdateien hinzugefügt.
-- Option zum Löschen aller Logdateien und automatisches Aufräumen alter Logdateien hinzugefügt.
-- Optionen zum Deaktivieren der Protokollierung, zur Protokollierung in lokaler Zeit und zum Ändern des Log-Ordners hinzugefügt.
-- Option für das Aktualisierungsintervall der Blocklisten mit manueller Möglichkeit, alle Blocklisten sofort zu aktualisieren.
-- Export einer Sicherung als ZIP-Datei mit ausgewählten Inhalten wie Konfigurationsdateien, Logs und Statistiken sowie Wiederherstellung ohne Neustart des Dienstes.
-- Mehrere Probleme in der DNS-Eintragsverwaltung des DHCP-Servers behoben.
-- Fehler beim Cache-Prefetching für Stub- und Conditional-Forwarder-Zonen behoben, durch den zwischengespeicherte Daten mit dem Ergebnis rekursiver Auflösung überschrieben wurden.
-- Problem mit der HTML-Kodierung in der Web-App behoben.
-- Die Web-App kann die Top 1000 der Clients, Domains und blockierten Domains auflisten.
-- Serve Stale im DNS-Cache ist konfigurierbar, die Standard-TTL für veraltete Antworten beträgt 3 statt 7 Tage.
-- Problem im rekursiven Resolver behoben, damit keine Root-Server abgefragt werden, wenn einer der Nameserver der übergeordneten Zone bereits im Cache liegt.
-- Inkompatible Änderungen an den API-Aufrufen `getDnsSettings` und `setDnsSettings` erfordern eine Anpassung von API-Clients vor dem Update.
-- Mehrere weitere kleinere Fehlerbehebungen und Verbesserungen.
+- Updated standalone console app to work on .NET 5 and removing standalone .NET Framework app support. .NET 5 update will boost performance of the DNS Server on all platforms.
+- Updated DNS and DHCP listener code to use async IO to improve performance.
+- Added HTTPS support for web service that provides the web console access.
+- Added support to change the web service local addresses.
+- Updated the server to allow changing DNS Server end points, the web service end points, or enabling DoH or DoT services instantly without need to manually restart the main service. Basically, you do not need to restart the DNS Server app at all for applying any kind of settings as all the changes are applied dynamically.
+- Added HTTP compression support in the main web service.
+- Added HTTP compression for downloading block lists.
+- Added option to clear and delete all dashboard stats and auto clean up old stats files from disk
+- Added option to delete all log files and auto clean up old log files from disk.
+- Added configurable option to disable logging, allow logging in local time, and to change log folder path.
+- Added option in settings to define the refresh interval for block lists with a manual option to force refresh all block lists.
+- Added support for exporting backup zip file containing selected items like config files, logs, stats, etc. and allow restoring the backup zip file without restarting the main service.
+- Fixed multiple issues in DHCP server's DNS record management.
+- Fixed bug in DNS Server cache prefetching for stub and conditional forwarder zones causing the cached data to be overwritten by the prefetched output from recursive resolution.
+- Fixed html encoding issue in web app.
+- Added option in web app to list top 1000 clients, top domains and top blocked domains.
+- DNS cache serve stale feature made configurable with default serve stale TTL set to 3 days instead of 7 days.
+- Fixed issue in recursive resolver to avoid querying root servers when one of the parent zone's name servers exists in DNS cache.
+- Breaking changes in the `getDnsSettings` and `setDnsSettings` API calls will require API clients to update the code before updating the DNS Server.
+- Multiple other minor bug fixes and improvements.
 
 ## Version 5.5
-Veröffentlicht: 14. November 2020
+Release Date: 14 November 2020
 
-- Option für den Namen der Bootdatei beim PXE-Boot hinzugefügt.
-- DHCP-Option für herstellerspezifische Informationen umgesetzt.
-- Die Ausschlussliste wird jetzt strikt durchgesetzt.
-- Fehler beim anfänglichen Servernamen behoben, der durch ungültige Zeichen im Computernamen entstand.
-- Unterstützung für die Verarbeitung zusätzlicher Einträge bei SRV-Einträgen hinzugefügt und Probleme bei NS- und MX-Einträgen behoben.
-- Mehrere weitere kleinere Fehlerbehebungen und Verbesserungen.
+- Added option to specify bootfile name for PXE booting.
+- Implemented DHCP vendor specific information option.
+- Implemented strict enforcing of exclusion list.
+- Fixed bug in DNS initial server name that was caused due to invalid characters in the computer name.
+- Added support for additional record processing for SRV records and fixed issues for NS and MX records processing.
+- Multiple other minor bug fixes and improvements.
 
 ## Version 5.4
-Veröffentlicht: 18. Oktober 2020
+Release Date: 18 October 2020
 
-- QNAME-Randomisierung nach [draft-vixie-dnsext-dns0x20](https://datatracker.ietf.org/doc/html/draft-vixie-dnsext-dns0x20-00) umgesetzt.
-- Fehler behoben, der unter bestimmten Bedingungen bei UDP eine Endlosschleife verursachte.
-- Fehler bei Cache-Abfragen behoben, durch den der Server bei der rekursiven Auflösung unnötige Anfragen stellte.
-- Option „PTR-Zone anlegen“ beim Hinzufügen von A- oder AAAA-Einträgen hinzugefügt.
-- Probleme bei der Auswahl des DHCP-Bereichs mit Relay-Agent behoben.
-- Die IP-Vergabe eines DHCP-Bereichs lässt sich von dynamisch auf reserviert und umgekehrt umstellen.
-- DHCP-Bereiche erlauben die Angabe einer Next-Server-Adresse für den Boot über TFTP.
-- Mehrere weitere kleinere Fehlerbehebungen und Verbesserungen.
+- Implemented QNAME randomization feature [draft-vixie-dnsext-dns0x20](https://datatracker.ietf.org/doc/html/draft-vixie-dnsext-dns0x20-00).
+- Fixed bug causing infinite loop in certain conditions when using UDP as transport.
+- Fixed bug in DNS cache querying which caused the server to make unneeded queries when performing recursive resolution.
+- Added Create PTR Zone option when adding A or AAAA records.
+- Fixed issues with DHCP scope selection when using relay agent.
+- Implemented changes to allow changing DHCP scope IP allocation from dynamic to reserved and vice versa.
+- Updated DHCP scope to allow specifying Next Server Address for use with TFTP for booting.
+- Multiple other minor bug fixes and improvements.
 
 ## Version 5.3
-Veröffentlicht: 26. September 2020
+Release Date: 26 September 2020
 
-- Probleme im DHCP-Server behoben, durch die er mit Relay-Agents nicht korrekt funktionierte.
-- Der DHCP-Server unterstützt mehrere Bereiche auf einer Netzwerkschnittstelle und kann so Gerätegruppen unterschiedliche Optionen zuweisen.
-- Mehrere weitere kleinere Fehlerbehebungen und Verbesserungen.
+- Fixed issues with DHCP server that caused it to not work correctly with relay agents.
+- Updated DHCP server to support multiple scopes to work on a single network interface allowing it to provide different options for groups of devices.
+- Multiple other minor bug fixes and improvements.
 
 ## Version 5.2
-Veröffentlicht: 6. September 2020
+Release Date: 6 September 2020
 
-- TLS-Zertifikate für DNS-over-HTTPS und DNS-over-TLS lassen sich mit `certbot` automatisch erneuern.
-- Problem im DHCP-Server behoben, der durch fehlende asynchrone Methoden Threads blockierte.
-- Fehler im DNS-Client behoben, der durch die QNAME-Minimierung zu abweichenden QTYPEs führte.
-- Probleme im DNS-over-HTTPS-Client bei Wiederholungen und der Behandlung von HTTP-Fehlern behoben.
-- Mehrere weitere kleinere Fehlerbehebungen und Verbesserungen.
+- Added feature to allow using `certbot` to renew TLS certificates automatically when using DNS-over-HTTPS and DNS-over-TLS.
+- Fixed issue in DHCP server that caused thread to block by implementing async methods.
+- Fixed bug in DNS client that caused QTYPE mismatch due to QNAME minimization.
+- Fixed issues in DNS-over-HTTPS client related to retries and http error handling.
+- Multiple other minor bug fixes and improvements.
 
 ## Version 5.1
-Veröffentlicht: 29. August 2020
+Release Date: 29 August 2020
 
-- Asynchrone Ein-/Ausgabe umgesetzt, damit der DNS-Server deutlich mehr gleichzeitige Last verarbeiten kann.
-- Eigene Thread-Pools für den Webdienst und den rekursiven Resolver umgesetzt.
-- Fehler im Blocklisten-Downloader behoben, der Dateien mit 0 Byte herunterlud.
-- Fehler im DHCP-Server beim Anlegen von Reverse-Zonen behoben.
-- Mehrere weitere kleinere Fehlerbehebungen und Verbesserungen.
+- Implemented async IO to allow the DNS Server handle much higher concurrent loads.
+- Implemented independent thread pools for DNS web service and recursive resolver.
+- Fixed bug in block list downloader that caused 0 byte file downloads.
+- Fixed bug in DHCP server in creating reverse zone.
+- Multiple other minor bug fixes and improvements.
 
 ## Version 5.0.2
-Veröffentlicht: 18. Juli 2020
+Release Date: 18 July 2020
 
-- Fehlenden Port für „This Server“ im DNS-Client ergänzt.
-- Der blockierte Domainname wird im TXT-Eintrag angegeben.
-- Fehler in der CNAME-Cloaking-Erkennung behoben.
-- .NET Framework auf v4.8 aktualisiert.
-- Mehrere weitere kleinere Fehlerbehebungen und Verbesserungen.
+- Fixed issue of missing port for "This Server" in DNS Client.
+- Added domain name that was blocked in the TXT record.
+- Fixed bugs in CNAME cloaking implementation.
+- Upgraded .NET Framework version to v4.8.
+- Multiple other minor bug fixes and improvements.
 
 ## Version 5.0.1
-Veröffentlicht: 6. Juli 2020
+Release Date: 6 July 2020
 
-- Serialisierungsfehler bei TXT-Einträgen behoben.
-- Problem beim Lesen von DnsDatagram bei DoH-POST-Anfragen behoben.
-- Fehler bei der JSON-Serialisierung von DnsDatagram im DoH-JSON-Format behoben.
-- Fehler bei der RTT-Berechnung für DoH-JSON-Verbindungen behoben.
+- Fixed serialization bug for TXT records.
+- Fixed issue with reading DnsDatagram for DoH POST requests.
+- Fixed bug in json serialization of DnsDatagram for DoH json format.
+- Fixed bug in RTT calculation for DoH json Connection.
 
 ## Version 5.0
-Veröffentlicht: 4. Juli 2020
+Release Date: 4 July 2020
 
-- Lokale Endpunkte des DNS-Servers mit abweichenden Ports für UDP und TCP werden unterstützt.
-- Performance-Probleme durch Thread-Konflikte behoben.
-- CNAME-Cloaking-Erkennung umgesetzt, um Domains zu blockieren, die per CNAME auf blockierte Domains verweisen.
-- Neue Blocklistenzone, die sehr wenig Speicher benötigt und Blocklisten mit Millionen Domains selbst auf einem Raspberry Pi mit 1 GB RAM lädt.
-- QNAME-Minimierung im rekursiven Resolver nach [draft-ietf-dnsop-rfc7816bis-04](https://datatracker.ietf.org/doc/html/draft-ietf-dnsop-rfc7816bis-04).
-- Eigener ANAME-Eintragstyp, der eine CNAME-ähnliche Funktion an der Zonenwurzel ermöglicht.
-- Primary-Zonen mit NOTIFY nach [RFC 1996](https://datatracker.ietf.org/doc/html/rfc1996) hinzugefügt.
-- Secondary-Zonen mit NOTIFY nach [RFC 1996](https://datatracker.ietf.org/doc/html/rfc1996) hinzugefügt.
-- Stub-Zonen mit der Möglichkeit, Einträge zu überschreiben, hinzugefügt.
-- Conditional-Forwarder-Zonen mit allen Protokollen einschließlich DNS-over-HTTPS und DNS-over-TLS hinzugefügt.
-- Conditional-Forwarder-Zonen können Einträge überschreiben.
-- Conditional-Forwarder-Zonen unterstützen mehrere Forwarder für verschiedene Subdomains.
-- Zonenbaum auf Basis von ByteTree, einem vollständig sperrfreien und threadsicheren Baum für gleichzeitige Lese- und Schreibzugriffe.
-- Fehler beim Einlesen großer TXT-Einträge behoben.
-- Der DNS-Client kann intern parallel abfragen, um mehrere Forwarder gleichzeitig zu fragen und die schnellste Antwort zu verwenden.
-- Der DNS-Client kann Einträge per Zonentransfer importieren.
-- Mehrere weitere Fehlerbehebungen in den DNS- und DHCP-Modulen.
+- DNS Server local end points support to allow specifying alternate ports for UDP and TCP protocols.
+- DNS Server performance issues caused by thread contention fixed.
+- CNAME cloaking implemented to block domain names that resolve to CNAME which are blocked.
+- New Block List zone implementation that uses very less memory allowing to load block lists with millions of domain names even on a Raspberry Pi with 1GB RAM.
+- QNAME minimization support in recursive resolver [draft-ietf-dnsop-rfc7816bis-04](https://datatracker.ietf.org/doc/html/draft-ietf-dnsop-rfc7816bis-04).
+- ANAME propriety record support to allow using CNAME like feature at zone root.
+- Added primary zones with NOTIFY implementation [RFC 1996](https://datatracker.ietf.org/doc/html/rfc1996).
+- Added secondary zones with NOTIFY implementation [RFC 1996](https://datatracker.ietf.org/doc/html/rfc1996).
+- Added stub zones with feature to override records.
+- Added conditional forwarder zones with all protocols including DNS-over-HTTPS and DNS-over-TLS support.
+- Conditional forwarder zones with feature to override records.
+- Conditional forwarder zones with support for multiple forwarders with different sub domain names.
+- ByteTree based zone tree implementation which is a complete lock-less and thread safe tree allowing concurrent read and write operations.
+- Fixed bug in parsing large TXT records.
+- DNS Client with internal support for concurrent querying. This allows querying multiple forwarders simultaneously to return fastest response of all.
+- DNS Client with support to import records via zone transfer.
+- Multiple other bug fixes in DNS and DHCP modules.

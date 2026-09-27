@@ -1,5 +1,7 @@
 # NxDomain App
 
+[Deutsche Version](README.de.md)
+
 A DNS App for ZenitiumDNS that blocks configured domain names by returning **NXDOMAIN**.
 
 ## Overview
