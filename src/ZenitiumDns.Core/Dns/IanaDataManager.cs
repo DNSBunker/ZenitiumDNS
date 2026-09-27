@@ -30,6 +30,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Org.BouncyCastle.Cms;
 using Org.BouncyCastle.Utilities.Collections;
+using ZenitiumDns.ApplicationCommon;
 using ZenitiumLibrary;
 using ZenitiumLibrary.Net.Dns;
 using ZenitiumLibrary.Net.Dns.ResourceRecords;
@@ -405,7 +406,7 @@ namespace ZenitiumDns.Core.Dns
                             await WriteFileAtomicAsync(signatureFile, signature);
 
                             DnsClient.RootTrustAnchors = anchors;
-                            status.SetSuccess("IANA", "Signatur von ICANN geprüft, " + anchors.Count + " gültige Schlüssel.");
+                            status.SetSuccess(Lang.L("IANA"), Lang.L("Signatur von ICANN geprüft, " + anchors.Count + " gültige Schlüssel.", "Signature verified by ICANN, " + anchors.Count + " valid keys."));
                         }
                         break;
 
@@ -414,13 +415,13 @@ namespace ZenitiumDns.Core.Dns
                             IReadOnlyList<DnsResourceRecord> anchors = ParseCustomTrustAnchors(await File.ReadAllTextAsync(GetFile("root-anchors.custom.txt")));
 
                             DnsClient.RootTrustAnchors = anchors;
-                            status.SetSuccess("Eigene Version", anchors.Count + " selbst eingetragene Schlüssel.");
+                            status.SetSuccess(Lang.L("Eigene Version", "Custom version"), Lang.L(anchors.Count + " selbst eingetragene Schlüssel.", anchors.Count + " manually entered keys."));
                         }
                         break;
 
                     default:
                         DnsClient.ReloadRootTrustAnchors();
-                        status.SetSuccess("Mitgeliefert", "Die mit dem Paket ausgelieferte root-anchors.xml wird verwendet.");
+                        status.SetSuccess(Lang.L("Mitgeliefert", "Bundled"), Lang.L("Die mit dem Paket ausgelieferte root-anchors.xml wird verwendet.", "The root-anchors.xml shipped with the package is used."));
                         break;
                 }
             }
@@ -433,12 +434,12 @@ namespace ZenitiumDns.Core.Dns
                     if (!keepCurrent)
                         DnsClient.ReloadRootTrustAnchors();
 
-                    status.SetError(ex.Message + (keepCurrent ? " Die zuletzt geprüften Schlüssel bleiben aktiv." : " Die mitgelieferten Schlüssel werden verwendet."));
+                    status.SetError(LocalizedException.TextOf(ex) + (keepCurrent ? Lang.L(" Die zuletzt geprüften Schlüssel bleiben aktiv.", " The last verified keys remain active.") : Lang.L(" Die mitgelieferten Schlüssel werden verwendet.", " The bundled keys are used.")));
                 }
                 else
                 {
                     DnsClient.ReloadRootTrustAnchors();
-                    status.SetError(ex.Message + " Die mitgelieferten Schlüssel werden verwendet.");
+                    status.SetError(LocalizedException.TextOf(ex) + Lang.L(" Die mitgelieferten Schlüssel werden verwendet.", " The bundled keys are used."));
                 }
 
                 _dnsServer.LogManager?.Write("DNS Server failed to update the root trust anchors: " + ex.Message);
@@ -525,7 +526,7 @@ namespace ZenitiumDns.Core.Dns
                             await WriteFileAtomicAsync(file, data);
 
                             Activate(item, zone);
-                            status.SetSuccess("IANA", zone.Verification);
+                            status.SetSuccess(Lang.L("IANA"), zone.Verification);
                         }
                         break;
 
@@ -536,7 +537,7 @@ namespace ZenitiumDns.Core.Dns
                             LocalZone zone = LocalZone.Load(records, zoneName, await GetApexDSAsync(item), false);
 
                             Activate(item, zone);
-                            status.SetSuccess("Eigene Version", zone.Verified ? zone.Verification : "Nicht signaturgeprüft: " + zone.Verification);
+                            status.SetSuccess(Lang.L("Eigene Version", "Custom version"), zone.Verified ? zone.Verification : Lang.L("Nicht signaturgeprüft: ", "Signatures not verified: ") + zone.Verification);
                         }
                         break;
 
@@ -548,7 +549,7 @@ namespace ZenitiumDns.Core.Dns
             }
             catch (Exception ex)
             {
-                status.SetError(ex.Message);
+                status.SetError(LocalizedException.TextOf(ex));
                 _dnsServer.LogManager?.Write("DNS Server failed to load the " + (item == IanaDataItem.RootZone ? "root" : "arpa") + " zone: " + ex.Message);
             }
 
@@ -679,9 +680,9 @@ namespace ZenitiumDns.Core.Dns
 
             jsonWriter.WriteString("mode", GetMode(item).ToString());
             jsonWriter.WriteBoolean("hasCustom", File.Exists(item == IanaDataItem.TrustAnchors ? GetFile("root-anchors.custom.txt") : GetFile(GetZoneFileName(item, true))));
-            jsonWriter.WriteString("source", status.Source);
-            jsonWriter.WriteString("message", status.Message);
-            jsonWriter.WriteString("error", status.Error);
+            jsonWriter.WriteString("source", status.Source?.ToString());
+            jsonWriter.WriteString("message", status.Message?.ToString());
+            jsonWriter.WriteString("error", status.Error?.ToString());
 
             if (status.LoadedOn != DateTime.MinValue)
                 jsonWriter.WriteString("loadedOn", status.LoadedOn);
@@ -923,12 +924,12 @@ namespace ZenitiumDns.Core.Dns
             LocalZone zone = item == IanaDataItem.RootZone ? _rootZone : _arpaZone;
             ItemStatus status = GetStatus(item);
 
-            return (IsUsable(zone, status), zone?.Verified ?? false, zone?.Serial ?? 0, zone?.DelegationCount ?? 0, status.Error, status.Message, GetMode(item));
+            return (IsUsable(zone, status), zone?.Verified ?? false, zone?.Serial ?? 0, zone?.DelegationCount ?? 0, status.Error?.ToString(), status.Message?.ToString(), GetMode(item));
         }
 
         public (string Source, string Error, string Message, IanaDataMode Mode) GetTrustAnchorState()
         {
-            return (_trustAnchorStatus.Source, _trustAnchorStatus.Error, _trustAnchorStatus.Message, _trustAnchorMode);
+            return (_trustAnchorStatus.Source?.ToString(), _trustAnchorStatus.Error?.ToString(), _trustAnchorStatus.Message?.ToString(), _trustAnchorMode);
         }
 
         #endregion
@@ -948,14 +949,14 @@ namespace ZenitiumDns.Core.Dns
 
         sealed class ItemStatus
         {
-            public string Source;
-            public string Message;
-            public string Error;
+            public LocalizedText Source;
+            public LocalizedText Message;
+            public LocalizedText Error;
             public DateTime LoadedOn;
             public DateTime LastCheck;
             public DateTime NextCheck;
 
-            public void SetSuccess(string source, string message)
+            public void SetSuccess(LocalizedText source, LocalizedText message)
             {
                 Source = source;
                 Message = message;
@@ -963,7 +964,7 @@ namespace ZenitiumDns.Core.Dns
                 LoadedOn = DateTime.UtcNow;
             }
 
-            public void SetError(string error)
+            public void SetError(LocalizedText error)
             {
                 Error = error;
             }
@@ -971,7 +972,7 @@ namespace ZenitiumDns.Core.Dns
             public void SetDisabled()
             {
                 Source = null;
-                Message = "Ausgeschaltet.";
+                Message = Lang.L("Ausgeschaltet.", "Turned off.");
                 Error = null;
                 LoadedOn = DateTime.MinValue;
             }

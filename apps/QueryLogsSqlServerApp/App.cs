@@ -365,10 +365,10 @@ namespace QueryLogsSqlServer
                 _connectionString = jsonConfig.GetPropertyValue("connectionString", null);
 
                 if (_connectionString is null)
-                    throw new Exception("Bitte eine gültige Verbindungszeichenfolge in 'connectionString' angeben.");
+                    throw new Exception(Lang.T("Bitte eine gültige Verbindungszeichenfolge in 'connectionString' angeben.", "Please specify a valid connection string in 'connectionString'."));
 
                 if (_connectionString.Contains("Initial Catalog", StringComparison.OrdinalIgnoreCase))
-                    throw new Exception("Die Verbindungszeichenfolge darf kein 'Initial Catalog' enthalten. Den Datenbanknamen stattdessen in 'databaseName' eintragen.");
+                    throw new Exception(Lang.T("Die Verbindungszeichenfolge darf kein 'Initial Catalog' enthalten. Den Datenbanknamen stattdessen in 'databaseName' eintragen.", "The connection string must not contain 'Initial Catalog'. Enter the database name in 'databaseName' instead."));
 
                 if (!_connectionString.TrimEnd().EndsWith(';'))
                     _connectionString += ";";
@@ -804,7 +804,7 @@ FETCH NEXT @limit ROWS ONLY";
         #region properties
 
         public string Description
-        { get { return "Schreibt alle eingehenden DNS-Anfragen und ihre Antworten in eine Microsoft-SQL-Server-Datenbank, die sich in der Weboberfläche durchsuchen lässt."; } }
+        { get { return Lang.T("Schreibt alle eingehenden DNS-Anfragen und ihre Antworten in eine Microsoft-SQL-Server-Datenbank, die sich in der Weboberfläche durchsuchen lässt.", "Writes all incoming DNS queries and their responses to a Microsoft SQL Server database that can be searched in the web interface."); } }
 
         #endregion
 

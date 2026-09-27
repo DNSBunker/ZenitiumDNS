@@ -107,6 +107,7 @@ install -m 0644 "$scriptDir/zenitiumdns.service" -D "$pkgDir/usr/lib/systemd/sys
 install -m 0644 "$scriptDir/zenitiumdns.sysusers" -D "$pkgDir/usr/lib/sysusers.d/zenitiumdns.conf"
 install -m 0644 "$scriptDir/copyright" "$docDir/copyright"
 install -m 0644 "$scriptDir/README.Debian.md" "$docDir/README.Debian.md"
+install -m 0644 "$scriptDir/README.Debian.de.md" "$docDir/README.Debian.de.md"
 install -m 0644 "$rootDir/README.md" "$docDir/README.md"
 install -m 0644 "$rootDir/NOTICE.md" "$docDir/NOTICE.md"
 gzip -9 -n -c "$rootDir/CHANGELOG.md" > "$docDir/changelog.gz"
@@ -130,30 +131,29 @@ Depends: libc6 (>= 2.27), libgcc-s1, libstdc++6, libssl3t64 | libssl3, libicu76 
 Recommends: iproute2
 Suggests: libmsquic, dnsutils
 Provides: dns-server
-Homepage: https://github.com/DNSBunker/ZenitiumDNS-DE
-Description: Rekursiver DNS-Resolver mit Weboberfläche
- ZenitiumDNS ist ein rekursiver DNS-Resolver für den öffentlichen oder
- internen Betrieb mit deutschsprachiger Weboberfläche. Er bietet unter
- anderem:
-  - rekursive Auflösung über die Root-Server oder Forwarding über
-    DNS-over-TLS, DNS-over-HTTPS und DNS-over-QUIC,
-  - DNSSEC-Validierung mit NSEC und NSEC3,
-  - lokale, geprüfte Kopie der Root-Zone nach RFC 8806,
-  - eigene DoT-, DoH- und DoQ-Dienste sowie das PROXY-Protokoll,
-  - Werbe- und Malware-Blockierung über Blocklisten,
-  - Weiterleitungszonen (Conditional Forwarder) mit lokalen Einträgen,
-  - Cache mit Serve Stale, Prefetch und Speicherung auf der Festplatte,
-  - automatischen IPv6-Rückfall bei gestörter IPv6-Anbindung,
-  - Statistik mit Antwortzeiten und Echtzeitgraphen,
-  - Ratenbegrenzung, SSO, LDAP und Zwei-Faktor-Anmeldung,
-  - DNS-Apps für erweiterte Filter, DNS64 und Protokollexport.
+Homepage: https://github.com/DNSBunker/ZenitiumDNS
+Description: Recursive DNS resolver with web interface
+ ZenitiumDNS is a recursive DNS resolver for public or internal use
+ with a web interface in English and German. Features include:
+  - recursive resolution via the root servers or forwarding over
+    DNS-over-TLS, DNS-over-HTTPS and DNS-over-QUIC,
+  - DNSSEC validation with NSEC and NSEC3,
+  - local, verified copy of the root zone according to RFC 8806,
+  - its own DoT, DoH and DoQ services and the PROXY protocol,
+  - ad and malware blocking with block lists,
+  - forwarder zones (conditional forwarders) with local records,
+  - cache with serve stale, prefetch and persistence on disk,
+  - automatic IPv6 fallback when IPv6 connectivity is broken,
+  - statistics with response times and live graphs,
+  - rate limiting, SSO, LDAP and two-factor authentication,
+  - DNS apps for advanced filtering, DNS64 and log export.
  .
- Das Paket enthält die .NET-Laufzeit und benötigt keine separate
- .NET-Installation. Der Dienst läuft als eigener Systembenutzer und
- erhält bei der Erstinstallation ein zufälliges Admin-Passwort. Die
- mitgelieferten DNS-Apps werden beim ersten Start aus
- /usr/share/zenitiumdns/apps installiert, bleiben aber deaktiviert,
- bis sie in der Weboberfläche aktiviert werden.
+ The package contains the .NET runtime and needs no separate .NET
+ installation. The service runs as its own system user and gets a
+ random admin password on the first installation. The interface
+ language is chosen after the first sign-in. The bundled DNS apps are
+ installed from /usr/share/zenitiumdns/apps on the first start but stay
+ disabled until they are enabled in the web interface.
 CONTROL
 
 install -m 0755 "$scriptDir/postinst" "$controlDir/postinst"

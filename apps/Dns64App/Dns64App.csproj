@@ -10,6 +10,12 @@
 	</PropertyGroup>
 
 	<ItemGroup>
+		<AssemblyMetadata Include="DescriptionEn">
+			<Value>Provides DNS64 for answers from local zones and from recursive resolution, for clients that only have IPv6.\n\nWarning: Without NAT64 in the network, some websites are no longer reachable after enabling it.</Value>
+		</AssemblyMetadata>
+	</ItemGroup>
+
+	<ItemGroup>
 		<ProjectReference Include="..\..\src\ZenitiumDns.ApplicationCommon\ZenitiumDns.ApplicationCommon.csproj">
 			<Private>false</Private>
 		</ProjectReference>

@@ -22,6 +22,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
+using ZenitiumDns.ApplicationCommon;
 
 namespace ZenitiumDns.Core.Dns
 {
@@ -99,7 +100,7 @@ namespace ZenitiumDns.Core.Dns
 
         #region private
 
-        private void AddEvent(WatchdogSeverity severity, string title, string message, string logMessage)
+        private void AddEvent(WatchdogSeverity severity, LocalizedText title, LocalizedText message, string logMessage)
         {
             lock (_lock)
             {
@@ -155,7 +156,17 @@ namespace ZenitiumDns.Core.Dns
 
         private static string FormatMegabytes(long bytes)
         {
-            return (bytes / (1024 * 1024)).ToString("N0", System.Globalization.CultureInfo.GetCultureInfo("de-DE")) + " MB";
+            return (bytes / (1024 * 1024)).ToString("N0", System.Globalization.CultureInfo.InvariantCulture) + " MB";
+        }
+
+        private static string FormatMegabytes(long bytes, string language)
+        {
+            return (bytes / (1024 * 1024)).ToString("N0", System.Globalization.CultureInfo.GetCultureInfo(language == Lang.German ? "de-DE" : "en-US")) + " MB";
+        }
+
+        private static string FormatCount(long value, string language)
+        {
+            return value.ToString("N0", System.Globalization.CultureInfo.GetCultureInfo(language == Lang.German ? "de-DE" : "en-US"));
         }
 
         private void CheckDiskSpace(DateTime utcNow)
@@ -185,7 +196,7 @@ namespace ZenitiumDns.Core.Dns
             int deletedLogFiles = log.DeleteLogFilesBefore(DateTime.Now.AddDays(-1));
             log.SuspendFileLoggingForToday("only " + FormatMegabytes(free) + " of disk space left");
 
-            AddEvent(WatchdogSeverity.Critical, "Speicherplatz", "Nur noch " + FormatMegabytes(free) + " frei. Das Datei-Protokoll ist bis Mitternacht pausiert, " + deletedLogFiles + " ältere Protokolldateien wurden gelöscht, damit Einstellungen und Cache weiter gespeichert werden können.", "only " + FormatMegabytes(free) + " of disk space left; file logging suspended until midnight and " + deletedLogFiles + " old log files deleted.");
+            AddEvent(WatchdogSeverity.Critical, Lang.L("Speicherplatz", "Disk space"), Lang.L("Nur noch " + FormatMegabytes(free, Lang.German) + " frei. Das Datei-Protokoll ist bis Mitternacht pausiert, " + deletedLogFiles + " ältere Protokolldateien wurden gelöscht, damit Einstellungen und Cache weiter gespeichert werden können.", "Only " + FormatMegabytes(free, Lang.English) + " free. File logging is paused until midnight, " + deletedLogFiles + " older log files were deleted so that settings and cache can still be saved."), "only " + FormatMegabytes(free) + " of disk space left; file logging suspended until midnight and " + deletedLogFiles + " old log files deleted.");
         }
 
         private void CheckLogFileSize()
@@ -200,7 +211,7 @@ namespace ZenitiumDns.Core.Dns
 
             log.SuspendFileLoggingForToday("today's log file reached " + FormatMegabytes(size));
 
-            AddEvent(WatchdogSeverity.Warning, "Protokoll", "Die heutige Protokolldatei hat " + FormatMegabytes(size) + " erreicht. Das Datei-Protokoll ist bis Mitternacht pausiert, damit die Platte nicht vollläuft. Häufig ist das Protokollieren aller Anfragen eingeschaltet.", "today's log file reached " + FormatMegabytes(size) + "; file logging suspended until midnight.");
+            AddEvent(WatchdogSeverity.Warning, Lang.L("Protokoll", "Log"), Lang.L("Die heutige Protokolldatei hat " + FormatMegabytes(size, Lang.German) + " erreicht. Das Datei-Protokoll ist bis Mitternacht pausiert, damit die Platte nicht vollläuft. Häufig ist das Protokollieren aller Anfragen eingeschaltet.", "Today's log file reached " + FormatMegabytes(size, Lang.English) + ". File logging is paused until midnight so that the disk does not fill up. Often logging of all queries is turned on."), "today's log file reached " + FormatMegabytes(size) + "; file logging suspended until midnight.");
         }
 
         private void CheckMemory(DateTime utcNow)
@@ -228,7 +239,7 @@ namespace ZenitiumDns.Core.Dns
 
             long workingSetAfter = Environment.WorkingSet;
 
-            AddEvent(WatchdogSeverity.Critical, "Arbeitsspeicher", "Der Arbeitsspeicher war zu " + (load * 100 / total) + " % belegt. " + removed.ToString("N0", System.Globalization.CultureInfo.GetCultureInfo("de-DE")) + " selten genutzte Cache-Einträge wurden entfernt, der Prozess belegt jetzt " + FormatMegabytes(workingSetAfter) + " statt " + FormatMegabytes(workingSetBefore) + ". Dauerhaft hilft ein kleinerer Höchstwert für Cache-Einträge.", "memory load at " + (load * 100 / total) + "%; removed " + removed + " cache entries, working set " + FormatMegabytes(workingSetBefore) + " -> " + FormatMegabytes(workingSetAfter) + ".");
+            AddEvent(WatchdogSeverity.Critical, Lang.L("Arbeitsspeicher", "Memory"), Lang.L("Der Arbeitsspeicher war zu " + (load * 100 / total) + " % belegt. " + FormatCount(removed, Lang.German) + " selten genutzte Cache-Einträge wurden entfernt, der Prozess belegt jetzt " + FormatMegabytes(workingSetAfter, Lang.German) + " statt " + FormatMegabytes(workingSetBefore, Lang.German) + ". Dauerhaft hilft ein kleinerer Höchstwert für Cache-Einträge.", "Memory was " + (load * 100 / total) + " % full. " + FormatCount(removed, Lang.English) + " rarely used cache entries were removed, the process now uses " + FormatMegabytes(workingSetAfter, Lang.English) + " instead of " + FormatMegabytes(workingSetBefore, Lang.English) + ". A lower maximum for cache entries helps permanently."), "memory load at " + (load * 100 / total) + "%; removed " + removed + " cache entries, working set " + FormatMegabytes(workingSetBefore) + " -> " + FormatMegabytes(workingSetAfter) + ".");
         }
 
         private void CheckStatsQueue(DateTime utcNow)
@@ -245,7 +256,7 @@ namespace ZenitiumDns.Core.Dns
 
             int dropped = statsManager.DropQueuedItems();
 
-            AddEvent(WatchdogSeverity.Warning, "Statistik", dropped.ToString("N0", System.Globalization.CultureInfo.GetCultureInfo("de-DE")) + " noch nicht ausgewertete Einträge der Statistik wurden verworfen, weil die Warteschlange nicht mehr abgearbeitet wurde. Meist schreibt eine Query-Logs-App zu langsam in ihre Datenbank.", "stats queue reached " + length + " items; dropped " + dropped + " items.");
+            AddEvent(WatchdogSeverity.Warning, Lang.L("Statistik", "Statistics"), Lang.L(FormatCount(dropped, Lang.German) + " noch nicht ausgewertete Einträge der Statistik wurden verworfen, weil die Warteschlange nicht mehr abgearbeitet wurde. Meist schreibt eine Query-Logs-App zu langsam in ihre Datenbank.", FormatCount(dropped, Lang.English) + " unprocessed statistics entries were dropped because the queue was no longer being processed. Usually a query logs app writes to its database too slowly."), "stats queue reached " + length + " items; dropped " + dropped + " items.");
         }
 
         private void CheckThreadPool(DateTime utcNow)
@@ -275,7 +286,7 @@ namespace ZenitiumDns.Core.Dns
             _lastThreadPoolAction = utcNow;
             _threadPoolStreak = 0;
 
-            AddEvent(WatchdogSeverity.Warning, "Threadpool", "Im Threadpool warteten über 30 Sekunden mehr als " + THREAD_POOL_QUEUE_HIGH + " Aufgaben. Die Mindestzahl der Threads wurde von " + workerThreads + " auf " + newWorkerThreads + " erhöht, damit Anfragen nicht liegen bleiben.", "thread pool queue stayed above " + THREAD_POOL_QUEUE_HIGH + "; minimum worker threads raised from " + workerThreads + " to " + newWorkerThreads + ".");
+            AddEvent(WatchdogSeverity.Warning, Lang.L("Threadpool", "Thread pool"), Lang.L("Im Threadpool warteten über 30 Sekunden mehr als " + THREAD_POOL_QUEUE_HIGH + " Aufgaben. Die Mindestzahl der Threads wurde von " + workerThreads + " auf " + newWorkerThreads + " erhöht, damit Anfragen nicht liegen bleiben.", "More than " + THREAD_POOL_QUEUE_HIGH + " tasks waited in the thread pool for over 30 seconds. The minimum number of threads was raised from " + workerThreads + " to " + newWorkerThreads + " so that queries do not get stuck."), "thread pool queue stayed above " + THREAD_POOL_QUEUE_HIGH + "; minimum worker threads raised from " + workerThreads + " to " + newWorkerThreads + ".");
         }
 
         private async Task CheckListenersAsync(DateTime utcNow)
@@ -312,7 +323,7 @@ namespace ZenitiumDns.Core.Dns
 
             string names = string.Join(", ", inactive);
 
-            AddEvent(WatchdogSeverity.Critical, "Dienste", "Nicht aktiv: " + names + ". Die DNS-Dienste werden neu gestartet (Versuch " + _listenerRestarts + " von " + MAX_LISTENER_RESTARTS + "), etwa weil ein anderer Dienst den Port beim Start belegt hatte.", "listeners not active (" + names + "); restarting DNS service, attempt " + _listenerRestarts + " of " + MAX_LISTENER_RESTARTS + ".");
+            AddEvent(WatchdogSeverity.Critical, Lang.L("Dienste", "Services"), Lang.L("Nicht aktiv: " + names + ". Die DNS-Dienste werden neu gestartet (Versuch " + _listenerRestarts + " von " + MAX_LISTENER_RESTARTS + "), etwa weil ein anderer Dienst den Port beim Start belegt hatte.", "Not active: " + names + ". The DNS services are being restarted (attempt " + _listenerRestarts + " of " + MAX_LISTENER_RESTARTS + "), for example because another service occupied the port at startup."), "listeners not active (" + names + "); restarting DNS service, attempt " + _listenerRestarts + " of " + MAX_LISTENER_RESTARTS + ".");
 
             await _dnsServer.StopAsync();
             await _dnsServer.StartAsync();
@@ -399,5 +410,5 @@ namespace ZenitiumDns.Core.Dns
         Critical
     }
 
-    sealed record WatchdogEvent(DateTime Time, WatchdogSeverity Severity, string Title, string Message);
+    sealed record WatchdogEvent(DateTime Time, WatchdogSeverity Severity, LocalizedText Title, LocalizedText Message);
 }

@@ -39,6 +39,11 @@ function showPageLogin(autoLogin) {
     $("#btnLogin").button("reset");
     $("#pageLogin").show();
 
+    $("#divLoginLanguage").toggle(!zdnsI18n.chosen);
+    $("#divLoginLanguage a").each(function () {
+        $(this).toggleClass("active", $(this).attr("data-language") === zdnsI18n.language);
+    });
+
     $("#txtUser").trigger("focus");
 
     if (refreshTimerHandle != null) {
@@ -130,7 +135,7 @@ function showPageMain() {
     $("#divViewZones").show();
     $("#divEditZone").hide();
 
-    $("#txtDnsClientNameServer").val("Dieser Server {this-server}");
+    $("#txtDnsClientNameServer").val(tr("Dieser Server") + " {this-server}");
     $("#txtDnsClientDomain").val("");
     $("#optDnsClientType").val("A");
     $("#optDnsClientProtocol").val("UDP");
@@ -205,6 +210,89 @@ function showPageMain() {
 
         $("#lblAboutUptime").text(moment(sessionData.info.uptimestamp).local().format("lll") + " (" + moment(sessionData.info.uptimestamp).fromNow() + ")");
     }, 30000);
+
+    languageChooserVisible = showLanguageChooserIfNeeded();
+}
+
+var languageChooserVisible = false;
+var languageChooserPasswordPrompt = null;
+
+function setLoginLanguage(language) {
+    zdnsI18n.setLanguageCookie(language);
+    window.location.reload();
+}
+
+function showLanguageChooserIfNeeded() {
+    if (zdnsI18n.chosen || (sessionData == null) || (sessionData.info == null) || !sessionData.info.permissions.Settings.canModify)
+        return false;
+
+    hideAlert($("#divChooseLanguageAlert"));
+
+    $("#modalChooseLanguage .language-choice .btn").each(function () {
+        var current = $(this).attr("data-language") === zdnsI18n.language;
+        $(this).toggleClass("btn-primary", current).toggleClass("btn-default", !current);
+    });
+
+    $("#modalChooseLanguage").modal("show");
+    return true;
+}
+
+function chooseLanguage(objBtn, language) {
+    var btn = $(objBtn);
+    btn.button("loading");
+
+    HTTPRequest({
+        url: "api/settings/set",
+        token: sessionData.token,
+        method: "POST",
+        data: "language=" + encodeURIComponent(language),
+        processData: false,
+        success: function () {
+            zdnsI18n.chosen = true;
+            languageChooserVisible = false;
+
+            if (language !== zdnsI18n.language) {
+                if (languageChooserPasswordPrompt != null) {
+                    try {
+                        sessionStorage.setItem("changePasswordPrompt", "true");
+                    }
+                    catch (e) { }
+                }
+
+                window.location.reload();
+                return;
+            }
+
+            btn.button("reset");
+            $("#modalChooseLanguage").modal("hide");
+
+            if (languageChooserPasswordPrompt != null) {
+                showChangePasswordModal(languageChooserPasswordPrompt);
+                languageChooserPasswordPrompt = null;
+            }
+        },
+        error: function () {
+            btn.button("reset");
+        },
+        invalidToken: function () {
+            btn.button("reset");
+            $("#modalChooseLanguage").modal("hide");
+            showPageLogin();
+        },
+        objAlertPlaceholder: $("#divChooseLanguageAlert")
+    });
+}
+
+function consumeChangePasswordPrompt() {
+    var prompt = null;
+
+    try {
+        prompt = sessionStorage.getItem("changePasswordPrompt");
+        sessionStorage.removeItem("changePasswordPrompt");
+    }
+    catch (e) { }
+
+    return prompt === "true";
 }
 
 function updatePageTitle() {
@@ -623,7 +711,7 @@ function initUpdateNotificationMenu() {
 }
 
 function disableUpdateNotification() {
-    if (!confirm("Ohne Update-Hinweise zeigt die Weboberfläche nach der Anmeldung keine neuen Versionen mehr an.\r\n\r\nUpdate-Hinweise wirklich ausblenden?"))
+    if (!confirm(tr("Ohne Update-Hinweise zeigt die Weboberfläche nach der Anmeldung keine neuen Versionen mehr an.\r\n\r\nUpdate-Hinweise wirklich ausblenden?")))
         return;
 
     localStorage.setItem("disableUpdateNotification", true);
@@ -631,7 +719,7 @@ function disableUpdateNotification() {
     $("#mnuEnableCheckForUpdateNotification").show();
     $("#lnkUpdateAvailable").hide();
 
-    showAlert("success", "Hinweise ausgeblendet", "Update-Hinweise werden nicht mehr angezeigt.");
+    showAlert("success", tr("Hinweise ausgeblendet"), tr("Update-Hinweise werden nicht mehr angezeigt."));
 }
 
 function enableUpdateNotification() {
@@ -639,7 +727,7 @@ function enableUpdateNotification() {
     $("#mnuEnableCheckForUpdateNotification").hide();
     $("#mnuDisableCheckForUpdateNotification").show();
 
-    showAlert("success", "Hinweise eingeblendet", "Update-Hinweise werden wieder angezeigt.");
+    showAlert("success", tr("Hinweise eingeblendet"), tr("Update-Hinweise werden wieder angezeigt."));
 }
 
 function setAboutVersionInfo(info) {
@@ -650,7 +738,7 @@ function setAboutVersionInfo(info) {
         $("#lblAboutTechnitiumVersion").text(info.technitiumVersion);
 
     if (info.runtimeVersion != null)
-        $("#lblAboutRuntime").text(info.runtimeVersion + " auf " + info.osDescription + " (" + info.osArchitecture + ")");
+        $("#lblAboutRuntime").text(tr("{0} auf {1} ({2})", info.runtimeVersion, info.osDescription, info.osArchitecture));
 }
 
 function renderReleaseNotesInline(text) {
@@ -665,7 +753,7 @@ function renderReleaseNotesInline(text) {
 
 function renderReleaseNotes(markdown) {
     if ((markdown == null) || (markdown.trim().length === 0))
-        return "<p>Für diese Version gibt es keine Beschreibung.</p>";
+        return "<p>" + tr("Für diese Version gibt es keine Beschreibung.") + "</p>";
 
     var lines = markdown.replace(/\r\n/g, "\n").split("\n");
     var html = "";
@@ -764,30 +852,30 @@ function checkForUpdate(force) {
 
             if (!response.dnsServerEnableCheckForUpdate) {
                 lnkUpdateAvailable.hide();
-                lblAboutUpdateStatus.text("Die Update-Prüfung ist in den Einstellungen ausgeschaltet.");
+                lblAboutUpdateStatus.text(tr("Die Update-Prüfung ist in den Einstellungen ausgeschaltet."));
 
                 if (force)
-                    showAlert("warning", "Update-Prüfung ausgeschaltet", "Die Update-Prüfung ist unter Einstellungen > Allgemein ausgeschaltet.");
+                    showAlert("warning", tr("Update-Prüfung ausgeschaltet"), tr("Die Update-Prüfung ist unter Einstellungen > Server ausgeschaltet."));
 
                 return;
             }
 
             if (response.updateCheckError != null) {
                 lnkUpdateAvailable.hide();
-                lblAboutUpdateStatus.text("GitHub ist gerade nicht erreichbar: " + response.updateCheckError);
+                lblAboutUpdateStatus.text(tr("GitHub ist gerade nicht erreichbar: {0}", response.updateCheckError));
 
                 if (force)
-                    showAlert("warning", "Update-Prüfung fehlgeschlagen", "GitHub ist gerade nicht erreichbar: " + response.updateCheckError);
+                    showAlert("warning", tr("Update-Prüfung fehlgeschlagen"), tr("GitHub ist gerade nicht erreichbar: {0}", response.updateCheckError));
 
                 return;
             }
 
             if (!response.updateAvailable) {
                 lnkUpdateAvailable.hide();
-                lblAboutUpdateStatus.text("Die installierte Version ist aktuell. Neueste Version auf GitHub: " + response.updateVersion + ".");
+                lblAboutUpdateStatus.text(tr("Die installierte Version ist aktuell. Neueste Version auf GitHub: {0}.", response.updateVersion));
 
                 if (force)
-                    showAlert("success", "Kein Update verfügbar", "Die installierte Version " + response.currentVersion + " ist aktuell.");
+                    showAlert("success", tr("Kein Update verfügbar"), tr("Die installierte Version {0} ist aktuell.", response.currentVersion));
 
                 return;
             }
@@ -795,7 +883,7 @@ function checkForUpdate(force) {
             $("#lblUpdateAvailableTitle").text(response.updateTitle);
             $("#lblUpdateVersion").text(response.updateVersion);
             $("#lblCurrentVersion").text(response.currentVersion);
-            $("#lblUpdatePublished").text(response.publishedAt == null ? "" : ", veröffentlicht am " + moment(response.publishedAt).local().format("LL"));
+            $("#lblUpdatePublished").text(response.publishedAt == null ? "" : tr(", veröffentlicht am {0}", moment(response.publishedAt).local().format("LL")));
             $("#divUpdateReleaseNotes").html(renderReleaseNotes(response.releaseNotes));
 
             if (response.releaseUrl == null)
@@ -807,7 +895,7 @@ function checkForUpdate(force) {
                 $("#divUpdateInstall").hide();
             }
             else {
-                $("#lnkUpdateDownload").attr("href", response.downloadLink).text(response.downloadName + " (" + (response.downloadSize / 1048576).toFixed(1).replace(".", ",") + " MB)");
+                $("#lnkUpdateDownload").attr("href", response.downloadLink).text(response.downloadName + " (" + formatNumber(response.downloadSize / 1048576, 1) + " MB)");
                 $("#preUpdateInstall").text("wget " + response.downloadLink + "\nsudo apt install ./" + response.downloadName);
 
                 if (response.checksumsLink == null)
@@ -818,9 +906,9 @@ function checkForUpdate(force) {
                 $("#divUpdateInstall").show();
             }
 
-            lnkUpdateAvailable.html("<span class=\"fa fa-arrow-circle-up\" aria-hidden=\"true\"></span> Version " + htmlEncode(response.updateVersion) + " verfügbar");
+            lnkUpdateAvailable.html("<span class=\"fa fa-arrow-circle-up\" aria-hidden=\"true\"></span> " + tr("Version {0} verfügbar", htmlEncode(response.updateVersion)));
             lnkUpdateAvailable.show();
-            lblAboutUpdateStatus.html("Version <b>" + htmlEncode(response.updateVersion) + "</b> ist verfügbar. <a href=\"#\" data-toggle=\"modal\" data-target=\"#modalUpdateAvailable\">Änderungen und Installation ansehen</a>");
+            lblAboutUpdateStatus.html(tr("Version {0} ist verfügbar.", "<b>" + htmlEncode(response.updateVersion) + "</b>") + " <a href=\"#\" data-toggle=\"modal\" data-target=\"#modalUpdateAvailable\">" + tr("Änderungen und Installation ansehen") + "</a>");
 
             if (force)
                 $("#modalUpdateAvailable").modal("show");
@@ -842,13 +930,13 @@ function loadQuickBlockLists() {
             loadQuickBlockListsFrom(responseJSON);
         },
         error: function (jqXHR, textStatus, errorThrown) {
-            showAlert("danger", "Fehler", "Die Blocklisten-Schnellauswahl konnte nicht geladen werden: " + jqXHR.status + " " + jqXHR.statusText);
+            showAlert("danger", tr("Fehler"), tr("Die Blocklisten-Schnellauswahl konnte nicht geladen werden: {0}", jqXHR.status + " " + jqXHR.statusText));
         }
     });
 }
 
 function loadQuickBlockListsFrom(responseJSON) {
-    var htmlList = "<option value=\"blank\" selected></option><option value=\"none\">Leeren</option>";
+    var htmlList = "<option value=\"blank\" selected></option><option value=\"none\">" + tr("Leeren") + "</option>";
     var currentGroup = null;
 
     for (var i = 0; i < responseJSON.length; i++) {
@@ -859,12 +947,12 @@ function loadQuickBlockListsFrom(responseJSON) {
                 htmlList += "</optgroup>";
 
             if (group !== null)
-                htmlList += "<optgroup label=\"" + htmlEncode(group) + "\">";
+                htmlList += "<optgroup label=\"" + htmlEncode(tr(group)) + "\">";
 
             currentGroup = group;
         }
 
-        htmlList += "<option>" + htmlEncode(responseJSON[i].name) + "</option>";
+        htmlList += "<option value=\"" + htmlEncode(responseJSON[i].name) + "\">" + htmlEncode(tr(responseJSON[i].name)) + "</option>";
     }
 
     if (currentGroup !== null)
@@ -895,7 +983,7 @@ function loadQuickForwardersList() {
                     loadQuickForwardersListFrom(responseJSON);
                 },
                 error: function (jqXHR, textStatus, errorThrown) {
-                    showAlert("danger", "Fehler", "Die Forwarder-Schnellauswahl konnte nicht geladen werden: " + jqXHR.status + " " + jqXHR.statusText);
+                    showAlert("danger", tr("Fehler"), tr("Die Forwarder-Schnellauswahl konnte nicht geladen werden: {0}", jqXHR.status + " " + jqXHR.statusText));
                 }
             });
         }
@@ -903,7 +991,7 @@ function loadQuickForwardersList() {
 }
 
 function loadQuickForwardersListFrom(responseJSON) {
-    var htmlList = "<option value=\"blank\" selected></option><option value=\"none\">Leeren</option>";
+    var htmlList = "<option value=\"blank\" selected></option><option value=\"none\">" + tr("Leeren") + "</option>";
 
     for (var i = 0; i < responseJSON.length; i++) {
         htmlList += "<option>" + htmlEncode(responseJSON[i].name) + "</option>";
@@ -958,16 +1046,16 @@ function renderIpv6UpstreamStatus(serverStatus) {
     }
 
     if (serverStatus.ipv6Mode === "Disabled") {
-        div.html("<span class=\"label label-default\">IPv6 deaktiviert</span>");
+        div.html("<span class=\"label label-default\">" + tr("IPv6 deaktiviert") + "</span>");
     }
     else if (serverStatus.ipv6UpstreamAvailable) {
-        div.html("<span class=\"label label-success\">IPv6 wird genutzt</span>");
+        div.html("<span class=\"label label-success\">" + tr("IPv6 wird genutzt") + "</span>");
     }
     else if (serverStatus.ipv6UpstreamUnavailableUntil != null) {
-        div.html("<span class=\"label label-warning\">IPv6 ausgesetzt</span> bis " + htmlEncode(moment(serverStatus.ipv6UpstreamUnavailableUntil).local().format("LTS")) + " (" + htmlEncode(moment(serverStatus.ipv6UpstreamUnavailableUntil).fromNow()) + "), bis dahin nur IPv4");
+        div.html("<span class=\"label label-warning\">" + tr("IPv6 ausgesetzt") + "</span> " + htmlEncode(tr("bis {0} ({1}), bis dahin nur IPv4", moment(serverStatus.ipv6UpstreamUnavailableUntil).local().format("LTS"), moment(serverStatus.ipv6UpstreamUnavailableUntil).fromNow())));
     }
     else {
-        div.html("<span class=\"label label-warning\">IPv6 ausgesetzt</span>");
+        div.html("<span class=\"label label-warning\">" + tr("IPv6 ausgesetzt") + "</span>");
     }
 
     var ipv6Enabled = serverStatus.ipv6Mode !== "Disabled";
@@ -1005,14 +1093,14 @@ function probeIpv6Upstream(objBtn, reset) {
             renderIpv6UpstreamStatus(r.serverStatus != null ? r.serverStatus : r);
 
             var available = (r.serverStatus != null) ? r.serverStatus.ipv6UpstreamAvailable : r.ipv6UpstreamAvailable;
-            var lastResponse = (r.lastIPv6ResponseSecondsAgo == null) ? "" : " Letzte Antwort eines Nameservers über IPv6: vor " + r.lastIPv6ResponseSecondsAgo + " s.";
+            var lastResponse = (r.lastIPv6ResponseSecondsAgo == null) ? "" : " " + tr("Letzte Antwort eines Nameservers über IPv6: vor {0} s.", r.lastIPv6ResponseSecondsAgo);
 
             if (r.probeSucceeded)
-                showAlert("success", "IPv6 erreichbar", "Die IPv6-Root-Server antworten. Ausgehende IPv6-Anfragen sind aktiv." + lastResponse);
+                showAlert("success", tr("IPv6 erreichbar"), tr("Die IPv6-Root-Server antworten. Ausgehende IPv6-Anfragen sind aktiv.") + lastResponse);
             else if (available)
-                showAlert("warning", "IPv6 aktiv, Root-Server-Prüfung fehlgeschlagen", "Nameserver antworten über IPv6, deshalb bleibt IPv6 aktiv. Die IPv6-Root-Server waren bei der Prüfung aber nicht erreichbar: " + (r.probeError == null ? "unbekannter Fehler" : r.probeError) + lastResponse);
+                showAlert("warning", tr("IPv6 aktiv, Root-Server-Prüfung fehlgeschlagen"), tr("Nameserver antworten über IPv6, deshalb bleibt IPv6 aktiv. Die IPv6-Root-Server waren bei der Prüfung aber nicht erreichbar: {0}", (r.probeError == null ? tr("unbekannter Fehler") : r.probeError)) + lastResponse);
             else
-                showAlert("warning", "IPv6 nicht erreichbar", "Weder die IPv6-Root-Server noch andere Nameserver antworten über IPv6. Ausgehende Anfragen laufen vorerst nur über IPv4. " + (r.probeError == null ? "" : r.probeError));
+                showAlert("warning", tr("IPv6 nicht erreichbar"), tr("Weder die IPv6-Root-Server noch andere Nameserver antworten über IPv6. Ausgehende Anfragen laufen vorerst nur über IPv4.") + (r.probeError == null ? "" : " " + r.probeError));
         },
         error: function () {
             btn.button("reset");
@@ -1061,6 +1149,8 @@ function loadDnsSettings(responseJSON) {
 
     $("#txtDefaultResponsiblePerson").val(responseJSON.response.defaultResponsiblePerson);
 
+    $("#optLanguage").val(responseJSON.response.language);
+
     $("#chkDnsServerEnableCheckForUpdate").prop("checked", responseJSON.response.dnsServerEnableCheckForUpdate);
 
     switch (responseJSON.response.ipv6Mode) {
@@ -1097,13 +1187,13 @@ function loadDnsSettings(responseJSON) {
     $("#optQuickClientBlockList").val("");
 
     if ((responseJSON.response.clientBlockListUrls == null) || (responseJSON.response.clientBlockListUrls.length === 0))
-        $("#lblClientBlockListStatus").text("Keine Listen eingetragen.");
+        $("#lblClientBlockListStatus").text(tr("Keine Listen eingetragen."));
     else
-        $("#lblClientBlockListStatus").text(responseJSON.response.clientBlockListAddressRanges.toLocaleString("de-DE") + " Adressbereiche geladen, zuletzt aktualisiert " + (responseJSON.response.clientBlockListLastUpdatedOn == null ? "noch nie" : "am " + moment(responseJSON.response.clientBlockListLastUpdatedOn).local().format("DD.MM.YYYY HH:mm")) + ", " + responseJSON.response.clientBlockListDrops.toLocaleString("de-DE") + " Anfragen oder Verbindungen seit dem Start verworfen.");
+        $("#lblClientBlockListStatus").text(tr("{0} Adressbereiche geladen, zuletzt aktualisiert {1}, {2} Anfragen oder Verbindungen seit dem Start verworfen.", formatNumber(responseJSON.response.clientBlockListAddressRanges), (responseJSON.response.clientBlockListLastUpdatedOn == null ? tr("noch nie") : tr("am {0}", moment(responseJSON.response.clientBlockListLastUpdatedOn).local().format(tr("DD.MM.YYYY HH:mm")))), formatNumber(responseJSON.response.clientBlockListDrops)));
 
     $(".rule-hits").each(function () {
         var matches = responseJSON.response.requestFilterMatches == null ? null : responseJSON.response.requestFilterMatches[$(this).attr("data-rule")];
-        $(this).text(matches == null ? "" : Number(matches).toLocaleString("de-DE") + " Treffer");
+        $(this).text(matches == null ? "" : tr("{0} Treffer", formatNumber(matches)));
     });
 
     $("#chkEnableUdpSocketPool").prop("checked", responseJSON.response.enableUdpSocketPool);
@@ -1288,7 +1378,7 @@ function loadDnsSettings(responseJSON) {
     }
 
     if ((responseJSON.response.ddrRecords == null) || (responseJSON.response.ddrRecords.length === 0))
-        $("#preDdrRecords").text("Keine Einträge: Es ist kein TLS-Zertifikat geladen oder kein verschlüsselter Dienst aktiv.");
+        $("#preDdrRecords").text(tr("Keine Einträge: Es ist kein TLS-Zertifikat geladen oder kein verschlüsselter Dienst aktiv."));
     else
         $("#preDdrRecords").text(responseJSON.response.ddrRecords.join("\n"));
 
@@ -1378,9 +1468,9 @@ function loadDnsSettings(responseJSON) {
     $("#chkAllowTxtBlockingReport").prop("checked", responseJSON.response.allowTxtBlockingReport);
 
     if (responseJSON.response.temporaryDisableBlockingTill == null)
-        $("#lblTemporaryDisableBlockingTill").text("nicht pausiert");
+        $("#lblTemporaryDisableBlockingTill").text(tr("nicht pausiert"));
     else
-        $("#lblTemporaryDisableBlockingTill").text(moment(responseJSON.response.temporaryDisableBlockingTill).local().format("DD.MM.YYYY HH:mm:ss"));
+        $("#lblTemporaryDisableBlockingTill").text(moment(responseJSON.response.temporaryDisableBlockingTill).local().format(tr("DD.MM.YYYY HH:mm:ss")));
 
     $("#txtTemporaryDisableBlockingMinutes").val("");
 
@@ -1415,7 +1505,7 @@ function loadDnsSettings(responseJSON) {
     $("#chkForceChromePreflight").prop("checked", responseJSON.response.forceChromePreflight);
 
     if ((responseJSON.response.autoAllowedNames == null) || (responseJSON.response.autoAllowedNames.length === 0))
-        $("#lblAutoAllowedNames").text("Keine: Der Serverdomainname ist kein vollständiger Domainname und es ist kein TLS-Zertifikat geladen.");
+        $("#lblAutoAllowedNames").text(tr("Keine: Der Serverdomainname ist kein vollständiger Domainname und es ist kein TLS-Zertifikat geladen."));
     else
         $("#lblAutoAllowedNames").text(responseJSON.response.autoAllowedNames.join(", "));
     $("#txtBlockingReportText").val(responseJSON.response.blockingReportText == null ? "" : responseJSON.response.blockingReportText);
@@ -1435,15 +1525,15 @@ function loadDnsSettings(responseJSON) {
     $("#txtBlockListUpdateIntervalHours").val(responseJSON.response.blockListUpdateIntervalHours);
 
     if (responseJSON.response.blockListNextUpdatedOn == null) {
-        $("#lblBlockListNextUpdatedOn").text("nicht geplant");
+        $("#lblBlockListNextUpdatedOn").text(tr("nicht geplant"));
     }
     else {
         var blockListNextUpdatedOn = moment(responseJSON.response.blockListNextUpdatedOn);
 
         if (moment().utc().isBefore(blockListNextUpdatedOn))
-            $("#lblBlockListNextUpdatedOn").text(blockListNextUpdatedOn.local().format("DD.MM.YYYY HH:mm:ss"));
+            $("#lblBlockListNextUpdatedOn").text(blockListNextUpdatedOn.local().format(tr("DD.MM.YYYY HH:mm:ss")));
         else
-            $("#lblBlockListNextUpdatedOn").text("wird gerade aktualisiert");
+            $("#lblBlockListNextUpdatedOn").text(tr("wird gerade aktualisiert"));
     }
 
     var proxy = responseJSON.response.proxy;
@@ -1576,7 +1666,7 @@ function saveDnsSettings(objBtn) {
     var dnsServerDomain = $("#txtDnsServerDomain").val();
 
     if ((dnsServerDomain === null) || (dnsServerDomain === "")) {
-        showAlert("warning", "Angabe fehlt", "Bitte die Server-Domain eingeben.");
+        showAlert("warning", tr("Angabe fehlt"), tr("Bitte die Server-Domain eingeben."));
         $("#txtDnsServerDomain").trigger("focus");
         return;
     }
@@ -1604,6 +1694,10 @@ function saveDnsSettings(objBtn) {
     var dnsServerEnableCheckForUpdate = $("#chkDnsServerEnableCheckForUpdate").prop("checked");
 
     formData += "&defaultRecordTtl=" + encodeURIComponent(defaultRecordTtl) + "&defaultResponsiblePerson=" + encodeURIComponent(defaultResponsiblePerson) + "&dnsServerEnableCheckForUpdate=" + dnsServerEnableCheckForUpdate;
+
+    var language = $("#optLanguage").val();
+    if ((language === "de") || (language === "en"))
+        formData += "&language=" + language;
 
     var ipv6Mode = $("input[name=rdIPv6Mode]:checked").val();
     var ipv6AutoFallback = $("#chkIpv6AutoFallback").prop("checked");
@@ -1646,14 +1740,14 @@ function saveDnsSettings(objBtn) {
 
     var eDnsClientSubnetIPv4PrefixLength = $("#txtEDnsClientSubnetIPv4PrefixLength").val();
     if ((eDnsClientSubnetIPv4PrefixLength == null) || (eDnsClientSubnetIPv4PrefixLength === "")) {
-        showAlert("warning", "Angabe fehlt", "Bitte die IPv4-Präfixlänge für ECS eingeben.");
+        showAlert("warning", tr("Angabe fehlt"), tr("Bitte die IPv4-Präfixlänge für ECS eingeben."));
         $("#txtEDnsClientSubnetIPv4PrefixLength").trigger("focus");
         return;
     }
 
     var eDnsClientSubnetIPv6PrefixLength = $("#txtEDnsClientSubnetIPv6PrefixLength").val();
     if ((eDnsClientSubnetIPv6PrefixLength == null) || (eDnsClientSubnetIPv6PrefixLength === "")) {
-        showAlert("warning", "Angabe fehlt", "Bitte die IPv6-Präfixlänge für ECS eingeben.");
+        showAlert("warning", tr("Angabe fehlt"), tr("Bitte die IPv6-Präfixlänge für ECS eingeben."));
         $("#txtEDnsClientSubnetIPv6PrefixLength").trigger("focus");
         return;
     }
@@ -1680,14 +1774,14 @@ function saveDnsSettings(objBtn) {
 
     var rateLimitBurstSeconds = $("#txtRateLimitBurstSeconds").val();
     if (!isIntegerInRange(rateLimitBurstSeconds, 1, 60)) {
-        showAlert("warning", "Ungültige Angabe", "Die Burst-Dauer muss zwischen 1 und 60 Sekunden liegen.");
+        showAlert("warning", tr("Ungültige Angabe"), tr("Die Burst-Dauer muss zwischen 1 und 60 Sekunden liegen."));
         $("#txtRateLimitBurstSeconds").trigger("focus");
         return;
     }
 
     var rateLimitUdpTruncationPercentage = $("#txtRateLimitUdpTruncation").val();
     if (!isIntegerInRange(rateLimitUdpTruncationPercentage, 0, 100)) {
-        showAlert("warning", "Ungültige Angabe", "Der Anteil der TC-Antworten muss zwischen 0 und 100 % liegen.");
+        showAlert("warning", tr("Ungültige Angabe"), tr("Der Anteil der TC-Antworten muss zwischen 0 und 100 % liegen."));
         $("#txtRateLimitUdpTruncation").trigger("focus");
         return;
     }
@@ -1700,63 +1794,63 @@ function saveDnsSettings(objBtn) {
 
     var clientTimeout = $("#txtClientTimeout").val();
     if ((clientTimeout == null) || (clientTimeout === "")) {
-        showAlert("warning", "Angabe fehlt", "Bitte einen Wert für das Client-Zeitlimit eingeben.");
+        showAlert("warning", tr("Angabe fehlt"), tr("Bitte einen Wert für das Client-Zeitlimit eingeben."));
         $("#txtClientTimeout").trigger("focus");
         return;
     }
 
     var tcpSendTimeout = $("#txtTcpSendTimeout").val();
     if ((tcpSendTimeout == null) || (tcpSendTimeout === "")) {
-        showAlert("warning", "Angabe fehlt", "Bitte einen Wert für das TCP-Sendezeitlimit eingeben.");
+        showAlert("warning", tr("Angabe fehlt"), tr("Bitte einen Wert für das TCP-Sendezeitlimit eingeben."));
         $("#txtTcpSendTimeout").trigger("focus");
         return;
     }
 
     var tcpReceiveTimeout = $("#txtTcpReceiveTimeout").val();
     if ((tcpReceiveTimeout == null) || (tcpReceiveTimeout === "")) {
-        showAlert("warning", "Angabe fehlt", "Bitte einen Wert für das TCP-Empfangszeitlimit eingeben.");
+        showAlert("warning", tr("Angabe fehlt"), tr("Bitte einen Wert für das TCP-Empfangszeitlimit eingeben."));
         $("#txtTcpReceiveTimeout").trigger("focus");
         return;
     }
 
     var quicIdleTimeout = $("#txtQuicIdleTimeout").val();
     if ((quicIdleTimeout == null) || (quicIdleTimeout === "")) {
-        showAlert("warning", "Angabe fehlt", "Bitte einen Wert für die QUIC-Leerlaufzeit eingeben.");
+        showAlert("warning", tr("Angabe fehlt"), tr("Bitte einen Wert für die QUIC-Leerlaufzeit eingeben."));
         $("#txtQuicIdleTimeout").trigger("focus");
         return;
     }
 
     var quicMaxInboundStreams = $("#txtQuicMaxInboundStreams").val();
     if ((quicMaxInboundStreams == null) || (quicMaxInboundStreams === "")) {
-        showAlert("warning", "Angabe fehlt", "Bitte einen Wert für die QUIC-Streams je Verbindung eingeben.");
+        showAlert("warning", tr("Angabe fehlt"), tr("Bitte einen Wert für die QUIC-Streams je Verbindung eingeben."));
         $("#txtQuicMaxInboundStreams").trigger("focus");
         return;
     }
 
     var listenBacklog = $("#txtListenBacklog").val();
     if ((listenBacklog == null) || (listenBacklog === "")) {
-        showAlert("warning", "Angabe fehlt", "Bitte einen Wert für das Listen-Backlog eingeben.");
+        showAlert("warning", tr("Angabe fehlt"), tr("Bitte einen Wert für das Listen-Backlog eingeben."));
         $("#txtListenBacklog").trigger("focus");
         return;
     }
 
     var udpSendBufferSizeKB = $("#txtUdpSendBufferSizeKB").val();
     if ((udpSendBufferSizeKB == null) || (udpSendBufferSizeKB === "")) {
-        showAlert("warning", "Angabe fehlt", "Bitte einen Wert für den UDP-Sendepuffer eingeben.");
+        showAlert("warning", tr("Angabe fehlt"), tr("Bitte einen Wert für den UDP-Sendepuffer eingeben."));
         $("#txtUdpSendBufferSizeKB").trigger("focus");
         return;
     }
 
     var udpReceiveBufferSizeKB = $("#txtUdpReceiveBufferSizeKB").val();
     if ((udpReceiveBufferSizeKB == null) || (udpReceiveBufferSizeKB === "")) {
-        showAlert("warning", "Angabe fehlt", "Bitte einen Wert für den UDP-Empfangspuffer eingeben.");
+        showAlert("warning", tr("Angabe fehlt"), tr("Bitte einen Wert für den UDP-Empfangspuffer eingeben."));
         $("#txtUdpReceiveBufferSizeKB").trigger("focus");
         return;
     }
 
     var maxConcurrentResolutionsPerCore = $("#txtMaxConcurrentResolutionsPerCore").val();
     if ((maxConcurrentResolutionsPerCore == null) || (maxConcurrentResolutionsPerCore === "")) {
-        showAlert("warning", "Angabe fehlt", "Bitte einen Wert für die gleichzeitigen Auflösungen eingeben.");
+        showAlert("warning", tr("Angabe fehlt"), tr("Bitte einen Wert für die gleichzeitigen Auflösungen eingeben."));
         $("#txtMaxConcurrentResolutionsPerCore").trigger("focus");
         return;
     }
@@ -1821,21 +1915,21 @@ function saveDnsSettings(objBtn) {
 
     var dnsOverUdpProxyPort = $("#txtDnsOverUdpProxyPort").val();
     if ((dnsOverUdpProxyPort == null) || (dnsOverUdpProxyPort === "")) {
-        showAlert("warning", "Angabe fehlt", "Bitte den Port für DNS-over-UDP-PROXY eingeben.");
+        showAlert("warning", tr("Angabe fehlt"), tr("Bitte den Port für DNS-over-UDP-PROXY eingeben."));
         $("#txtDnsOverUdpProxyPort").trigger("focus");
         return;
     }
 
     var dnsOverTcpProxyPort = $("#txtDnsOverTcpProxyPort").val();
     if ((dnsOverTcpProxyPort == null) || (dnsOverTcpProxyPort === "")) {
-        showAlert("warning", "Angabe fehlt", "Bitte den Port für DNS-over-TCP-PROXY eingeben.");
+        showAlert("warning", tr("Angabe fehlt"), tr("Bitte den Port für DNS-over-TCP-PROXY eingeben."));
         $("#txtDnsOverTcpProxyPort").trigger("focus");
         return;
     }
 
     var dnsOverHttpPort = $("#txtDnsOverHttpPort").val();
     if ((dnsOverHttpPort == null) || (dnsOverHttpPort === "")) {
-        showAlert("warning", "Angabe fehlt", "Bitte den Port für DNS-over-HTTP eingeben.");
+        showAlert("warning", tr("Angabe fehlt"), tr("Bitte den Port für DNS-over-HTTP eingeben."));
         $("#txtDnsOverHttpPort").trigger("focus");
         return;
     }
@@ -1845,21 +1939,21 @@ function saveDnsSettings(objBtn) {
 
     var dnsOverTlsPort = $("#txtDnsOverTlsPort").val();
     if ((dnsOverTlsPort == null) || (dnsOverTlsPort === "")) {
-        showAlert("warning", "Angabe fehlt", "Bitte den Port für DNS-over-TLS eingeben.");
+        showAlert("warning", tr("Angabe fehlt"), tr("Bitte den Port für DNS-over-TLS eingeben."));
         $("#txtDnsOverTlsPort").trigger("focus");
         return;
     }
 
     var dnsOverHttpsPort = $("#txtDnsOverHttpsPort").val();
     if ((dnsOverHttpsPort == null) || (dnsOverHttpsPort === "")) {
-        showAlert("warning", "Angabe fehlt", "Bitte den Port für DNS-over-HTTPS eingeben.");
+        showAlert("warning", tr("Angabe fehlt"), tr("Bitte den Port für DNS-over-HTTPS eingeben."));
         $("#txtDnsOverHttpsPort").trigger("focus");
         return;
     }
 
     var dnsOverQuicPort = $("#txtDnsOverQuicPort").val();
     if ((dnsOverQuicPort == null) || (dnsOverQuicPort === "")) {
-        showAlert("warning", "Angabe fehlt", "Bitte den Port für DNS-over-QUIC eingeben.");
+        showAlert("warning", tr("Angabe fehlt"), tr("Bitte den Port für DNS-over-QUIC eingeben."));
         $("#txtDnsOverQuicPort").trigger("focus");
         return;
     }
@@ -1897,28 +1991,28 @@ function saveDnsSettings(objBtn) {
 
     var resolverRetries = $("#txtResolverRetries").val();
     if ((resolverRetries == null) || (resolverRetries === "")) {
-        showAlert("warning", "Angabe fehlt", "Bitte die Wiederholungen des Resolvers eingeben.");
+        showAlert("warning", tr("Angabe fehlt"), tr("Bitte die Wiederholungen des Resolvers eingeben."));
         $("#txtResolverRetries").trigger("focus");
         return;
     }
 
     var resolverTimeout = $("#txtResolverTimeout").val();
     if ((resolverTimeout == null) || (resolverTimeout === "")) {
-        showAlert("warning", "Angabe fehlt", "Bitte das Zeitlimit des Resolvers eingeben.");
+        showAlert("warning", tr("Angabe fehlt"), tr("Bitte das Zeitlimit des Resolvers eingeben."));
         $("#txtResolverTimeout").trigger("focus");
         return;
     }
 
     var resolverConcurrency = $("#txtResolverConcurrency").val();
     if ((resolverConcurrency == null) || (resolverConcurrency === "")) {
-        showAlert("warning", "Angabe fehlt", "Bitte die parallelen Anfragen des Resolvers eingeben.");
+        showAlert("warning", tr("Angabe fehlt"), tr("Bitte die parallelen Anfragen des Resolvers eingeben."));
         $("#txtResolverConcurrency").trigger("focus");
         return;
     }
 
     var resolverMaxStackCount = $("#txtResolverMaxStackCount").val();
     if ((resolverMaxStackCount == null) || (resolverMaxStackCount === "")) {
-        showAlert("warning", "Angabe fehlt", "Bitte die maximale Verschachtelung des Resolvers eingeben.");
+        showAlert("warning", tr("Angabe fehlt"), tr("Bitte die maximale Verschachtelung des Resolvers eingeben."));
         $("#txtResolverMaxStackCount").trigger("focus");
         return;
     }
@@ -1935,56 +2029,56 @@ function saveDnsSettings(objBtn) {
 
     var cacheMaximumEntries = $("#txtCacheMaximumEntries").val();
     if ((cacheMaximumEntries === null) || (cacheMaximumEntries === "")) {
-        showAlert("warning", "Angabe fehlt", "Bitte die maximalen Cache-Einträge eingeben.");
+        showAlert("warning", tr("Angabe fehlt"), tr("Bitte die maximalen Cache-Einträge eingeben."));
         $("#txtCacheMaximumEntries").trigger("focus");
         return;
     }
 
     var cacheMinimumRecordTtl = $("#txtCacheMinimumRecordTtl").val();
     if ((cacheMinimumRecordTtl === null) || (cacheMinimumRecordTtl === "")) {
-        showAlert("warning", "Angabe fehlt", "Bitte die minimale Cache-TTL eingeben.");
+        showAlert("warning", tr("Angabe fehlt"), tr("Bitte die minimale Cache-TTL eingeben."));
         $("#txtCacheMinimumRecordTtl").trigger("focus");
         return;
     }
 
     var cacheMaximumRecordTtl = $("#txtCacheMaximumRecordTtl").val();
     if ((cacheMaximumRecordTtl === null) || (cacheMaximumRecordTtl === "")) {
-        showAlert("warning", "Angabe fehlt", "Bitte die maximale Cache-TTL eingeben.");
+        showAlert("warning", tr("Angabe fehlt"), tr("Bitte die maximale Cache-TTL eingeben."));
         $("#txtCacheMaximumRecordTtl").trigger("focus");
         return;
     }
 
     var cacheNegativeRecordTtl = $("#txtCacheNegativeRecordTtl").val();
     if ((cacheNegativeRecordTtl === null) || (cacheNegativeRecordTtl === "")) {
-        showAlert("warning", "Angabe fehlt", "Bitte die negative Cache-TTL eingeben.");
+        showAlert("warning", tr("Angabe fehlt"), tr("Bitte die negative Cache-TTL eingeben."));
         $("#txtCacheNegativeRecordTtl").trigger("focus");
         return;
     }
 
     var cacheMaximumNegativeRecordTtl = $("#txtCacheMaximumNegativeRecordTtl").val();
     if ((cacheMaximumNegativeRecordTtl === null) || (cacheMaximumNegativeRecordTtl === "")) {
-        showAlert("warning", "Angabe fehlt", "Bitte die maximale negative TTL für den Cache eingeben.");
+        showAlert("warning", tr("Angabe fehlt"), tr("Bitte die maximale negative TTL für den Cache eingeben."));
         $("#txtCacheMaximumNegativeRecordTtl").trigger("focus");
         return;
     }
 
     var cacheFailureRecordTtl = $("#txtCacheFailureRecordTtl").val();
     if ((cacheFailureRecordTtl === null) || (cacheFailureRecordTtl === "")) {
-        showAlert("warning", "Angabe fehlt", "Bitte die Fehler-TTL eingeben.");
+        showAlert("warning", tr("Angabe fehlt"), tr("Bitte die Fehler-TTL eingeben."));
         $("#txtCacheFailureRecordTtl").trigger("focus");
         return;
     }
 
     var cachePrefetchEligibility = $("#txtCachePrefetchEligibility").val();
     if ((cachePrefetchEligibility === null) || (cachePrefetchEligibility === "")) {
-        showAlert("warning", "Angabe fehlt", "Bitte die Mindest-TTL für Prefetch eingeben.");
+        showAlert("warning", tr("Angabe fehlt"), tr("Bitte die Mindest-TTL für Prefetch eingeben."));
         $("#txtCachePrefetchEligibility").trigger("focus");
         return;
     }
 
     var cachePrefetchTrigger = $("#txtCachePrefetchTrigger").val();
     if ((cachePrefetchTrigger === null) || (cachePrefetchTrigger === "")) {
-        showAlert("warning", "Angabe fehlt", "Bitte den Prefetch-Auslöser eingeben.");
+        showAlert("warning", tr("Angabe fehlt"), tr("Bitte den Prefetch-Auslöser eingeben."));
         $("#txtCachePrefetchTrigger").trigger("focus");
         return;
     }
@@ -2033,7 +2127,7 @@ function saveDnsSettings(objBtn) {
         var proxyAddress = $("#txtProxyAddress").val();
 
         if ((proxyAddress === null) || (proxyAddress === "")) {
-            showAlert("warning", "Angabe fehlt", "Bitte die Proxy-Adresse eingeben.");
+            showAlert("warning", tr("Angabe fehlt"), tr("Bitte die Proxy-Adresse eingeben."));
             $("#txtProxyAddress").trigger("focus");
             return;
         }
@@ -2041,7 +2135,7 @@ function saveDnsSettings(objBtn) {
         var proxyPort = $("#txtProxyPort").val();
 
         if ((proxyPort === null) || (proxyPort === "")) {
-            showAlert("warning", "Angabe fehlt", "Bitte den Proxy-Port eingeben.");
+            showAlert("warning", tr("Angabe fehlt"), tr("Bitte den Proxy-Port eingeben."));
             $("#txtProxyPort").trigger("focus");
             return;
         }
@@ -2069,21 +2163,21 @@ function saveDnsSettings(objBtn) {
 
     var forwarderRetries = $("#txtForwarderRetries").val();
     if ((forwarderRetries == null) || (forwarderRetries === "")) {
-        showAlert("warning", "Angabe fehlt", "Bitte die Wiederholungen je Forwarder eingeben.");
+        showAlert("warning", tr("Angabe fehlt"), tr("Bitte die Wiederholungen je Forwarder eingeben."));
         $("#txtForwarderRetries").trigger("focus");
         return;
     }
 
     var forwarderTimeout = $("#txtForwarderTimeout").val();
     if ((forwarderTimeout == null) || (forwarderTimeout === "")) {
-        showAlert("warning", "Angabe fehlt", "Bitte das Zeitlimit je Forwarder eingeben.");
+        showAlert("warning", tr("Angabe fehlt"), tr("Bitte das Zeitlimit je Forwarder eingeben."));
         $("#txtForwarderTimeout").trigger("focus");
         return;
     }
 
     var forwarderConcurrency = $("#txtForwarderConcurrency").val();
     if ((forwarderConcurrency == null) || (forwarderConcurrency === "")) {
-        showAlert("warning", "Angabe fehlt", "Bitte die Zahl gleichzeitiger Forwarder eingeben.");
+        showAlert("warning", tr("Angabe fehlt"), tr("Bitte die Zahl gleichzeitiger Forwarder eingeben."));
         $("#txtForwarderConcurrency").trigger("focus");
         return;
     }
@@ -2120,10 +2214,18 @@ function saveDnsSettings(objBtn) {
             loadDnsSettings(responseJSON);
 
             btn.button("reset");
-            showAlert("success", "Gespeichert", "Die Einstellungen wurden übernommen.");
+            showAlert("success", tr("Gespeichert"), tr("Die Einstellungen wurden übernommen."));
+
+            var redirecting = false;
 
             if (sessionData.info.dnsServerDomain == responseJSON.server)
-                checkForWebConsoleRedirection(responseJSON);
+                redirecting = checkForWebConsoleRedirection(responseJSON);
+
+            if (!redirecting && (responseJSON.response.language !== zdnsI18n.language)) {
+                setTimeout(function () {
+                    window.location.reload();
+                }, 800);
+            }
         },
         error: function () {
             btn.button("reset");
@@ -2153,13 +2255,13 @@ function validateQpsPrefixLimits(table, maxPrefix) {
         var prefix = $(inputs[0]);
 
         if (!isIntegerInRange(prefix.val(), 0, maxPrefix)) {
-            showAlert("warning", "Ungültige Angabe", "Die Präfixlänge muss zwischen 0 und " + maxPrefix + " liegen.");
+            showAlert("warning", tr("Ungültige Angabe"), tr("Die Präfixlänge muss zwischen 0 und {0} liegen.", maxPrefix));
             prefix.trigger("focus");
             return false;
         }
 
         if (prefixes[prefix.val().trim()]) {
-            showAlert("warning", "Doppelter Eintrag", "Das Präfix /" + prefix.val().trim() + " ist mehrfach eingetragen.");
+            showAlert("warning", tr("Doppelter Eintrag"), tr("Das Präfix /{0} ist mehrfach eingetragen.", prefix.val().trim()));
             prefix.trigger("focus");
             return false;
         }
@@ -2170,7 +2272,7 @@ function validateQpsPrefixLimits(table, maxPrefix) {
             var limit = $(inputs[j]);
 
             if (!isIntegerInRange(limit.val(), 0, 1000000)) {
-                showAlert("warning", "Ungültige Angabe", "Das Limit muss zwischen 0 und 1.000.000 Anfragen pro Sekunde liegen, 0 bedeutet unbegrenzt.");
+                showAlert("warning", tr("Ungültige Angabe"), tr("Das Limit muss zwischen 0 und 1.000.000 Anfragen pro Sekunde liegen, 0 bedeutet unbegrenzt."));
                 limit.trigger("focus");
                 return false;
             }
@@ -2196,10 +2298,10 @@ function addQpsPrefixLimitsIPv4Row(prefix, udpLimit, tcpLimit) {
     var id = Math.floor(Math.random() * 10000);
 
     var tableHtmlRows = "<tr id=\"tableQpsPrefixLimitsIPv4Row" + id + "\"><td><input type=\"number\" class=\"form-control\" min=\"0\" max=\"32\" step=\"1\" placeholder=\"32\" value=\"" + htmlEncode(prefix) + "\"></td>";
-    tableHtmlRows += "<td><input type=\"number\" class=\"form-control\" min=\"0\" max=\"1000000\" step=\"1\" placeholder=\"0 = unbegrenzt\" value=\"" + htmlEncode(udpLimit) + "\"></td>";
-    tableHtmlRows += "<td><input type=\"number\" class=\"form-control\" min=\"0\" max=\"1000000\" step=\"1\" placeholder=\"0 = unbegrenzt\" value=\"" + htmlEncode(tcpLimit) + "\"></td>";
+    tableHtmlRows += "<td><input type=\"number\" class=\"form-control\" min=\"0\" max=\"1000000\" step=\"1\" placeholder=\"" + tr("0 = unbegrenzt") + "\" value=\"" + htmlEncode(udpLimit) + "\"></td>";
+    tableHtmlRows += "<td><input type=\"number\" class=\"form-control\" min=\"0\" max=\"1000000\" step=\"1\" placeholder=\"" + tr("0 = unbegrenzt") + "\" value=\"" + htmlEncode(tcpLimit) + "\"></td>";
 
-    tableHtmlRows += "<td><button type=\"button\" class=\"btn btn-danger\" onclick=\"$('#tableQpsPrefixLimitsIPv4Row" + id + "').remove();\">Löschen</button></td></tr>";
+    tableHtmlRows += "<td><button type=\"button\" class=\"btn btn-danger\" onclick=\"$('#tableQpsPrefixLimitsIPv4Row" + id + "').remove();\">" + tr("Löschen") + "</button></td></tr>";
 
     $("#tableQpsPrefixLimitsIPv4").append(tableHtmlRows);
 }
@@ -2208,10 +2310,10 @@ function addQpsPrefixLimitsIPv6Row(prefix, udpLimit, tcpLimit) {
     var id = Math.floor(Math.random() * 10000);
 
     var tableHtmlRows = "<tr id=\"tableQpsPrefixLimitsIPv6Row" + id + "\"><td><input type=\"number\" class=\"form-control\" min=\"0\" max=\"128\" step=\"1\" placeholder=\"64\" value=\"" + htmlEncode(prefix) + "\"></td>";
-    tableHtmlRows += "<td><input type=\"number\" class=\"form-control\" min=\"0\" max=\"1000000\" step=\"1\" placeholder=\"0 = unbegrenzt\" value=\"" + htmlEncode(udpLimit) + "\"></td>";
-    tableHtmlRows += "<td><input type=\"number\" class=\"form-control\" min=\"0\" max=\"1000000\" step=\"1\" placeholder=\"0 = unbegrenzt\" value=\"" + htmlEncode(tcpLimit) + "\"></td>";
+    tableHtmlRows += "<td><input type=\"number\" class=\"form-control\" min=\"0\" max=\"1000000\" step=\"1\" placeholder=\"" + tr("0 = unbegrenzt") + "\" value=\"" + htmlEncode(udpLimit) + "\"></td>";
+    tableHtmlRows += "<td><input type=\"number\" class=\"form-control\" min=\"0\" max=\"1000000\" step=\"1\" placeholder=\"" + tr("0 = unbegrenzt") + "\" value=\"" + htmlEncode(tcpLimit) + "\"></td>";
 
-    tableHtmlRows += "<td><button type=\"button\" class=\"btn btn-danger\" onclick=\"$('#tableQpsPrefixLimitsIPv6Row" + id + "').remove();\">Löschen</button></td></tr>";
+    tableHtmlRows += "<td><button type=\"button\" class=\"btn btn-danger\" onclick=\"$('#tableQpsPrefixLimitsIPv6Row" + id + "').remove();\">" + tr("Löschen") + "</button></td></tr>";
 
     $("#tableQpsPrefixLimitsIPv6").append(tableHtmlRows);
 }
@@ -2236,7 +2338,7 @@ function checkForReverseProxy(responseJSON) {
 
 function checkForWebConsoleRedirection(responseJSON) {
     if (reverseProxyDetected)
-        return;
+        return false;
 
     if (location.protocol == "https:") {
         if (!responseJSON.response.webServiceEnableTls) {
@@ -2244,7 +2346,7 @@ function checkForWebConsoleRedirection(responseJSON) {
                 window.open("http://" + window.location.hostname + ":" + responseJSON.response.webServiceHttpPort, "_self");
             }, 2500);
 
-            return;
+            return true;
         }
 
         var currentPort = window.location.port;
@@ -2256,6 +2358,8 @@ function checkForWebConsoleRedirection(responseJSON) {
             setTimeout(function () {
                 window.open("https://" + window.location.hostname + ":" + responseJSON.response.webServiceTlsPort, "_self");
             }, 2500);
+
+            return true;
         }
     }
     else {
@@ -2264,7 +2368,7 @@ function checkForWebConsoleRedirection(responseJSON) {
                 window.open("https://" + window.location.hostname + ":" + responseJSON.response.webServiceTlsPort, "_self");
             }, 2500);
 
-            return;
+            return true;
         }
 
         var currentPort = window.location.port;
@@ -2276,12 +2380,16 @@ function checkForWebConsoleRedirection(responseJSON) {
             setTimeout(function () {
                 window.open("http://" + window.location.hostname + ":" + responseJSON.response.webServiceHttpPort, "_self");
             }, 2500);
+
+            return true;
         }
     }
+
+    return false;
 }
 
 function forceUpdateBlockLists() {
-    if (!confirm("Blocklisten jetzt herunterladen und aktualisieren?"))
+    if (!confirm(tr("Blocklisten jetzt herunterladen und aktualisieren?")))
         return;
 
     var btn = $("#btnUpdateBlockListsNow");
@@ -2293,9 +2401,9 @@ function forceUpdateBlockLists() {
         success: function (responseJSON) {
             btn.button("reset");
 
-            $("#lblBlockListNextUpdatedOn").text("wird gerade aktualisiert");
+            $("#lblBlockListNextUpdatedOn").text(tr("wird gerade aktualisiert"));
 
-            showAlert("success", "Blocklisten werden aktualisiert", "Die Aktualisierung der Blocklisten wurde gestartet.");
+            showAlert("success", tr("Blocklisten werden aktualisiert"), tr("Die Aktualisierung der Blocklisten wurde gestartet."));
         },
         error: function () {
             btn.button("reset");
@@ -2311,12 +2419,12 @@ function temporaryDisableBlockingNow() {
     var minutes = $("#txtTemporaryDisableBlockingMinutes").val();
 
     if ((minutes === null) || (minutes === "")) {
-        showAlert("warning", "Angabe fehlt", "Bitte angeben, wie viele Minuten die Blockierung pausieren soll.");
+        showAlert("warning", tr("Angabe fehlt"), tr("Bitte angeben, wie viele Minuten die Blockierung pausieren soll."));
         $("#txtTemporaryDisableBlockingMinutes").trigger("focus");
         return;
     }
 
-    if (!confirm("Blockierung für " + minutes + " Minute(n) pausieren?"))
+    if (!confirm(tr("Blockierung für {0} Minute(n) pausieren?", minutes)))
         return;
 
     var btn = $("#btnTemporaryDisableBlockingNow");
@@ -2329,10 +2437,10 @@ function temporaryDisableBlockingNow() {
             btn.button("reset");
 
             $("#chkEnableBlocking").prop("checked", false);
-            $("#lblTemporaryDisableBlockingTill").text(moment(responseJSON.response.temporaryDisableBlockingTill).local().format("DD.MM.YYYY HH:mm:ss"));
+            $("#lblTemporaryDisableBlockingTill").text(moment(responseJSON.response.temporaryDisableBlockingTill).local().format(tr("DD.MM.YYYY HH:mm:ss")));
             updateBlockingState();
 
-            showAlert("success", "Blockierung aus", "Die Blockierung ist pausiert für " + htmlEncode(minutes) + " Minute(n).");
+            showAlert("success", tr("Blockierung aus"), tr("Die Blockierung ist pausiert für {0} Minute(n).", minutes));
 
             setTimeout(updateBlockingState, 500);
         },
@@ -2355,7 +2463,7 @@ function forceUpdateClientBlockLists() {
         token: sessionData.token,
         success: function (responseJSON) {
             btn.button("reset");
-            showAlert("success", "Aktualisierung gestartet", "Die Client-Sperrlisten werden im Hintergrund heruntergeladen und neu geladen.");
+            showAlert("success", tr("Aktualisierung gestartet"), tr("Die Client-Sperrlisten werden im Hintergrund heruntergeladen und neu geladen."));
         },
         error: function () {
             btn.button("reset");
@@ -2404,14 +2512,14 @@ function dashboardBlockingOptionsOnClick() {
 }
 
 function enableBlocking() {
-    if (!confirm("Blockierung aktivieren?"))
+    if (!confirm(tr("Blockierung aktivieren?")))
         return;
 
     HTTPRequest({
         url: "api/settings/set?enableBlocking=true",
         token: sessionData.token,
         success: function (responseJSON) {
-            showAlert("success", "Blockierung aktiv", "Die Blockierung ist aktiviert.");
+            showAlert("success", tr("Blockierung aktiv"), tr("Die Blockierung ist aktiviert."));
         },
         invalidToken: function () {
             showPageLogin();
@@ -2420,14 +2528,14 @@ function enableBlocking() {
 }
 
 function disableBlocking() {
-    if (!confirm("Blockierung deaktivieren?"))
+    if (!confirm(tr("Blockierung deaktivieren?")))
         return;
 
     HTTPRequest({
         url: "api/settings/set?enableBlocking=false",
         token: sessionData.token,
         success: function (responseJSON) {
-            showAlert("success", "Blockierung aus", "Die Blockierung ist deaktiviert.");
+            showAlert("success", tr("Blockierung aus"), tr("Die Blockierung ist deaktiviert."));
         },
         invalidToken: function () {
             showPageLogin();
@@ -2436,14 +2544,14 @@ function disableBlocking() {
 }
 
 function temporaryDisableBlockingForMenu(minutes) {
-    if (!confirm("Blockierung für " + minutes + " Minute(n) pausieren?"))
+    if (!confirm(tr("Blockierung für {0} Minute(n) pausieren?", minutes)))
         return;
 
     HTTPRequest({
         url: "api/settings/temporaryDisableBlocking?minutes=" + minutes,
         token: sessionData.token,
         success: function (responseJSON) {
-            showAlert("success", "Blockierung aus", "Die Blockierung ist pausiert für " + htmlEncode(minutes) + " Minute(n).");
+            showAlert("success", tr("Blockierung aus"), tr("Die Blockierung ist pausiert für {0} Minute(n).", minutes));
         },
         invalidToken: function () {
             showPageLogin();
@@ -2483,7 +2591,7 @@ function backupSettings(objBtn) {
     var logs = $("#chkBackupLogs").prop("checked");
 
     if (!authConfig && !webServiceSettings && !dnsSettings && !logSettings && !zones && !allowedZones && !blockedZones && !blockLists && !apps && !stats && !logs) {
-        showAlert("warning", "Angabe fehlt", "Bitte mindestens einen Bestandteil für die Sicherung auswählen.", divBackupSettingsAlert);
+        showAlert("warning", tr("Angabe fehlt"), tr("Bitte mindestens einen Bestandteil für die Sicherung auswählen."), divBackupSettingsAlert);
         return;
     }
 
@@ -2499,7 +2607,7 @@ function backupSettings(objBtn) {
             window.open("api/settings/backup?token=" + responseJSON.response.token + "&authConfig=" + authConfig + "&webServiceSettings=" + webServiceSettings + "&dnsSettings=" + dnsSettings + "&logSettings=" + logSettings + "&zones=" + zones + "&allowedZones=" + allowedZones + "&blockedZones=" + blockedZones + "&blockLists=" + blockLists + "&apps=" + apps + "&stats=" + stats + "&logs=" + logs + "&ts=" + (new Date().getTime()), "_blank");
 
             $("#modalBackupSettings").modal("hide");
-            showAlert("success", "Gesichert", "Die Sicherung wurde erstellt.");
+            showAlert("success", tr("Gesichert"), tr("Die Sicherung wurde erstellt."));
         },
         error: function () {
             btn.button("reset");
@@ -2537,7 +2645,7 @@ function restoreSettings() {
     var fileBackupZip = $("#fileBackupZip");
 
     if (fileBackupZip[0].files.length === 0) {
-        showAlert("warning", "Angabe fehlt", "Bitte eine Sicherungsdatei (ZIP) auswählen.", divRestoreSettingsAlert);
+        showAlert("warning", tr("Angabe fehlt"), tr("Bitte eine Sicherungsdatei (ZIP) auswählen."), divRestoreSettingsAlert);
         fileBackupZip.trigger("focus");
         return;
     }
@@ -2557,7 +2665,7 @@ function restoreSettings() {
     var deleteExistingFiles = $("#chkDeleteExistingFiles").prop("checked");
 
     if (!authConfig && !webServiceSettings && !dnsSettings && !logSettings && !zones && !allowedZones && !blockedZones && !blockLists && !apps && !stats && !logs) {
-        showAlert("warning", "Angabe fehlt", "Bitte mindestens einen Bestandteil zum Wiederherstellen auswählen.", divRestoreSettingsAlert);
+        showAlert("warning", tr("Angabe fehlt"), tr("Bitte mindestens einen Bestandteil zum Wiederherstellen auswählen."), divRestoreSettingsAlert);
         return;
     }
 
@@ -2582,7 +2690,7 @@ function restoreSettings() {
             $("#modalRestoreSettings").modal("hide");
             btn.button("reset");
 
-            showAlert("success", "Wiederhergestellt", "Die Sicherung wurde wiederhergestellt.");
+            showAlert("success", tr("Wiederhergestellt"), tr("Die Sicherung wurde wiederhergestellt."));
 
             if (sessionData.info.dnsServerDomain == responseJSON.server)
                 checkForWebConsoleRedirection(responseJSON);
@@ -2707,7 +2815,7 @@ function formatIanaDate(value) {
     if (value == null)
         return null;
 
-    return moment(value).local().format("DD.MM.YYYY HH:mm");
+    return moment(value).local().format(tr("DD.MM.YYYY HH:mm"));
 }
 
 function renderIanaZoneStatus(target, status) {
@@ -2715,29 +2823,29 @@ function renderIanaZoneStatus(target, status) {
     var html;
 
     if (status.error != null) {
-        html = "<span class=\"iana-state iana-state-error\">Fehler</span> " + htmlEncode(status.error);
+        html = "<span class=\"iana-state iana-state-error\">" + tr("Fehler") + "</span> " + htmlEncode(status.error);
 
         if (status.active)
-            html += " Die zuletzt geprüfte Version ist weiter aktiv.";
+            html += " " + tr("Die zuletzt geprüfte Version ist weiter aktiv.");
     }
     else if (status.mode === "Disabled") {
-        html = "<span class=\"iana-state\">Aus</span>";
+        html = "<span class=\"iana-state\">" + tr("Aus") + "</span>";
     }
     else if (status.active) {
-        html = "<span class=\"iana-state iana-state-ok\">Aktiv</span> Seriennummer " + htmlEncode(String(status.serial)) + ", " + formatNumber(status.delegations) + " Delegationen, Quelle " + htmlEncode(status.source) + ". " + htmlEncode(status.message);
+        html = "<span class=\"iana-state iana-state-ok\">" + tr("Aktiv") + "</span> " + htmlEncode(tr("Seriennummer {0}, {1} Delegationen, Quelle {2}.", String(status.serial), formatNumber(status.delegations), status.source)) + " " + htmlEncode(status.message);
 
         if (status.validUntil != null)
-            html += " Signaturen gültig bis " + formatIanaDate(status.validUntil) + ".";
+            html += " " + tr("Signaturen gültig bis {0}.", formatIanaDate(status.validUntil));
     }
     else if (status.loadedOn == null) {
-        html = "<span class=\"iana-state\">Wird geladen</span> Die Zone wird kurz nach dem Start geladen und geprüft.";
+        html = "<span class=\"iana-state\">" + tr("Wird geladen") + "</span> " + tr("Die Zone wird kurz nach dem Start geladen und geprüft.");
     }
     else {
-        html = "<span class=\"iana-state iana-state-warning\">Nicht aktiv</span> " + htmlEncode(status.message == null ? "" : status.message);
+        html = "<span class=\"iana-state iana-state-warning\">" + tr("Nicht aktiv") + "</span> " + htmlEncode(status.message == null ? "" : status.message);
     }
 
     if (status.lastCheck != null)
-        html += " <span class=\"iana-checked\">Zuletzt geprüft " + formatIanaDate(status.lastCheck) + ".</span>";
+        html += " <span class=\"iana-checked\">" + tr("Zuletzt geprüft {0}.", formatIanaDate(status.lastCheck)) + "</span>";
 
     div.html(html);
 }
@@ -2761,16 +2869,16 @@ function renderIanaData(ianaData) {
     var html;
 
     if (anchors.error != null)
-        html = "<span class=\"iana-state iana-state-error\">Fehler</span> " + htmlEncode(anchors.error);
+        html = "<span class=\"iana-state iana-state-error\">" + tr("Fehler") + "</span> " + htmlEncode(anchors.error);
     else if (anchors.source == null)
-        html = "<span class=\"iana-state\">Wird geladen</span>";
+        html = "<span class=\"iana-state\">" + tr("Wird geladen") + "</span>";
     else
-        html = "<span class=\"iana-state iana-state-ok\">Aktiv</span> Quelle " + htmlEncode(anchors.source) + ". " + htmlEncode(anchors.message);
+        html = "<span class=\"iana-state iana-state-ok\">" + tr("Aktiv") + "</span> " + htmlEncode(tr("Quelle {0}.", anchors.source)) + " " + htmlEncode(anchors.message);
 
-    html += " Schlüssel: " + htmlEncode(anchors.keyTags.join(", ")) + ".";
+    html += " " + htmlEncode(tr("Schlüssel: {0}.", anchors.keyTags.join(", ")));
 
     if (anchors.lastCheck != null)
-        html += " <span class=\"iana-checked\">Zuletzt geprüft " + formatIanaDate(anchors.lastCheck) + ".</span>";
+        html += " <span class=\"iana-checked\">" + tr("Zuletzt geprüft {0}.", formatIanaDate(anchors.lastCheck)) + "</span>";
 
     $("#divIanaStatusTrustAnchors").html(html);
 }
@@ -2785,7 +2893,7 @@ function updateIanaData(objBtn) {
         success: function (responseJSON) {
             btn.button("reset");
             renderIanaData(responseJSON.response.ianaData);
-            showAlert("success", "Geprüft", "Root-Zone, arpa-Zone und Vertrauensanker wurden geprüft und, falls nötig, aktualisiert.");
+            showAlert("success", tr("Geprüft"), tr("Root-Zone, arpa-Zone und Vertrauensanker wurden geprüft und, falls nötig, aktualisiert."));
         },
         error: function () {
             btn.button("reset");
@@ -2800,11 +2908,11 @@ function showIanaDataEditor(objBtn, item) {
     var btn = $(objBtn);
     btn.button("loading");
 
-    var titles = { RootZone: "Eigene Root-Zone", ArpaZone: "Eigene arpa-Zone", TrustAnchors: "Eigene Vertrauensanker (Root-KSK)" };
+    var titles = { RootZone: tr("Eigene Root-Zone"), ArpaZone: tr("Eigene arpa-Zone"), TrustAnchors: tr("Eigene Vertrauensanker (Root-KSK)") };
     var hints = {
-        RootZone: "Zonendatei im Standardformat. Vorbelegt ist die aktuell verwendete Version. Nach dem Speichern wird sie geprüft und sofort verwendet; ist sie nicht gültig signiert, gelten ihre Top-Level-Domains als unsigniert, was mit eingeschalteter DNSSEC-Validierung zu Fehlern führen kann.",
-        ArpaZone: "Zonendatei der arpa-Zone im Standardformat. Nach dem Speichern wird sie geprüft und sofort verwendet.",
-        TrustAnchors: "Ein DS-Eintrag pro Zeile für die Root-Zone, zum Beispiel: . IN DS 20326 8 2 E06D44B8… Nach dem Speichern werden ausschließlich diese Anker für die DNSSEC-Validierung verwendet."
+        RootZone: tr("Zonendatei im Standardformat. Vorbelegt ist die aktuell verwendete Version. Nach dem Speichern wird sie geprüft und sofort verwendet; ist sie nicht gültig signiert, gelten ihre Top-Level-Domains als unsigniert, was mit eingeschalteter DNSSEC-Validierung zu Fehlern führen kann."),
+        ArpaZone: tr("Zonendatei der arpa-Zone im Standardformat. Nach dem Speichern wird sie geprüft und sofort verwendet."),
+        TrustAnchors: tr("Ein DS-Eintrag pro Zeile für die Root-Zone, zum Beispiel: . IN DS 20326 8 2 E06D44B8… Nach dem Speichern werden ausschließlich diese Anker für die DNSSEC-Validierung verwendet.")
     };
 
     HTTPRequest({
@@ -2835,7 +2943,7 @@ function saveIanaData() {
     var content = $("#txtIanaData").val();
 
     if (content.trim().length === 0) {
-        showAlert("warning", "Angabe fehlt", "Der Inhalt darf nicht leer sein.", divIanaDataAlert);
+        showAlert("warning", tr("Angabe fehlt"), tr("Der Inhalt darf nicht leer sein."), divIanaDataAlert);
         return;
     }
 
@@ -2851,7 +2959,7 @@ function saveIanaData() {
         success: function (responseJSON) {
             $("#modalIanaData").modal("hide");
             renderIanaData(responseJSON.response.ianaData);
-            showAlert("success", "Gespeichert", "Die eigene Version wurde gespeichert und wird jetzt verwendet.");
+            showAlert("success", tr("Gespeichert"), tr("Die eigene Version wurde gespeichert und wird jetzt verwendet."));
         },
         error: function () {
             btn.button("reset");

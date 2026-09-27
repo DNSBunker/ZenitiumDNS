@@ -287,6 +287,10 @@ html {
     -webkit-text-size-adjust: 100%;
 }
 
+html.i18n-pending body {
+    visibility: hidden;
+}
+
 body {
     margin: 0;
     min-height: 100vh;
@@ -844,6 +848,33 @@ body.signed-in #topbar {
     margin-top: 16px;
     font-size: 13px;
 }
+
+.login-language {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 8px;
+    margin-top: 16px;
+    color: var(--ink-3);
+    font-size: 13px;
+}
+
+    .login-language a.active {
+        color: var(--ink);
+        font-weight: 600;
+        text-decoration: none;
+        pointer-events: none;
+    }
+
+.language-choice {
+    display: flex;
+    gap: 12px;
+    margin-top: 18px;
+}
+
+    .language-choice .btn {
+        flex: 1 1 0;
+    }
 
 .login-sso {
     margin-top: 18px;

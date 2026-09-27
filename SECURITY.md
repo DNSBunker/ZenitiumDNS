@@ -1,11 +1,13 @@
-# Sicherheitsrichtlinie
+# Security policy
 
-## Unterstützte Versionen
+[Deutsche Version](SECURITY.de.md)
 
-Sicherheitsupdates gibt es nur für die jeweils neueste Version von ZenitiumDNS, also den Branch `master`.
+## Supported versions
 
-## Schwachstellen melden
+Security updates are only provided for the latest version of ZenitiumDNS, i.e. the `main` branch.
 
-Bitte melde Schwachstellen vertraulich an die Betreuer dieses Repositorys, zum Beispiel über die Funktion für vertrauliche Schwachstellenmeldungen der Hosting-Plattform. Eröffne für Sicherheitslücken keine öffentlichen Issues.
+## Reporting vulnerabilities
 
-Schwachstellen, die auch den ursprünglichen Technitium DNS Server betreffen, sollten zusätzlich an das Originalprojekt gemeldet werden, wie in dessen Sicherheitsrichtlinie beschrieben.
+Please report vulnerabilities confidentially to the maintainers of this repository, for example via the private vulnerability reporting feature of the hosting platform. Do not open public issues for security vulnerabilities.
+
+Vulnerabilities that also affect the original Technitium DNS Server should additionally be reported to the original project as described in its security policy.

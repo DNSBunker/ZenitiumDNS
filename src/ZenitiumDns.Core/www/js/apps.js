@@ -21,77 +21,77 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 var appConfigState = null;
 
 var APP_CONFIG_LABELS = {
-    enableBlocking: "Blockieren aktiviert",
-    blockingAnswerTtl: "TTL der Blockierantwort (Sekunden)",
-    blockListUrlUpdateIntervalHours: "Aktualisierung der Listen (Stunden)",
-    blockListUrlUpdateIntervalMinutes: "Aktualisierung der Listen (zusätzliche Minuten)",
-    localEndPointGroupMap: "Gruppe je lokalem Endpunkt",
-    networkGroupMap: "Gruppe je Client-Netz",
-    groups: "Gruppen",
-    name: "Name",
-    allowTxtBlockingReport: "Blockiergrund per TXT-Abfrage abrufbar",
-    blockAsNxDomain: "Als NXDOMAIN blockieren",
-    blockingAddresses: "Blockieradressen",
-    allowed: "Erlaubte Domains",
-    blocked: "Blockierte Domains",
-    allowListUrls: "URLs von Allowlisten",
-    blockListUrls: "URLs von Blocklisten",
-    allowedRegex: "Erlaubte Domains (regulärer Ausdruck)",
-    blockedRegex: "Blockierte Domains (regulärer Ausdruck)",
-    regexAllowListUrls: "URLs von Regex-Allowlisten",
-    regexBlockListUrls: "URLs von Regex-Blocklisten",
-    adblockListUrls: "URLs von Adblock-Listen",
+    enableBlocking: tr("Blockieren aktiviert"),
+    blockingAnswerTtl: tr("TTL der Blockierantwort (Sekunden)"),
+    blockListUrlUpdateIntervalHours: tr("Aktualisierung der Listen (Stunden)"),
+    blockListUrlUpdateIntervalMinutes: tr("Aktualisierung der Listen (zusätzliche Minuten)"),
+    localEndPointGroupMap: tr("Gruppe je lokalem Endpunkt"),
+    networkGroupMap: tr("Gruppe je Client-Netz"),
+    groups: tr("Gruppen"),
+    name: tr("Name"),
+    allowTxtBlockingReport: tr("Blockiergrund per TXT-Abfrage abrufbar"),
+    blockAsNxDomain: tr("Als NXDOMAIN blockieren"),
+    blockingAddresses: tr("Blockieradressen"),
+    allowed: tr("Erlaubte Domains"),
+    blocked: tr("Blockierte Domains"),
+    allowListUrls: tr("URLs von Allowlisten"),
+    blockListUrls: tr("URLs von Blocklisten"),
+    allowedRegex: tr("Erlaubte Domains (regulärer Ausdruck)"),
+    blockedRegex: tr("Blockierte Domains (regulärer Ausdruck)"),
+    regexAllowListUrls: tr("URLs von Regex-Allowlisten"),
+    regexBlockListUrls: tr("URLs von Regex-Blocklisten"),
+    adblockListUrls: tr("URLs von Adblock-Listen"),
     url: "URL",
-    appPreference: "Reihenfolge (kleiner wird zuerst ausgeführt)",
-    enableForwarding: "Weiterleitung aktiviert",
-    proxyServers: "Proxyserver",
-    type: "Typ",
-    proxyAddress: "Proxy-Adresse",
-    proxyPort: "Proxy-Port",
-    proxyUsername: "Benutzername",
-    proxyPassword: "Passwort",
-    forwarders: "Forwarder",
-    proxy: "Proxy",
-    dnssecValidation: "DNSSEC-Validierung",
-    forwarderProtocol: "Protokoll",
-    forwarderAddresses: "Adressen",
-    forwardings: "Weiterleitungen",
-    domains: "Domains",
-    adguardUpstreams: "AdGuard-Upstreams",
-    configFile: "Konfigurationsdatei",
-    enableDns64: "DNS64 aktiviert",
-    dns64PrefixMap: "DNS64-Präfix je IPv4-Netz",
-    excludedIpv6: "Ausgenommene IPv6-Netze",
-    enableProtection: "Schutz aktiviert",
-    bypassNetworks: "Ausgenommene Client-Netze",
-    privateNetworks: "Private Netze",
-    privateDomains: "Private Domains",
-    dropMalformedRequests: "Fehlerhafte Anfragen verwerfen",
-    allowedNetworks: "Erlaubte Client-Netze",
-    blockedNetworks: "Blockierte Client-Netze",
-    allowedLocalEndPoints: "Erlaubte lokale Endpunkte",
-    blockedQuestions: "Blockierte Anfragen",
-    blockZone: "Ganze Zone blockieren",
-    maxQueueSize: "Maximale Warteschlange",
-    enableEdnsLogging: "EDNS-Daten mitschreiben",
-    file: "Datei",
-    path: "Pfad",
-    enabled: "Aktiviert",
+    appPreference: tr("Reihenfolge (kleiner wird zuerst ausgeführt)"),
+    enableForwarding: tr("Weiterleitung aktiviert"),
+    proxyServers: tr("Proxyserver"),
+    type: tr("Typ"),
+    proxyAddress: tr("Proxy-Adresse"),
+    proxyPort: tr("Proxy-Port"),
+    proxyUsername: tr("Benutzername"),
+    proxyPassword: tr("Passwort"),
+    forwarders: tr("Forwarder"),
+    proxy: tr("Proxy"),
+    dnssecValidation: tr("DNSSEC-Validierung"),
+    forwarderProtocol: tr("Protokoll"),
+    forwarderAddresses: tr("Adressen"),
+    forwardings: tr("Weiterleitungen"),
+    domains: tr("Domains"),
+    adguardUpstreams: tr("AdGuard-Upstreams"),
+    configFile: tr("Konfigurationsdatei"),
+    enableDns64: tr("DNS64 aktiviert"),
+    dns64PrefixMap: tr("DNS64-Präfix je IPv4-Netz"),
+    excludedIpv6: tr("Ausgenommene IPv6-Netze"),
+    enableProtection: tr("Schutz aktiviert"),
+    bypassNetworks: tr("Ausgenommene Client-Netze"),
+    privateNetworks: tr("Private Netze"),
+    privateDomains: tr("Private Domains"),
+    dropMalformedRequests: tr("Fehlerhafte Anfragen verwerfen"),
+    allowedNetworks: tr("Erlaubte Client-Netze"),
+    blockedNetworks: tr("Blockierte Client-Netze"),
+    allowedLocalEndPoints: tr("Erlaubte lokale Endpunkte"),
+    blockedQuestions: tr("Blockierte Anfragen"),
+    blockZone: tr("Ganze Zone blockieren"),
+    maxQueueSize: tr("Maximale Warteschlange"),
+    enableEdnsLogging: tr("EDNS-Daten mitschreiben"),
+    file: tr("Datei"),
+    path: tr("Pfad"),
+    enabled: tr("Aktiviert"),
     http: "HTTP",
-    endpoint: "Endpunkt",
-    headers: "HTTP-Header",
+    endpoint: tr("Endpunkt"),
+    headers: tr("HTTP-Header"),
     syslog: "Syslog",
-    address: "Adresse",
-    port: "Port",
-    protocol: "Protokoll",
-    enableLogging: "Protokollierung aktiviert",
-    maxLogDays: "Aufbewahrung in Tagen (0 = unbegrenzt)",
-    maxLogRecords: "Maximale Einträge (0 = unbegrenzt)",
-    databaseName: "Datenbankname",
-    connectionString: "Verbindungszeichenfolge",
-    enableVacuum: "Datenbank regelmäßig verdichten (VACUUM)",
-    useInMemoryDb: "Datenbank nur im Arbeitsspeicher",
-    sqliteDbPath: "Pfad der SQLite-Datei"
+    address: tr("Adresse"),
+    port: tr("Port"),
+    protocol: tr("Protokoll"),
+    enableLogging: tr("Protokollierung aktiviert"),
+    maxLogDays: tr("Aufbewahrung in Tagen (0 = unbegrenzt)"),
+    maxLogRecords: tr("Maximale Einträge (0 = unbegrenzt)"),
+    databaseName: tr("Datenbankname"),
+    connectionString: tr("Verbindungszeichenfolge"),
+    enableVacuum: tr("Datenbank regelmäßig verdichten (VACUUM)"),
+    useInMemoryDb: tr("Datenbank nur im Arbeitsspeicher"),
+    sqliteDbPath: tr("Pfad der SQLite-Datei")
 };
 
 function refreshApps() {
@@ -140,37 +140,37 @@ function getAppRowHtml(app) {
     var dnsAppsTable = null;
 
     if (app.dnsApps.length > 0) {
-        dnsAppsTable = "<table class=\"table\" style=\"margin-bottom: 10px; background: transparent;\"><thead><th>Klassenpfad</th><th>Beschreibung</th></thead><tbody>";
+        dnsAppsTable = "<table class=\"table\" style=\"margin-bottom: 10px; background: transparent;\"><thead><th>" + tr("Klassenpfad") + "</th><th>" + tr("Beschreibung") + "</th></thead><tbody>";
 
         for (var j = 0; j < app.dnsApps.length; j++) {
             var labels = "";
             var description = null;
 
             if (app.dnsApps[j].isAppRecordRequestHandler) {
-                labels += "<span class=\"label label-info\" style=\"margin-right: 4px;\">APP-Eintrag</span>";
-                description = "<p>" + htmlEncode(app.dnsApps[j].description).replace(/\n/g, "<br />") + "</p>" + (app.dnsApps[j].recordDataTemplate == null ? "" : "<div><b>Vorlage für die Daten</b><pre>" + htmlEncode(app.dnsApps[j].recordDataTemplate) + "</pre></div>");
+                labels += "<span class=\"label label-info\" style=\"margin-right: 4px;\">" + tr("APP-Eintrag") + "</span>";
+                description = "<p>" + htmlEncode(app.dnsApps[j].description).replace(/\n/g, "<br />") + "</p>" + (app.dnsApps[j].recordDataTemplate == null ? "" : "<div><b>" + tr("Vorlage für die Daten") + "</b><pre>" + htmlEncode(app.dnsApps[j].recordDataTemplate) + "</pre></div>");
             }
 
             if (app.dnsApps[j].isRequestController)
-                labels += "<span class=\"label label-info\" style=\"margin-right: 4px;\">Zugriffskontrolle</span>";
+                labels += "<span class=\"label label-info\" style=\"margin-right: 4px;\">" + tr("Zugriffskontrolle") + "</span>";
 
             if (app.dnsApps[j].isAuthoritativeRequestHandler)
-                labels += "<span class=\"label label-info\" style=\"margin-right: 4px;\">Lokale Antworten</span>";
+                labels += "<span class=\"label label-info\" style=\"margin-right: 4px;\">" + tr("Lokale Antworten") + "</span>";
 
             if (app.dnsApps[j].isRequestBlockingHandler)
-                labels += "<span class=\"label label-info\" style=\"margin-right: 4px;\">Blockierung</span>";
+                labels += "<span class=\"label label-info\" style=\"margin-right: 4px;\">" + tr("Blockierung") + "</span>";
 
             if (app.dnsApps[j].isQueryLogger)
-                labels += "<span class=\"label label-info\" style=\"margin-right: 4px;\">Abfrage-Protokollierung</span>";
+                labels += "<span class=\"label label-info\" style=\"margin-right: 4px;\">" + tr("Abfrage-Protokollierung") + "</span>";
 
             if (app.dnsApps[j].isQueryLogs)
-                labels += "<span class=\"label label-info\" style=\"margin-right: 4px;\">Abfrageprotokoll</span>";
+                labels += "<span class=\"label label-info\" style=\"margin-right: 4px;\">" + tr("Abfrageprotokoll") + "</span>";
 
             if (app.dnsApps[j].isPostProcessor)
-                labels += "<span class=\"label label-info\" style=\"margin-right: 4px;\">Nachbearbeitung</span>";
+                labels += "<span class=\"label label-info\" style=\"margin-right: 4px;\">" + tr("Nachbearbeitung") + "</span>";
 
             if (labels == "")
-                labels = "<span class=\"label label-info\" style=\"margin-right: 4px;\">Allgemein</span>";
+                labels = "<span class=\"label label-info\" style=\"margin-right: 4px;\">" + tr("Allgemein") + "</span>";
 
             if (description == null)
                 description = htmlEncode(app.dnsApps[j].description).replace(/\n/g, "<br />");
@@ -182,21 +182,21 @@ function getAppRowHtml(app) {
     }
 
     var id = getAppRowId(name);
-    var tableHtmlRow = "<tr id=\"trApp" + id + "\"><td><div><span style=\"font-weight: bold; font-size: 16px;\">" + htmlEncode(getAppDisplayName(name)) + "</span>" + (getAppDisplayName(name) == name ? "" : " <span class=\"text-muted\" style=\"font-size: 12px;\">" + htmlEncode(name) + "</span>") + "<br /><span class=\"label label-primary\">Version " + htmlEncode(version) + "</span>" + (app.enabled ? " <span class=\"label label-success\">Aktiv</span>" : " <span class=\"label label-default\">Deaktiviert</span>") + "</div>";
+    var tableHtmlRow = "<tr id=\"trApp" + id + "\"><td><div><span style=\"font-weight: bold; font-size: 16px;\">" + htmlEncode(getAppDisplayName(name)) + "</span>" + (getAppDisplayName(name) == name ? "" : " <span class=\"text-muted\" style=\"font-size: 12px;\">" + htmlEncode(name) + "</span>") + "<br /><span class=\"label label-primary\">" + tr("Version {0}", htmlEncode(version)) + "</span>" + (app.enabled ? " <span class=\"label label-success\">" + tr("Aktiv") + "</span>" : " <span class=\"label label-default\">" + tr("Deaktiviert") + "</span>") + "</div>";
 
     if (app.description != null)
         tableHtmlRow += "<div style=\"margin-top: 10px;\">" + htmlEncode(app.description).replace(/\n/g, "<br />") + "</div>";
 
     if (dnsAppsTable != null) {
-        tableHtmlRow += "<div style=\"margin-top: 10px;\"><a href=\"#" + id + "\" class=\"collapsed\" data-toggle=\"collapse\" aria-expanded=\"false\" aria-controls=\"" + id + "\">Details <span class=\"glyphicon glyphicon-chevron-down\" style=\"font-size: 10px;\" aria-hidden=\"true\"></span></a>";
+        tableHtmlRow += "<div style=\"margin-top: 10px;\"><a href=\"#" + id + "\" class=\"collapsed\" data-toggle=\"collapse\" aria-expanded=\"false\" aria-controls=\"" + id + "\">" + tr("Details") + " <span class=\"glyphicon glyphicon-chevron-down\" style=\"font-size: 10px;\" aria-hidden=\"true\"></span></a>";
         tableHtmlRow += "<div id=\"" + id + "\" class=\"collapse\" aria-expanded=\"false\">";
         tableHtmlRow += dnsAppsTable;
         tableHtmlRow += "</div></div>";
     }
 
     tableHtmlRow += "</td>";
-    tableHtmlRow += "<td><button type=\"button\" data-id=\"" + id + "\" class=\"btn " + (app.enabled ? "btn-default" : "btn-primary") + "\" style=\"font-size: 12px; padding: 2px 0px; width: 108px; margin-bottom: 6px; display: block;\" data-name=\"" + htmlEncode(name) + "\" onclick=\"setAppEnabled(this, $(this).attr('data-name'), " + (app.enabled ? "false" : "true") + ");\" data-loading-text=\"Bitte warten...\">" + (app.enabled ? "Deaktivieren" : "Aktivieren") + "</button>";
-    tableHtmlRow += "<button type=\"button\" class=\"btn btn-default\" style=\"font-size: 12px; padding: 2px 0px; width: 108px; margin-bottom: 6px; display: block;\" data-name=\"" + htmlEncode(name) + "\" onclick=\"showAppConfigModal(this, $(this).attr('data-name'));\" data-loading-text=\"Lade...\">Konfigurieren</button></td></tr>";
+    tableHtmlRow += "<td><button type=\"button\" data-id=\"" + id + "\" class=\"btn " + (app.enabled ? "btn-default" : "btn-primary") + "\" style=\"font-size: 12px; padding: 2px 0px; width: 108px; margin-bottom: 6px; display: block;\" data-name=\"" + htmlEncode(name) + "\" onclick=\"setAppEnabled(this, $(this).attr('data-name'), " + (app.enabled ? "false" : "true") + ");\" data-loading-text=\"" + tr("Bitte warten...") + "\">" + (app.enabled ? tr("Deaktivieren") : tr("Aktivieren")) + "</button>";
+    tableHtmlRow += "<button type=\"button\" class=\"btn btn-default\" style=\"font-size: 12px; padding: 2px 0px; width: 108px; margin-bottom: 6px; display: block;\" data-name=\"" + htmlEncode(name) + "\" onclick=\"showAppConfigModal(this, $(this).attr('data-name'));\" data-loading-text=\"" + tr("Lade...") + "\">" + tr("Konfigurieren") + "</button></td></tr>";
 
     return tableHtmlRow;
 }
@@ -211,7 +211,7 @@ function setAppEnabled(objBtn, appName, enabled) {
         success: function (responseJSON) {
             $("#trApp" + btn.attr("data-id")).replaceWith(getAppRowHtml(responseJSON.response.updatedApp));
 
-            showAlert("success", enabled ? "App aktiviert" : "App deaktiviert", "Die App '" + appName + "' wurde " + (enabled ? "aktiviert." : "deaktiviert."));
+            showAlert("success", enabled ? tr("App aktiviert") : tr("App deaktiviert"), enabled ? tr("Die App '{0}' wurde aktiviert.", appName) : tr("Die App '{0}' wurde deaktiviert.", appName));
         },
         error: function () {
             btn.button("reset");
@@ -225,9 +225,9 @@ function setAppEnabled(objBtn, appName, enabled) {
 function updateAppsFooterCount() {
     var totalApps = $("#tableApps >tbody >tr").length;
     if (totalApps > 0)
-        $("#tableAppsFooter").html("<tr><td colspan=\"2\"><b>Apps gesamt: " + totalApps + "</b></td></tr>");
+        $("#tableAppsFooter").html("<tr><td colspan=\"2\"><b>" + tr("Apps gesamt: {0}", totalApps) + "</b></td></tr>");
     else
-        $("#tableAppsFooter").html("<tr><td colspan=\"2\" align=\"center\">Keine Apps vorhanden</td></tr>");
+        $("#tableAppsFooter").html("<tr><td colspan=\"2\" align=\"center\">" + tr("Keine Apps vorhanden") + "</td></tr>");
 }
 
 function getAppConfigLabel(key) {
@@ -341,7 +341,7 @@ function renderAppConfigPrimitiveInput(parent, key, value, onChange) {
             var number = Number(text);
 
             if ((text === "") || !isFinite(number)) {
-                markAppConfigError($(this), "Bitte eine Zahl eingeben.");
+                markAppConfigError($(this), tr("Bitte eine Zahl eingeben."));
             }
             else {
                 clearAppConfigError($(this));
@@ -358,7 +358,7 @@ function renderAppConfigPrimitiveInput(parent, key, value, onChange) {
     input = $("<input class=\"form-control\" spellcheck=\"false\">").attr("type", isSecret ? "password" : "text").val(value === null ? "" : value);
 
     if (nullable)
-        input.attr("placeholder", "leer");
+        input.attr("placeholder", tr("leer"));
 
     input.on("input", function () {
         var text = $(this).val();
@@ -391,7 +391,7 @@ function renderAppConfigPrimitiveList(parent, key, value) {
             for (var j = 0; j < lines.length; j++) {
                 var number = Number(lines[j]);
                 if (!isFinite(number)) {
-                    markAppConfigError($(this), "Jede Zeile muss eine Zahl sein.");
+                    markAppConfigError($(this), tr("Jede Zeile muss eine Zahl sein."));
                     return;
                 }
 
@@ -419,7 +419,7 @@ function renderAppConfigMap(parent, key, container) {
             nullable = true;
     }
 
-    var table = $("<table class=\"table table-condensed app-config-map\"><thead><tr><th>Schlüssel</th><th>Wert</th><th></th></tr></thead><tbody></tbody></table>");
+    var table = $("<table class=\"table table-condensed app-config-map\"><thead><tr><th>" + tr("Schlüssel") + "</th><th>" + tr("Wert") + "</th><th></th></tr></thead><tbody></tbody></table>");
     var tbody = table.find("tbody");
 
     function commit() {
@@ -452,7 +452,7 @@ function renderAppConfigMap(parent, key, container) {
                     commit();
                 }
                 catch (e) {
-                    markAppConfigError($(this), "Bitte gültiges JSON eingeben.");
+                    markAppConfigError($(this), tr("Bitte gültiges JSON eingeben."));
                 }
             });
         }
@@ -460,7 +460,7 @@ function renderAppConfigMap(parent, key, container) {
             valueInput = $("<input type=\"text\" class=\"form-control\" spellcheck=\"false\">").val(entry.value === null ? "" : entry.value);
 
             if (nullable)
-                valueInput.attr("placeholder", "leer");
+                valueInput.attr("placeholder", tr("leer"));
 
             valueInput.on("input", function () {
                 var text = $(this).val();
@@ -468,7 +468,7 @@ function renderAppConfigMap(parent, key, container) {
                 if (typeof entry.value === "number") {
                     var number = Number(text);
                     if ((text.trim() === "") || !isFinite(number)) {
-                        markAppConfigError($(this), "Bitte eine Zahl eingeben.");
+                        markAppConfigError($(this), tr("Bitte eine Zahl eingeben."));
                         return;
                     }
 
@@ -483,7 +483,7 @@ function renderAppConfigMap(parent, key, container) {
             });
         }
 
-        var removeButton = $("<button type=\"button\" class=\"btn btn-default btn-xs\">Entfernen</button>");
+        var removeButton = $("<button type=\"button\" class=\"btn btn-default btn-xs\">" + tr("Entfernen") + "</button>");
         removeButton.on("click", function () {
             entries.splice(entries.indexOf(entry), 1);
             row.find("input, textarea").each(function () { clearAppConfigError($(this)); });
@@ -500,7 +500,7 @@ function renderAppConfigMap(parent, key, container) {
     for (var k = 0; k < entries.length; k++)
         addRow(entries[k]);
 
-    var addButton = $("<button type=\"button\" class=\"btn btn-default btn-xs\">Zeile hinzufügen</button>");
+    var addButton = $("<button type=\"button\" class=\"btn btn-default btn-xs\">" + tr("Zeile hinzufügen") + "</button>");
     addButton.on("click", function () {
         var entry = { key: "", value: nullable ? null : "" };
         entries.push(entry);
@@ -543,7 +543,7 @@ function renderAppConfigObjectList(parent, key, container) {
 
         head.append($("<span class=\"app-config-item-title\"></span>").text(title));
 
-        var removeButton = $("<button type=\"button\" class=\"btn btn-default btn-xs\">Entfernen</button>");
+        var removeButton = $("<button type=\"button\" class=\"btn btn-default btn-xs\">" + tr("Entfernen") + "</button>");
         removeButton.on("click", function () {
             list.splice(index, 1);
             render();
@@ -557,7 +557,7 @@ function renderAppConfigObjectList(parent, key, container) {
         }
         else {
             var holder = { value: item };
-            var field = createAppConfigField("Wert", null);
+            var field = createAppConfigField(tr("Wert"), null);
             field.append(renderAppConfigPrimitiveInput(holder, "value", item, function (newValue) { list[index] = newValue; }));
             card.append(field);
         }
@@ -568,7 +568,7 @@ function renderAppConfigObjectList(parent, key, container) {
     render();
     container.append(items);
 
-    var addButton = $("<button type=\"button\" class=\"btn btn-default btn-xs\">Eintrag hinzufügen</button>");
+    var addButton = $("<button type=\"button\" class=\"btn btn-default btn-xs\">" + tr("Eintrag hinzufügen") + "</button>");
     addButton.on("click", function () {
         list.push(template === null ? "" : JSON.parse(JSON.stringify(template)));
         render();
@@ -584,7 +584,7 @@ function renderAppConfigProperty(parent, key, container) {
     if (Array.isArray(value)) {
         if (isAppConfigPrimitiveArray(value)) {
             field.append(renderAppConfigPrimitiveList(parent, key, value));
-            field.append($("<div class=\"app-config-hint\"></div>").text("Ein Eintrag pro Zeile."));
+            field.append($("<div class=\"app-config-hint\"></div>").text(tr("Ein Eintrag pro Zeile.")));
         }
         else {
             field.addClass("app-config-group");
@@ -630,12 +630,12 @@ function renderAppConfigForm() {
     appConfigState.errors = {};
 
     if (!isAppConfigPlainObject(appConfigState.model)) {
-        form.append($("<p class=\"app-config-empty\"></p>").text("Diese Konfiguration lässt sich nur im JSON-Modus bearbeiten."));
+        form.append($("<p class=\"app-config-empty\"></p>").text(tr("Diese Konfiguration lässt sich nur im JSON-Modus bearbeiten.")));
         return;
     }
 
     if (Object.keys(appConfigState.model).length === 0) {
-        form.append($("<p class=\"app-config-empty\"></p>").text("Die App hat keine Einstellungen."));
+        form.append($("<p class=\"app-config-empty\"></p>").text(tr("Die App hat keine Einstellungen.")));
         return;
     }
 
@@ -667,7 +667,7 @@ function setAppConfigMode(mode) {
 
     if (mode === "json") {
         if (Object.keys(appConfigState.errors).length > 0) {
-            showAlert("warning", "Ungültige Eingabe", "Bitte zuerst die markierten Felder korrigieren.", divAppConfigAlert);
+            showAlert("warning", tr("Ungültige Eingabe"), tr("Bitte zuerst die markierten Felder korrigieren."), divAppConfigAlert);
             return false;
         }
 
@@ -678,7 +678,7 @@ function setAppConfigMode(mode) {
     else {
         var parsed = parseAppConfigText($("#txtAppConfig").val());
         if (!parsed.ok) {
-            showAlert("warning", "Ungültiges JSON", "Das Formular lässt sich erst öffnen, wenn das JSON gültig ist: " + parsed.error, divAppConfigAlert);
+            showAlert("warning", tr("Ungültiges JSON"), tr("Das Formular lässt sich erst öffnen, wenn das JSON gültig ist: {0}", parsed.error), divAppConfigAlert);
             return false;
         }
 
@@ -741,7 +741,7 @@ function showAppConfigModal(objBtn, appName) {
                 setAppConfigMode("json");
 
                 if (!parsed.ok)
-                    showAlert("warning", "Kein gültiges JSON", "Die Konfiguration ist kein gültiges JSON und lässt sich nur im JSON-Modus bearbeiten: " + parsed.error, $("#divAppConfigAlert"));
+                    showAlert("warning", tr("Kein gültiges JSON"), tr("Die Konfiguration ist kein gültiges JSON und lässt sich nur im JSON-Modus bearbeiten: {0}", parsed.error), $("#divAppConfigAlert"));
             }
 
             $("#modalAppConfig").modal("show");
@@ -762,7 +762,7 @@ function saveAppConfig() {
     if (appConfigState.mode === "form") {
         var errorIds = Object.keys(appConfigState.errors);
         if (errorIds.length > 0) {
-            showAlert("warning", "Ungültige Eingabe", appConfigState.errors[errorIds[0]] + " Die betroffenen Felder sind markiert.", divAppConfigAlert);
+            showAlert("warning", tr("Ungültige Eingabe"), appConfigState.errors[errorIds[0]] + " " + tr("Die betroffenen Felder sind markiert."), divAppConfigAlert);
             $("#divAppConfigForm .has-error input, #divAppConfigForm .has-error textarea").first().trigger("focus");
             return;
         }
@@ -774,7 +774,7 @@ function saveAppConfig() {
 
         var parsed = parseAppConfigText(config);
         if (!parsed.ok) {
-            showAlert("warning", "Ungültiges JSON", "Die Konfiguration wurde nicht gespeichert: " + parsed.error, divAppConfigAlert);
+            showAlert("warning", tr("Ungültiges JSON"), tr("Die Konfiguration wurde nicht gespeichert: {0}", parsed.error), divAppConfigAlert);
             $("#txtAppConfig").trigger("focus");
             return;
         }
@@ -793,7 +793,7 @@ function saveAppConfig() {
         success: function (responseJSON) {
             $("#modalAppConfig").modal("hide");
 
-            showAlert("success", "Konfiguration gespeichert", "Die Konfiguration der App '" + appName + "' wurde gespeichert und neu geladen.");
+            showAlert("success", tr("Konfiguration gespeichert"), tr("Die Konfiguration der App '{0}' wurde gespeichert und neu geladen.", appName));
         },
         error: function () {
             btn.button("reset");

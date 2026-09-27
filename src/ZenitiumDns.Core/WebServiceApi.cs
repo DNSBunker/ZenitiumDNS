@@ -18,6 +18,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 */
 
+using ZenitiumDns.ApplicationCommon;
 using ZenitiumDns.Core.Auth;
 using ZenitiumDns.Core.Dns;
 using Microsoft.AspNetCore.Http;
@@ -424,7 +425,7 @@ namespace ZenitiumDns.Core
                 if (dnssecErrorMessage is not null)
                 {
                     if (thisServerWithoutDnssec)
-                        dnssecErrorMessage = "Die DNSSEC-Validierung ist in den Einstellungen dieses Servers deaktiviert. Er fragt dann ohne DNSSEC an und liefert keine Signaturen (RRSIG) mit, deshalb kann der DNS-Client die Antwort nicht prüfen. Validierung unter Einstellungen > Resolver > DNSSEC aktivieren oder ohne DNSSEC-Prüfung abfragen. Meldung des DNS-Clients: " + dnssecErrorMessage;
+                        dnssecErrorMessage = Lang.T("Die DNSSEC-Validierung ist in den Einstellungen dieses Servers deaktiviert. Er fragt dann ohne DNSSEC an und liefert keine Signaturen (RRSIG) mit, deshalb kann der DNS-Client die Antwort nicht prüfen. Validierung unter Einstellungen > Resolver > DNSSEC aktivieren oder ohne DNSSEC-Prüfung abfragen. Meldung des DNS-Clients: ", "DNSSEC validation is disabled in the settings of this server. It then queries without DNSSEC and returns no signatures (RRSIG), so the DNS client cannot verify the answer. Enable validation under Settings > Resolver > DNSSEC or query without DNSSEC validation. Message from the DNS client: ") + dnssecErrorMessage;
 
                     jsonWriter.WriteString("warningMessage", dnssecErrorMessage);
                 }

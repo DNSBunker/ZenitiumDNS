@@ -1,5 +1,19 @@
 # ZenitiumDNS Änderungsprotokoll
 
+## ZenitiumDNS 15.5.1 (Paket 15.5.1-6)
+Veröffentlicht: 27. September 2026
+
+### Neu
+- Vollständige englische Fassung: Weboberfläche, Selbsttest, Meldungen des Servers und des Wächters, Status von Root-Zone und Vertrauensankern, App-Beschreibungen und -Fehlermeldungen, die Startseite für DNS-over-HTTPS sowie die Ausgaben des Installers gibt es auf Deutsch und Englisch.
+- Die Sprache wird nach der Installation beim ersten Anmelden in einem Dialog gewählt und gilt für alle Benutzer des Servers. Umstellen lässt sie sich jederzeit unter Einstellungen > Server > Sprache; die Seite lädt danach in der neuen Sprache. Bis zur Auswahl richtet sich die Anmeldeseite nach der Browsersprache und bietet einen Umschalter Deutsch/Englisch.
+- Datums- und Zahlenformate folgen der Sprache (Englisch: `2026-09-27 18:08`, `1,234`).
+- Die englischen Texte der Weboberfläche stehen in `www/lang/en.json`. `tools/i18n.py` meldet fehlende Übersetzungen und prüft, ob Markup und Platzhalter übereinstimmen.
+
+### Weitere Änderungen
+- Neues Repository https://github.com/DNSBunker/ZenitiumDNS. Die Update-Prüfung fragt dessen Releases ab.
+- README, README.Debian und die Dokumentation in `docs` gibt es auf Englisch und Deutsch, die Paketbeschreibung ist englisch.
+- Konfigurationsformat Version 6 für die Weboberfläche (Sprache). Ältere Versionen von ZenitiumDNS können es nicht lesen. Bestehende Installationen werden beim Update auf Deutsch gesetzt und fragen nicht erneut nach der Sprache.
+
 ## ZenitiumDNS 15.5.1 (Paket 15.5.1-5)
 Veröffentlicht: 27. September 2026
 
@@ -187,7 +201,7 @@ Veröffentlicht: 26. September 2026
 - Docker-Unterstützung entfernt: Dockerfile, Compose-Datei und die Umgebungsvariablen zur Erstkonfiguration, einschließlich SSO, LDAP und `DNS_SERVER_ADMIN_PASSWORD`. `DNS_SERVER_ADMIN_PASSWORD_FILE` bleibt erhalten.
 - Der Quellcode enthält keine Kommentare mehr, nur die Lizenzköpfe bleiben erhalten.
 - Die DNS-Einstellungen werden im Format Version 8 gespeichert, das ältere Builds nicht lesen können.
-- Quellcode und Releases: https://github.com/DNSBunker/ZenitiumDNS-DE
+- Quellcode und Releases: https://github.com/DNSBunker/ZenitiumDNS
 
 ## ZenitiumDNS 15.5
 Veröffentlicht: 26. September 2026

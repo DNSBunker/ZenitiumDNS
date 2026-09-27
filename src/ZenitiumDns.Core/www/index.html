@@ -29,6 +29,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
     <title>ZenitiumDNS</title>
 
+    <script src="lang.js"></script>
+    <script src="js/i18n.js"></script>
     <script src="js/jquery.min.js"></script>
 
     <link href="css/bootstrap.min.css" rel="stylesheet">
@@ -151,6 +153,13 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
                                 <a href="#" data-toggle="modal" data-target="#modalForgotPassword">Passwort vergessen?</a>
                             </div>
 
+                            <div id="divLoginLanguage" class="login-language" translate="no" style="display: none;">
+                                <span class="fa fa-globe" aria-hidden="true"></span>
+                                <a href="#" data-language="de" onclick="setLoginLanguage('de'); return false;" lang="de">Deutsch</a>
+                                <span aria-hidden="true">·</span>
+                                <a href="#" data-language="en" onclick="setLoginLanguage('en'); return false;" lang="en">English</a>
+                            </div>
+
                             <div id="divLoginSso" class="login-sso" style="display: none;">
                                 oder anmelden mit
                                 <button type="button" class="btn btn-default" onclick="window.location='sso/login';"><img width="16" height="16" src="img/oidc.png" alt="" /> OpenID Connect</button>
@@ -260,7 +269,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
                                             <div class="panel-heading panel-heading-flex">
                                                 <span>Anfragen im Zeitverlauf</span>
                                                 <div class="btn-group btn-group-xs" data-toggle="buttons" id="divMainChartView">
-                                                    <label class="btn btn-default active"><input type="radio" name="rdMainChartView" value="overview" autocomplete="off" checked> Übersicht</label>
+                                                    <label class="btn btn-default active"><input type="radio" name="rdMainChartView" value="overview" autocomplete="off" checked> <span data-i18n-key="Übersicht (Diagrammansicht)">Übersicht</span></label>
                                                     <label class="btn btn-default"><input type="radio" name="rdMainChartView" value="responses" autocomplete="off"> Antworten</label>
                                                     <label class="btn btn-default"><input type="radio" name="rdMainChartView" value="sources" autocomplete="off"> Beantwortet durch</label>
                                                     <label class="btn btn-default"><input type="radio" name="rdMainChartView" value="clients" autocomplete="off"> Clients</label>
@@ -306,7 +315,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
                                                 <div class="panel-body"><div class="chart-container chart-doughnut"><canvas id="canvasDashboardPie2"></canvas></div></div>
                                             </div>
                                             <div class="panel panel-default">
-                                                <div class="panel-heading">Protokolle</div>
+                                                <div class="panel-heading" data-i18n-key="Protokolle (Übertragungsprotokolle)">Protokolle</div>
                                                 <div class="panel-body"><div class="chart-container chart-doughnut"><canvas id="canvasDashboardPie3"></canvas></div></div>
                                             </div>
                                         </div>
@@ -372,7 +381,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
                                         <div id="divLiveSystem" class="live-system" style="display: none;">
                                             <div class="live-system-head">
                                                 <h3 class="live-system-title">Interne Prozesse</h3>
-                                                <span class="live-system-note">Sekündlich gemessen, die letzten 5 Minuten. Abschaltbar unter Einstellungen &gt; Allgemein.</span>
+                                                <span class="live-system-note">Sekündlich gemessen, die letzten 5 Minuten. Abschaltbar unter Einstellungen &gt; Server.</span>
                                             </div>
                                             <div class="live-grid">
                                                 <div class="panel panel-default live-panel">
@@ -1148,6 +1157,20 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
                                                 <div class="col-md-9">
                                                     <div class="tab-content settings-content">
                                 <div id="settingsTabPaneGeneral" role="tabpanel" class="tab-pane active">
+                                <div class="well well-sm form-horizontal settings-section" id="divSettingsGeneralLanguage">
+                                    <h4 class="settings-section-title">Sprache</h4>
+                                <div class="form-group">
+                                    <label for="optLanguage" class="col-sm-3 control-label">Sprache der Oberfläche</label>
+                                    <div class="col-sm-6">
+                                        <select id="optLanguage" class="form-control" translate="no">
+                                            <option value="de" lang="de">Deutsch</option>
+                                            <option value="en" lang="en">English</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-sm-offset-3 col-sm-8 help-block-text">Gilt für alle Benutzer: Weboberfläche, Selbsttest, Meldungen des Servers, App-Beschreibungen und die Startseite für DNS-over-HTTPS. Nach dem Speichern wird die Seite in der neuen Sprache geladen.</div>
+                                </div>
+                                </div>
+
                                 <div class="well well-sm form-horizontal settings-section" id="divSettingsGeneralLocalParameters">
                                     <h4 class="settings-section-title">Identität & Erreichbarkeit</h4>
                                     <p class="settings-section-desc">Wie sich der Server nennt und auf welchen Adressen er Anfragen annimmt.</p>
@@ -3370,6 +3393,25 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
                 </div>
             </div>
         </form>
+    </div>
+
+    <div id="modalChooseLanguage" class="modal fade" tabindex="-1" role="dialog" data-backdrop="static" data-keyboard="false" translate="no">
+        <div class="modal-dialog" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h4 class="modal-title"><span class="fa fa-globe" aria-hidden="true"></span> <span lang="de">Sprache wählen</span> · <span lang="en">Choose your language</span></h4>
+                </div>
+                <div class="modal-body">
+                    <div id="divChooseLanguageAlert"></div>
+                    <p lang="de">Die Oberfläche von ZenitiumDNS gibt es auf Deutsch und Englisch. Die Sprache gilt für alle Benutzer dieses Servers und lässt sich jederzeit unter Einstellungen &gt; Server ändern.</p>
+                    <p lang="en">ZenitiumDNS is available in German and English. The language applies to all users of this server and can be changed at any time under Settings &gt; Server.</p>
+                    <div class="language-choice">
+                        <button type="button" class="btn btn-default btn-lg" data-language="de" onclick="chooseLanguage(this, 'de');" data-loading-text="…" lang="de">Deutsch</button>
+                        <button type="button" class="btn btn-default btn-lg" data-language="en" onclick="chooseLanguage(this, 'en');" data-loading-text="…" lang="en">English</button>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 
     <div id="modalChangeTheme" class="modal fade" tabindex="-1" role="dialog">

@@ -12,6 +12,12 @@
 	</PropertyGroup>
 
 	<ItemGroup>
+		<AssemblyMetadata Include="DescriptionEn">
+			<Value>Writes all incoming DNS queries and their responses to an SQLite database that can be searched under Logs in the web interface.\n\nNote: Throughput depends on the disk the database file is stored on. The app is not suitable for very high load (more than 20,000 queries per second).\n\nWarning: With "Compact the database regularly (VACUUM)" the app runs VACUUM after deleting old records. This increases disk load and can block the app for a while. Best enable it only temporarily to shrink the file.</Value>
+		</AssemblyMetadata>
+	</ItemGroup>
+
+	<ItemGroup>
 		<PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.12" />
 	</ItemGroup>
 

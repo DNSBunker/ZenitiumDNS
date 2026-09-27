@@ -18,6 +18,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 */
 
+using ZenitiumDns.ApplicationCommon;
 using ZenitiumDns.Core.Auth;
 using ZenitiumDns.Core.Dns;
 using Microsoft.AspNetCore.Http;
@@ -263,6 +264,8 @@ namespace ZenitiumDns.Core
                 }
 
                 jsonWriter.WriteString("webServiceRealIpHeader", _dnsWebService._webServiceRealIpHeader);
+                jsonWriter.WriteString("language", _dnsWebService._webServiceLanguage ?? Lang.Code);
+                jsonWriter.WriteBoolean("languageChosen", _dnsWebService._webServiceLanguage is not null);
                 jsonWriter.WriteString("webServiceCspFrameAncestorsHeader", _dnsWebService._webServiceCspFrameAncestorsHeader);
                 jsonWriter.WriteString("webServiceTlsCertificatePath", _dnsWebService._webServiceTlsCertificatePath);
                 jsonWriter.WriteString("webServiceTlsCertificatePassword", string.IsNullOrEmpty(_dnsWebService._webServiceTlsCertificatePath) ? null : "************");
@@ -976,6 +979,14 @@ namespace ZenitiumDns.Core
                                 throw new ArgumentOutOfRangeException("WebServiceReverseProxyAddresses", "Web Service Reverse Proxy Addresses list cannot have more than 255 entries.");
                             else
                                 _dnsWebService._webServiceReverseProxyAddresses = webServiceReverseProxyAddresses;
+                        }
+
+                        if (request.TryQueryOrForm("language", out string language))
+                        {
+                            if (!Lang.IsSupported(language))
+                                throw new ArgumentException("Language must be 'de' or 'en'.", nameof(language));
+
+                            _dnsWebService.SetLanguage(language);
                         }
 
                         if (request.TryQueryOrForm("webServiceRealIpHeader", out string webServiceRealIpHeader))

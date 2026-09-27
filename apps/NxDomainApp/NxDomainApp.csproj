@@ -10,6 +10,12 @@
 	</PropertyGroup>
 
 	<ItemGroup>
+		<AssemblyMetadata Include="DescriptionEn">
+			<Value>Blocks the configured domains with an NXDOMAIN response.</Value>
+		</AssemblyMetadata>
+	</ItemGroup>
+
+	<ItemGroup>
 		<ProjectReference Include="..\..\src\ZenitiumDns.ApplicationCommon\ZenitiumDns.ApplicationCommon.csproj">
 			<Private>false</Private>
 		</ProjectReference>

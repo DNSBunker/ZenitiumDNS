@@ -19,7 +19,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
 function flushDnsCache(objBtn) {
-    if (!confirm("Den gesamten Cache leeren? Alle Antworten müssen danach neu aufgelöst werden."))
+    if (!confirm(tr("Den gesamten Cache leeren? Alle Antworten müssen danach neu aufgelöst werden.")))
         return;
 
     var btn = $(objBtn);
@@ -29,13 +29,13 @@ function flushDnsCache(objBtn) {
         url: "api/cache/flush",
         token: sessionData.token,
         success: function (responseJSON) {
-            $("#lstCachedZones").html("<div class=\"zone zone-action\"><a href=\"#\" onclick=\"refreshCachedZonesList(); return false;\"><span class=\"fa fa-refresh fa-fw\" aria-hidden=\"true\"></span>Aktualisieren</a></div>");
+            $("#lstCachedZones").html("<div class=\"zone zone-action\"><a href=\"#\" onclick=\"refreshCachedZonesList(); return false;\"><span class=\"fa fa-refresh fa-fw\" aria-hidden=\"true\"></span>" + tr("Aktualisieren") + "</a></div>");
             $("#txtCachedZoneViewerTitle").text("<ROOT>");
             $("#btnDeleteCachedZone").hide();
             $("#preCachedZoneViewerBody").hide();
 
             btn.button("reset");
-            showAlert("success", "Geleert", "Der Cache wurde geleert.");
+            showAlert("success", tr("Geleert"), tr("Der Cache wurde geleert."));
         },
         error: function () {
             btn.button("reset");
@@ -50,7 +50,7 @@ function flushDnsCache(objBtn) {
 function deleteCachedZone() {
     var domain = $("#txtCachedZoneViewerTitle").text();
 
-    if (!confirm("Zwischengespeicherte Daten für '" + domain + "' löschen?"))
+    if (!confirm(tr("Zwischengespeicherte Daten für '{0}' löschen?", domain)))
         return;
 
     var btn = $("#btnDeleteCachedZone");
@@ -63,7 +63,7 @@ function deleteCachedZone() {
             refreshCachedZonesList(getParentDomain(domain), "up");
 
             btn.button("reset");
-            showAlert("success", "Gelöscht", "Die zwischengespeicherten Daten für '" + domain + "' wurde gelöscht.");
+            showAlert("success", tr("Gelöscht"), tr("Die zwischengespeicherten Daten für '{0}' wurde gelöscht.", domain));
         },
         error: function () {
             btn.button("reset");
@@ -116,12 +116,12 @@ function refreshCachedZonesList(domain, direction) {
             var newDomain = responseJSON.response.domain;
             var zones = responseJSON.response.zones;
 
-            var list = "<div class=\"zone zone-action\"><a href=\"#\" onclick=\"refreshCachedZonesList(" + jsArg(newDomain) + "); return false;\"><span class=\"fa fa-refresh fa-fw\" aria-hidden=\"true\"></span>Aktualisieren</a></div>";
+            var list = "<div class=\"zone zone-action\"><a href=\"#\" onclick=\"refreshCachedZonesList(" + jsArg(newDomain) + "); return false;\"><span class=\"fa fa-refresh fa-fw\" aria-hidden=\"true\"></span>" + tr("Aktualisieren") + "</a></div>";
 
             var parentDomain = getParentDomain(newDomain);
 
             if (parentDomain != null)
-                list += "<div class=\"zone zone-action\"><a href=\"#\" onclick=\"refreshCachedZonesList(" + jsArg(parentDomain) + ", 'up'); return false;\"><span class=\"fa fa-level-up fa-fw\" aria-hidden=\"true\"></span>Eine Ebene höher</a></div>";
+                list += "<div class=\"zone zone-action\"><a href=\"#\" onclick=\"refreshCachedZonesList(" + jsArg(parentDomain) + ", 'up'); return false;\"><span class=\"fa fa-level-up fa-fw\" aria-hidden=\"true\"></span>" + tr("Eine Ebene höher") + "</a></div>";
 
             for (var i = 0; i < zones.length; i++) {
                 var zoneName = htmlEncode(zones[i]);
@@ -155,7 +155,7 @@ function refreshCachedZonesList(domain, direction) {
             showPageLogin();
         },
         error: function () {
-            lstCachedZones.html("<div class=\"zone zone-action\"><a href=\"#\" onclick=\"refreshCachedZonesList(" + jsArg(domain) + "); return false;\"><span class=\"fa fa-refresh fa-fw\" aria-hidden=\"true\"></span>Aktualisieren</a></div>");
+            lstCachedZones.html("<div class=\"zone zone-action\"><a href=\"#\" onclick=\"refreshCachedZonesList(" + jsArg(domain) + "); return false;\"><span class=\"fa fa-refresh fa-fw\" aria-hidden=\"true\"></span>" + tr("Aktualisieren") + "</a></div>");
 
             divCachedZoneViewer.show();
         },
@@ -167,7 +167,7 @@ function allowZone() {
     var domain = $("#txtAllowZone").val();
 
     if ((domain === null) || (domain === "")) {
-        showAlert("warning", "Angabe fehlt", "Bitte die zu erlaubende Domain eingeben.");
+        showAlert("warning", tr("Angabe fehlt"), tr("Bitte die zu erlaubende Domain eingeben."));
         $("#txtAllowZone").trigger("focus");
         return;
     }
@@ -184,7 +184,7 @@ function allowZone() {
             $("#txtAllowZone").val("");
             btn.button("reset");
 
-            showAlert("success", "Erlaubt", "Domain '" + domain + "' wird nicht mehr blockiert.");
+            showAlert("success", tr("Erlaubt"), tr("Domain '{0}' wird nicht mehr blockiert.", domain));
         },
         error: function () {
             btn.button("reset");
@@ -199,7 +199,7 @@ function allowZone() {
 function deleteAllowedZone() {
     var domain = $("#txtAllowedZoneViewerTitle").text();
 
-    if (!confirm("Freigabe für '" + domain + "' entfernen?"))
+    if (!confirm(tr("Freigabe für '{0}' entfernen?", domain)))
         return;
 
     var btn = $("#btnDeleteAllowedZone");
@@ -212,7 +212,7 @@ function deleteAllowedZone() {
             refreshAllowedZonesList(getParentDomain(domain), "up", true);
 
             btn.button("reset");
-            showAlert("success", "Gelöscht", "Domain '" + domain + "' ist nicht mehr erlaubt.");
+            showAlert("success", tr("Gelöscht"), tr("Domain '{0}' ist nicht mehr erlaubt.", domain));
         },
         error: function () {
             btn.button("reset");
@@ -225,7 +225,7 @@ function deleteAllowedZone() {
 }
 
 function flushAllowedZone() {
-    if (!confirm("Alle erlaubten Domains löschen?"))
+    if (!confirm(tr("Alle erlaubten Domains löschen?")))
         return;
 
     var btn = $("#btnFlushAllowedZone");
@@ -235,13 +235,13 @@ function flushAllowedZone() {
         url: "api/allowed/flush",
         token: sessionData.token,
         success: function (responseJSON) {
-            $("#lstAllowedZones").html("<div class=\"zone zone-action\"><a href=\"#\" onclick=\"refreshAllowedZonesList(); return false;\"><span class=\"fa fa-refresh fa-fw\" aria-hidden=\"true\"></span>Aktualisieren</a></div>");
+            $("#lstAllowedZones").html("<div class=\"zone zone-action\"><a href=\"#\" onclick=\"refreshAllowedZonesList(); return false;\"><span class=\"fa fa-refresh fa-fw\" aria-hidden=\"true\"></span>" + tr("Aktualisieren") + "</a></div>");
             $("#txtAllowedZoneViewerTitle").text("<ROOT>");
             $("#btnDeleteAllowedZone").hide();
             $("#preAllowedZoneViewerBody").hide();
 
             btn.button("reset");
-            showAlert("success", "Geleert", "Alle erlaubten Domains wurden gelöscht.");
+            showAlert("success", tr("Geleert"), tr("Alle erlaubten Domains wurden gelöscht."));
         },
         error: function () {
             btn.button("reset");
@@ -277,12 +277,12 @@ function refreshAllowedZonesList(domain, direction, fromPrimary) {
             var newDomain = responseJSON.response.domain;
             var zones = responseJSON.response.zones;
 
-            var list = "<div class=\"zone zone-action\"><a href=\"#\" onclick=\"refreshAllowedZonesList(" + jsArg(newDomain) + "); return false;\"><span class=\"fa fa-refresh fa-fw\" aria-hidden=\"true\"></span>Aktualisieren</a></div>";
+            var list = "<div class=\"zone zone-action\"><a href=\"#\" onclick=\"refreshAllowedZonesList(" + jsArg(newDomain) + "); return false;\"><span class=\"fa fa-refresh fa-fw\" aria-hidden=\"true\"></span>" + tr("Aktualisieren") + "</a></div>";
 
             var parentDomain = getParentDomain(newDomain);
 
             if (parentDomain != null)
-                list += "<div class=\"zone zone-action\"><a href=\"#\" onclick=\"refreshAllowedZonesList(" + jsArg(parentDomain) + ", 'up'); return false;\"><span class=\"fa fa-level-up fa-fw\" aria-hidden=\"true\"></span>Eine Ebene höher</a></div>";
+                list += "<div class=\"zone zone-action\"><a href=\"#\" onclick=\"refreshAllowedZonesList(" + jsArg(parentDomain) + ", 'up'); return false;\"><span class=\"fa fa-level-up fa-fw\" aria-hidden=\"true\"></span>" + tr("Eine Ebene höher") + "</a></div>";
 
             for (var i = 0; i < zones.length; i++) {
                 var zoneName = htmlEncode(zones[i]);
@@ -318,7 +318,7 @@ function refreshAllowedZonesList(domain, direction, fromPrimary) {
             showPageLogin();
         },
         error: function () {
-            lstAllowedZones.html("<div class=\"zone zone-action\"><a href=\"#\" onclick=\"refreshAllowedZonesList(" + jsArg(domain) + "); return false;\"><span class=\"fa fa-refresh fa-fw\" aria-hidden=\"true\"></span>Aktualisieren</a></div>");
+            lstAllowedZones.html("<div class=\"zone zone-action\"><a href=\"#\" onclick=\"refreshAllowedZonesList(" + jsArg(domain) + "); return false;\"><span class=\"fa fa-refresh fa-fw\" aria-hidden=\"true\"></span>" + tr("Aktualisieren") + "</a></div>");
 
             divAllowedZoneViewer.show();
         },
@@ -330,7 +330,7 @@ function blockZone() {
     var domain = $("#txtBlockZone").val();
 
     if ((domain === null) || (domain === "")) {
-        showAlert("warning", "Angabe fehlt", "Bitte die zu blockierende Domain eingeben.");
+        showAlert("warning", tr("Angabe fehlt"), tr("Bitte die zu blockierende Domain eingeben."));
         $("#txtBlockZone").trigger("focus");
         return;
     }
@@ -347,7 +347,7 @@ function blockZone() {
             $("#txtBlockZone").val("");
             btn.button("reset");
 
-            showAlert("success", "Blockiert", "Domain '" + domain + "' wird jetzt blockiert.");
+            showAlert("success", tr("Blockiert"), tr("Domain '{0}' wird jetzt blockiert.", domain));
         },
         error: function () {
             btn.button("reset");
@@ -362,7 +362,7 @@ function blockZone() {
 function deleteBlockedZone() {
     var domain = $("#txtBlockedZoneViewerTitle").text();
 
-    if (!confirm("Blockierung für '" + domain + "' aufheben?"))
+    if (!confirm(tr("Blockierung für '{0}' aufheben?", domain)))
         return;
 
     var btn = $("#btnDeleteBlockedZone");
@@ -375,7 +375,7 @@ function deleteBlockedZone() {
             refreshBlockedZonesList(getParentDomain(domain), "up", true);
 
             btn.button("reset");
-            showAlert("success", "Gelöscht", "Die Blockierung für '" + domain + "' wurde gelöscht.");
+            showAlert("success", tr("Gelöscht"), tr("Die Blockierung für '{0}' wurde gelöscht.", domain));
         },
         error: function () {
             btn.button("reset");
@@ -388,7 +388,7 @@ function deleteBlockedZone() {
 }
 
 function flushBlockedZone() {
-    if (!confirm("Alle blockierten Domains löschen?"))
+    if (!confirm(tr("Alle blockierten Domains löschen?")))
         return;
 
     var btn = $("#btnFlushBlockedZone");
@@ -398,13 +398,13 @@ function flushBlockedZone() {
         url: "api/blocked/flush",
         token: sessionData.token,
         success: function (responseJSON) {
-            $("#lstBlockedZones").html("<div class=\"zone zone-action\"><a href=\"#\" onclick=\"refreshBlockedZonesList(); return false;\"><span class=\"fa fa-refresh fa-fw\" aria-hidden=\"true\"></span>Aktualisieren</a></div>");
+            $("#lstBlockedZones").html("<div class=\"zone zone-action\"><a href=\"#\" onclick=\"refreshBlockedZonesList(); return false;\"><span class=\"fa fa-refresh fa-fw\" aria-hidden=\"true\"></span>" + tr("Aktualisieren") + "</a></div>");
             $("#txtBlockedZoneViewerTitle").text("<ROOT>");
             $("#btnDeleteBlockedZone").hide();
             $("#preBlockedZoneViewerBody").hide();
 
             btn.button("reset");
-            showAlert("success", "Geleert", "Alle blockierten Domains wurden gelöscht.");
+            showAlert("success", tr("Geleert"), tr("Alle blockierten Domains wurden gelöscht."));
         },
         error: function () {
             btn.button("reset");
@@ -440,12 +440,12 @@ function refreshBlockedZonesList(domain, direction, fromPrimary) {
             var newDomain = responseJSON.response.domain;
             var zones = responseJSON.response.zones;
 
-            var list = "<div class=\"zone zone-action\"><a href=\"#\" onclick=\"refreshBlockedZonesList(" + jsArg(newDomain) + "); return false;\"><span class=\"fa fa-refresh fa-fw\" aria-hidden=\"true\"></span>Aktualisieren</a></div>";
+            var list = "<div class=\"zone zone-action\"><a href=\"#\" onclick=\"refreshBlockedZonesList(" + jsArg(newDomain) + "); return false;\"><span class=\"fa fa-refresh fa-fw\" aria-hidden=\"true\"></span>" + tr("Aktualisieren") + "</a></div>";
 
             var parentDomain = getParentDomain(newDomain);
 
             if (parentDomain != null)
-                list += "<div class=\"zone zone-action\"><a href=\"#\" onclick=\"refreshBlockedZonesList(" + jsArg(parentDomain) + ", 'up'); return false;\"><span class=\"fa fa-level-up fa-fw\" aria-hidden=\"true\"></span>Eine Ebene höher</a></div>";
+                list += "<div class=\"zone zone-action\"><a href=\"#\" onclick=\"refreshBlockedZonesList(" + jsArg(parentDomain) + ", 'up'); return false;\"><span class=\"fa fa-level-up fa-fw\" aria-hidden=\"true\"></span>" + tr("Eine Ebene höher") + "</a></div>";
 
             for (var i = 0; i < zones.length; i++) {
                 var zoneName = htmlEncode(zones[i]);
@@ -481,7 +481,7 @@ function refreshBlockedZonesList(domain, direction, fromPrimary) {
             showPageLogin();
         },
         error: function () {
-            lstBlockedZones.html("<div class=\"zone zone-action\"><a href=\"#\" onclick=\"refreshBlockedZonesList(" + jsArg(domain) + "); return false;\"><span class=\"fa fa-refresh fa-fw\" aria-hidden=\"true\"></span>Aktualisieren</a></div>");
+            lstBlockedZones.html("<div class=\"zone zone-action\"><a href=\"#\" onclick=\"refreshBlockedZonesList(" + jsArg(domain) + "); return false;\"><span class=\"fa fa-refresh fa-fw\" aria-hidden=\"true\"></span>" + tr("Aktualisieren") + "</a></div>");
 
             divBlockedZoneViewer.show();
         },
@@ -503,7 +503,7 @@ function importAllowedZones() {
     var allowedZones = cleanTextList($("#txtImportAllowedZones").val());
 
     if ((allowedZones.length === 0) || (allowedZones === ",")) {
-        showAlert("warning", "Angabe fehlt", "Bitte die zu importierenden Domains eingeben.", divImportAllowedZonesAlert);
+        showAlert("warning", tr("Angabe fehlt"), tr("Bitte die zu importierenden Domains eingeben."), divImportAllowedZonesAlert);
         $("#txtImportAllowedZones").trigger("focus");
         return;
     }
@@ -521,7 +521,7 @@ function importAllowedZones() {
             $("#modalImportAllowedZones").modal("hide");
             btn.button("reset");
 
-            showAlert("success", "Importiert", "Die Domains wurden zu den erlaubten Domains hinzugefügt.");
+            showAlert("success", tr("Importiert"), tr("Die Domains wurden zu den erlaubten Domains hinzugefügt."));
         },
         error: function () {
             btn.button("reset");
@@ -546,7 +546,7 @@ function exportAllowedZones(objBtn) {
 
             window.open("api/allowed/export?token=" + responseJSON.response.token, "_blank");
 
-            showAlert("success", "Exportiert", "Die erlaubten Domains wurden exportiert.");
+            showAlert("success", tr("Exportiert"), tr("Die erlaubten Domains wurden exportiert."));
         },
         error: function () {
             btn.button("reset");
@@ -572,7 +572,7 @@ function importBlockedZones() {
     var blockedZones = cleanTextList($("#txtImportBlockedZones").val());
 
     if ((blockedZones.length === 0) || (blockedZones === ",")) {
-        showAlert("warning", "Angabe fehlt", "Bitte die zu importierenden Domains eingeben.", divImportBlockedZonesAlert);
+        showAlert("warning", tr("Angabe fehlt"), tr("Bitte die zu importierenden Domains eingeben."), divImportBlockedZonesAlert);
         $("#txtImportBlockedZones").trigger("focus");
         return;
     }
@@ -590,7 +590,7 @@ function importBlockedZones() {
             $("#modalImportBlockedZones").modal("hide");
             btn.button("reset");
 
-            showAlert("success", "Importiert", "Die Domains wurden zu den blockierten Domains hinzugefügt.");
+            showAlert("success", tr("Importiert"), tr("Die Domains wurden zu den blockierten Domains hinzugefügt."));
         },
         error: function () {
             btn.button("reset");
@@ -615,7 +615,7 @@ function exportBlockedZones(objBtn) {
 
             window.open("api/blocked/export?token=" + responseJSON.response.token, "_blank");
 
-            showAlert("success", "Exportiert", "Die blockierten Domains wurden exportiert.");
+            showAlert("success", tr("Exportiert"), tr("Die blockierten Domains wurden exportiert."));
         },
         error: function () {
             btn.button("reset");
@@ -636,7 +636,7 @@ function allowDomain(objMenuItem, btnName, alertPlaceholderName) {
     var btn = $("#" + btnName + id);
     var originalBtnHtml = btn.html();
     btn.prop("disabled", true);
-    btn.html("<span class='spinner spinner-sm' role='status' aria-label='Wird geladen'></span>");
+    btn.html("<span class='spinner spinner-sm' role='status' aria-label='" + tr("Wird geladen") + "'></span>");
 
     var alertPlaceholder;
     if (alertPlaceholderName != null)
@@ -653,7 +653,7 @@ function allowDomain(objMenuItem, btnName, alertPlaceholderName) {
                     btn.prop("disabled", false);
                     btn.html(originalBtnHtml);
 
-                    showAlert("success", "Erlaubt", "Domain '" + domain + "' wird nicht mehr blockiert.", alertPlaceholder);
+                    showAlert("success", tr("Erlaubt"), tr("Domain '{0}' wird nicht mehr blockiert.", domain), alertPlaceholder);
                 },
                 error: function () {
                     btn.prop("disabled", false);
@@ -685,7 +685,7 @@ function blockDomain(objMenuItem, btnName, alertPlaceholderName) {
     var btn = $("#" + btnName + id);
     var originalBtnHtml = btn.html();
     btn.prop("disabled", true);
-    btn.html("<span class='spinner spinner-sm' role='status' aria-label='Wird geladen'></span>");
+    btn.html("<span class='spinner spinner-sm' role='status' aria-label='" + tr("Wird geladen") + "'></span>");
 
     var alertPlaceholder;
     if (alertPlaceholderName != null)
@@ -702,7 +702,7 @@ function blockDomain(objMenuItem, btnName, alertPlaceholderName) {
                     btn.prop("disabled", false);
                     btn.html(originalBtnHtml);
 
-                    showAlert("success", "Blockiert", "Domain '" + domain + "' wird jetzt blockiert.", alertPlaceholder);
+                    showAlert("success", tr("Blockiert"), tr("Domain '{0}' wird jetzt blockiert.", domain), alertPlaceholder);
                 },
                 error: function () {
                     btn.prop("disabled", false);

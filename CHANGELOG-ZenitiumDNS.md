@@ -11,7 +11,7 @@ Dieses Dokument listet ausschließlich die Unterschiede zwischen dem Original-Bu
 | Update-Prüfung und App-Store | fest auf Technitium-Server | Update-Prüfung gegen die GitHub-Releases von ZenitiumDNS mit Changelog, App-Store entfernt |
 | Installation unter Debian 13 | Skript lädt Binärdateien und .NET aus dem Internet | eigenständiges `.deb`-Paket mit eingebauter .NET-Laufzeit |
 | Erstes Admin-Passwort | `admin` | zufällig erzeugt |
-| Sprache der Weboberfläche und Doku | Englisch | Deutsch |
+| Sprache der Weboberfläche und Doku | Englisch | Deutsch oder Englisch, nach der Installation wählbar und jederzeit umstellbar |
 | CNAME-Ketten über viele Zonen (z. B. `www.bbc.com`, `x.com`) | `SERVFAIL` durch zu niedrige Resolver-Limits | werden vollständig aufgelöst |
 | Ausfall der Root-Priming-Anfrage | rekursive Auflösung fällt komplett aus | Rückfall auf die Root-Hints |
 | „IPv6 bevorzugen“ mit nicht erreichbaren IPv6-Nameservern | jede Anfrage schlägt fehl | nach der ersten Anfrage Antwort über IPv4 in ca. 30 ms |
@@ -35,7 +35,7 @@ Dieses Dokument listet ausschließlich die Unterschiede zwischen dem Original-Bu
 | Lokale Root-Zone (RFC 8806) | nur als selbst angelegte Secondary-Zone | eingebaut, Root- und arpa-Zone von IANA mit ZONEMD- und Signaturprüfung, NXDOMAIN für nicht existierende TLDs ohne Root-Server |
 | Root-Vertrauensanker | nur mitgelieferte Datei | täglich von IANA, nur mit gültiger ICANN-Signatur, oder eigene Version |
 | Do53 | immer aktiv | aktiviert, nur DDR (verwerfen oder REFUSED) oder aus |
-| Apps | englisch, Konfiguration als JSON-Textfeld | deutsche Namen, Beschreibungen und Fehlermeldungen, Formular mit deutschen Bezeichnungen, JSON für Experten |
+| Apps | englisch, Konfiguration als JSON-Textfeld | Namen, Beschreibungen und Fehlermeldungen auf Deutsch oder Englisch, Formular mit übersetzten Bezeichnungen, JSON für Experten |
 | Übersicht | ab 1 Stunde | ab 1 Minute, Echtzeitgraphen interner Prozesse |
 | Automatisches Eingreifen bei Speicherplatz-, Speicher- oder Dienstproblemen | nicht vorhanden | Wächter |
 | EDNS-Padding (RFC 7830, RFC 8467) | nicht vorhanden | Antworten über DoT, DoH und DoQ auf Vielfache von 468 Byte, Anfragen an verschlüsselte Forwarder auf 128 Byte |

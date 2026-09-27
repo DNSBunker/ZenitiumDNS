@@ -30,7 +30,7 @@ $(function () {
         switch (protocol) {
             case "Udp":
             case "Tcp":
-                $("#txtAddZoneForwarder").attr("placeholder", "8.8.8.8 oder [2620:fe::10]")
+                $("#txtAddZoneForwarder").attr("placeholder", tr("8.8.8.8 oder [2620:fe::10]"))
                 break;
 
             case "Tls":
@@ -166,8 +166,8 @@ function getPaginationHtml(pageNumber, totalPages, onClickFunction) {
     var paginationHtml = "";
 
     if (pageNumber > 1) {
-        paginationHtml += "<li><a href=\"#\" aria-label=\"Erste Seite\" onClick=\"" + onClickFunction + "(1); return false;\"><span aria-hidden=\"true\">&laquo;</span></a></li>";
-        paginationHtml += "<li><a href=\"#\" aria-label=\"Vorherige Seite\" onClick=\"" + onClickFunction + "(" + (pageNumber - 1) + "); return false;\"><span aria-hidden=\"true\">&lsaquo;</span></a></li>";
+        paginationHtml += "<li><a href=\"#\" aria-label=\"" + tr("Erste Seite") + "\" onClick=\"" + onClickFunction + "(1); return false;\"><span aria-hidden=\"true\">&laquo;</span></a></li>";
+        paginationHtml += "<li><a href=\"#\" aria-label=\"" + tr("Vorherige Seite") + "\" onClick=\"" + onClickFunction + "(" + (pageNumber - 1) + "); return false;\"><span aria-hidden=\"true\">&lsaquo;</span></a></li>";
     }
 
     var pageStart = pageNumber - 5;
@@ -192,8 +192,8 @@ function getPaginationHtml(pageNumber, totalPages, onClickFunction) {
     }
 
     if (pageNumber < totalPages) {
-        paginationHtml += "<li><a href=\"#\" aria-label=\"Nächste Seite\" onClick=\"" + onClickFunction + "(" + (pageNumber + 1) + "); return false;\"><span aria-hidden=\"true\">&rsaquo;</span></a></li>";
-        paginationHtml += "<li><a href=\"#\" aria-label=\"Letzte Seite\" onClick=\"" + onClickFunction + "(-1); return false;\"><span aria-hidden=\"true\">&raquo;</span></a></li>";
+        paginationHtml += "<li><a href=\"#\" aria-label=\"" + tr("Nächste Seite") + "\" onClick=\"" + onClickFunction + "(" + (pageNumber + 1) + "); return false;\"><span aria-hidden=\"true\">&rsaquo;</span></a></li>";
+        paginationHtml += "<li><a href=\"#\" aria-label=\"" + tr("Letzte Seite") + "\" onClick=\"" + onClickFunction + "(-1); return false;\"><span aria-hidden=\"true\">&raquo;</span></a></li>";
     }
 
     return paginationHtml;
@@ -255,15 +255,15 @@ function refreshZones(checkDisplay, pageNumber) {
                 var status;
 
                 if (zones[i].disabled)
-                    status = "<span id=\"tdZoneStatus" + id + "\" class=\"label label-default\">Deaktiviert</span>";
+                    status = "<span id=\"tdZoneStatus" + id + "\" class=\"label label-default\">" + tr("Deaktiviert") + "</span>";
                 else
-                    status = "<span id=\"tdZoneStatus" + id + "\" class=\"label label-success\">Aktiv</span>";
+                    status = "<span id=\"tdZoneStatus" + id + "\" class=\"label label-success\">" + tr("Aktiv") + "</span>";
 
                 var lastModified = zones[i].lastModified;
                 if (lastModified == null)
                     lastModified = "&nbsp;";
                 else
-                    lastModified = moment(lastModified).local().format("DD.MM.YYYY HH:mm");
+                    lastModified = moment(lastModified).local().format(tr("DD.MM.YYYY HH:mm"));
 
                 tableHtmlRows += "<tr id=\"trZone" + id + "\"><td><input type=\"checkbox\" data-zone=\"" + htmlEncode(name) + "\"" + (zones[i].nameIdn == null ? "" : " data-zone-idn=\"" + htmlEncode(zones[i].nameIdn) + "\"") + " /></td>";
                 tableHtmlRows += "<td>" + (firstRowNumber + i) + "</td>";
@@ -277,31 +277,31 @@ function refreshZones(checkDisplay, pageNumber) {
                 tableHtmlRows += "<td>" + lastModified + "</td>";
 
                 tableHtmlRows += "<td align=\"right\"><div class=\"dropdown\"><a href=\"#\" id=\"btnZoneRowOption" + id + "\" class=\"dropdown-toggle\" data-toggle=\"dropdown\" aria-haspopup=\"true\" aria-expanded=\"true\"><span class=\"glyphicon glyphicon-option-vertical\" aria-hidden=\"true\"></span></a><ul class=\"dropdown-menu dropdown-menu-right\">";
-                tableHtmlRows += "<li><a href=\"#\" onclick=\"showEditZone(" + jsArg(name) + "); return false;\">Einträge bearbeiten</a></li>";
-                tableHtmlRows += "<li><a href=\"#\" onclick=\"showEditZoneFileModal(" + jsArg(name) + "); return false;\">Zonendatei bearbeiten</a></li>";
-                tableHtmlRows += "<li id=\"mnuEnableZone" + id + "\"" + (zones[i].disabled ? "" : " style=\"display: none;\"") + "><a href=\"#\" data-id=\"" + id + "\" data-zone=\"" + htmlEncode(name) + "\" onclick=\"enableZoneMenu(this); return false;\">Aktivieren</a></li>";
-                tableHtmlRows += "<li id=\"mnuDisableZone" + id + "\"" + (!zones[i].disabled ? "" : " style=\"display: none;\"") + "><a href=\"#\" data-id=\"" + id + "\" data-zone=\"" + htmlEncode(name) + "\" onclick=\"disableZoneMenu(this); return false;\">Deaktivieren</a></li>";
-                tableHtmlRows += "<li><a href=\"#\" onclick=\"$('#btnSaveZoneOptions').attr('data-zones-row-id', " + id + "); showZoneOptionsModal(" + jsArg(name) + "); return false;\">Zonenoptionen</a></li>";
-                tableHtmlRows += "<li><a href=\"#\" onclick=\"showZonePermissionsModal(" + jsArg(name) + "); return false;\">Berechtigungen</a></li>";
+                tableHtmlRows += "<li><a href=\"#\" onclick=\"showEditZone(" + jsArg(name) + "); return false;\">" + tr("Einträge bearbeiten") + "</a></li>";
+                tableHtmlRows += "<li><a href=\"#\" onclick=\"showEditZoneFileModal(" + jsArg(name) + "); return false;\">" + tr("Zonendatei bearbeiten") + "</a></li>";
+                tableHtmlRows += "<li id=\"mnuEnableZone" + id + "\"" + (zones[i].disabled ? "" : " style=\"display: none;\"") + "><a href=\"#\" data-id=\"" + id + "\" data-zone=\"" + htmlEncode(name) + "\" onclick=\"enableZoneMenu(this); return false;\">" + tr("Aktivieren") + "</a></li>";
+                tableHtmlRows += "<li id=\"mnuDisableZone" + id + "\"" + (!zones[i].disabled ? "" : " style=\"display: none;\"") + "><a href=\"#\" data-id=\"" + id + "\" data-zone=\"" + htmlEncode(name) + "\" onclick=\"disableZoneMenu(this); return false;\">" + tr("Deaktivieren") + "</a></li>";
+                tableHtmlRows += "<li><a href=\"#\" onclick=\"$('#btnSaveZoneOptions').attr('data-zones-row-id', " + id + "); showZoneOptionsModal(" + jsArg(name) + "); return false;\">" + tr("Zonenoptionen") + "</a></li>";
+                tableHtmlRows += "<li><a href=\"#\" onclick=\"showZonePermissionsModal(" + jsArg(name) + "); return false;\">" + tr("Berechtigungen") + "</a></li>";
                 tableHtmlRows += "<li role=\"separator\" class=\"divider\"></li>";
-                tableHtmlRows += "<li><a href=\"#\" onclick=\"showImportZoneModal(" + jsArg(name) + "); return false;\">Einträge importieren</a></li>";
-                tableHtmlRows += "<li><a href=\"#\" onclick=\"exportZone(" + jsArg(name) + "); return false;\">Zone exportieren</a></li>";
-                tableHtmlRows += "<li><a href=\"#\" onclick=\"showCloneZoneModal(" + jsArg(name) + "); return false;\">Zone klonen</a></li>";
+                tableHtmlRows += "<li><a href=\"#\" onclick=\"showImportZoneModal(" + jsArg(name) + "); return false;\">" + tr("Einträge importieren") + "</a></li>";
+                tableHtmlRows += "<li><a href=\"#\" onclick=\"exportZone(" + jsArg(name) + "); return false;\">" + tr("Zone exportieren") + "</a></li>";
+                tableHtmlRows += "<li><a href=\"#\" onclick=\"showCloneZoneModal(" + jsArg(name) + "); return false;\">" + tr("Zone klonen") + "</a></li>";
                 tableHtmlRows += "<li role=\"separator\" class=\"divider\"></li>";
-                tableHtmlRows += "<li><a href=\"#\" data-id=\"" + id + "\" data-zone=\"" + htmlEncode(name) + "\" onclick=\"deleteZoneMenu(this); return false;\">Zone löschen</a></li>";
+                tableHtmlRows += "<li><a href=\"#\" data-id=\"" + id + "\" data-zone=\"" + htmlEncode(name) + "\" onclick=\"deleteZoneMenu(this); return false;\">" + tr("Zone löschen") + "</a></li>";
                 tableHtmlRows += "</ul></div></td></tr>";
             }
 
             if (zones.length == 0)
-                tableHtmlRows = "<tr><td colspan=\"6\" align=\"center\">Noch keine Weiterleitungszonen angelegt</td></tr>";
+                tableHtmlRows = "<tr><td colspan=\"6\" align=\"center\">" + tr("Noch keine Weiterleitungszonen angelegt") + "</td></tr>";
 
             var paginationHtml = getPaginationHtml(responseJSON.response.pageNumber, responseJSON.response.totalPages, "refreshZonesPage");
             var statusHtml;
 
             if (zones.length > 0)
-                statusHtml = firstRowNumber + "–" + lastRowNumber + " von " + responseJSON.response.totalZones + " Zonen (Seite " + responseJSON.response.pageNumber + " von " + responseJSON.response.totalPages + ")";
+                statusHtml = tr("{0}–{1} von {2} Zonen (Seite {3} von {4})", firstRowNumber, lastRowNumber, responseJSON.response.totalZones, responseJSON.response.pageNumber, responseJSON.response.totalPages);
             else
-                statusHtml = "0 Zonen";
+                statusHtml = tr("0 Zonen");
 
             $("#txtZonesPageNumber").val(responseJSON.response.pageNumber);
             $("#chkZonesTableCheckAll").prop("checked", false);
@@ -339,7 +339,7 @@ function enableZoneMenu(objMenuItem) {
     var btn = $("#btnZoneRowOption" + id);
     var originalBtnHtml = btn.html();
     btn.prop("disabled", true);
-    btn.html("<span class='spinner spinner-sm' role='status' aria-label='Wird geladen'></span>");
+    btn.html("<span class='spinner spinner-sm' role='status' aria-label='" + tr("Wird geladen") + "'></span>");
 
     HTTPRequest({
         url: "api/zones/enable?zone=" + encodeURIComponent(zone),
@@ -351,9 +351,9 @@ function enableZoneMenu(objMenuItem) {
             $("#mnuEnableZone" + id).hide();
             $("#mnuDisableZone" + id).show();
             $("#tdZoneStatus" + id).attr("class", "label label-success");
-            $("#tdZoneStatus" + id).html("Aktiv");
+            $("#tdZoneStatus" + id).html(tr("Aktiv"));
 
-            showAlert("success", "Zone aktiviert", "Zone '" + zone + "' ist aktiv.");
+            showAlert("success", tr("Zone aktiviert"), tr("Zone '{0}' ist aktiv.", zone));
         },
         error: function () {
             btn.prop("disabled", false);
@@ -380,9 +380,9 @@ function enableZone(objBtn) {
             $("#btnEnableZoneEditZone").hide();
             $("#btnDisableZoneEditZone").show();
             $("#titleEditZoneStatus").attr("class", "label label-success");
-            $("#titleEditZoneStatus").html("Aktiv");
+            $("#titleEditZoneStatus").html(tr("Aktiv"));
 
-            showAlert("success", "Zone aktiviert", "Zone '" + zone + "' ist aktiv.");
+            showAlert("success", tr("Zone aktiviert"), tr("Zone '{0}' ist aktiv.", zone));
         },
         error: function () {
             btn.button("reset");
@@ -400,13 +400,13 @@ function disableZoneMenu(objMenuItem) {
     var id = mnuItem.attr("data-id");
     var zone = mnuItem.attr("data-zone");
 
-    if (!confirm("Zone '" + zone + "' deaktivieren?"))
+    if (!confirm(tr("Zone '{0}' deaktivieren?", zone)))
         return;
 
     var btn = $("#btnZoneRowOption" + id);
     var originalBtnHtml = btn.html();
     btn.prop("disabled", true);
-    btn.html("<span class='spinner spinner-sm' role='status' aria-label='Wird geladen'></span>");
+    btn.html("<span class='spinner spinner-sm' role='status' aria-label='" + tr("Wird geladen") + "'></span>");
 
     HTTPRequest({
         url: "api/zones/disable?zone=" + encodeURIComponent(zone),
@@ -418,9 +418,9 @@ function disableZoneMenu(objMenuItem) {
             $("#mnuEnableZone" + id).show();
             $("#mnuDisableZone" + id).hide();
             $("#tdZoneStatus" + id).attr("class", "label label-default");
-            $("#tdZoneStatus" + id).html("Deaktiviert");
+            $("#tdZoneStatus" + id).html(tr("Deaktiviert"));
 
-            showAlert("success", "Zone deaktiviert", "Zone '" + zone + "' ist deaktiviert.");
+            showAlert("success", tr("Zone deaktiviert"), tr("Zone '{0}' ist deaktiviert.", zone));
         },
         error: function () {
             btn.prop("disabled", false);
@@ -435,7 +435,7 @@ function disableZoneMenu(objMenuItem) {
 function disableZone(objBtn) {
     var zone = $("#titleEditZone").attr("data-zone");
 
-    if (!confirm("Zone '" + zone + "' deaktivieren?"))
+    if (!confirm(tr("Zone '{0}' deaktivieren?", zone)))
         return;
 
     var btn = $(objBtn);
@@ -450,9 +450,9 @@ function disableZone(objBtn) {
             $("#btnEnableZoneEditZone").show();
             $("#btnDisableZoneEditZone").hide();
             $("#titleEditZoneStatus").attr("class", "label label-default");
-            $("#titleEditZoneStatus").html("Deaktiviert");
+            $("#titleEditZoneStatus").html(tr("Deaktiviert"));
 
-            showAlert("success", "Zone deaktiviert", "Zone '" + zone + "' ist deaktiviert.");
+            showAlert("success", tr("Zone deaktiviert"), tr("Zone '{0}' ist deaktiviert.", zone));
         },
         error: function () {
             btn.button("reset");
@@ -496,11 +496,11 @@ function deleteSelectedZones(objBtn) {
     }
 
     if (zones == null) {
-        alert("Bitte mindestens eine Zone zum Löschen auswählen.");
+        alert(tr("Bitte mindestens eine Zone zum Löschen auswählen."));
         return;
     }
 
-    if (!confirm("Folgende Zonen samt allen Einträgen endgültig löschen?\n\n" + zonesList))
+    if (!confirm(tr("Folgende Zonen samt allen Einträgen endgültig löschen?") + "\n\n" + zonesList))
         return;
 
     var btn = $(objBtn);
@@ -515,9 +515,9 @@ function deleteSelectedZones(objBtn) {
 
             var failCount = Object.keys(responseJSON.response.failed).length;
             if (failCount == 0)
-                showAlert("success", "Zonen gelöscht", "Die ausgewählten Zonen wurden gelöscht.");
+                showAlert("success", tr("Zonen gelöscht"), tr("Die ausgewählten Zonen wurden gelöscht."));
             else
-                showAlert("warning", "Löschen fehlgeschlagen", "Insgesamt " + failCount + " von " + (responseJSON.response.deleted.length + failCount) + " ausgewählten Zonen konnten nicht gelöscht werden. Details stehen im Serverprotokoll.");
+                showAlert("warning", tr("Löschen fehlgeschlagen"), tr("Insgesamt {0} von {1} ausgewählten Zonen konnten nicht gelöscht werden. Details stehen im Serverprotokoll.", failCount, responseJSON.response.deleted.length + failCount));
         },
         error: function () {
             btn.button("reset");
@@ -535,13 +535,13 @@ function deleteZoneMenu(objMenuItem) {
     var id = mnuItem.attr("data-id");
     var zone = mnuItem.attr("data-zone");
 
-    if (!confirm("Zone '" + zone + "' samt allen Einträgen endgültig löschen?"))
+    if (!confirm(tr("Zone '{0}' samt allen Einträgen endgültig löschen?", zone)))
         return;
 
     var btn = $("#btnZoneRowOption" + id);
     var originalBtnHtml = btn.html();
     btn.prop("disabled", true);
-    btn.html("<span class='spinner spinner-sm' role='status' aria-label='Wird geladen'></span>");
+    btn.html("<span class='spinner spinner-sm' role='status' aria-label='" + tr("Wird geladen") + "'></span>");
 
     HTTPRequest({
         url: "api/zones/delete?zone=" + encodeURIComponent(zone),
@@ -549,7 +549,7 @@ function deleteZoneMenu(objMenuItem) {
         success: function (responseJSON) {
             refreshZones();
 
-            showAlert("success", "Zone gelöscht", "Zone '" + zone + "' wurde gelöscht.");
+            showAlert("success", tr("Zone gelöscht"), tr("Zone '{0}' wurde gelöscht.", zone));
         },
         error: function () {
             btn.prop("disabled", false);
@@ -564,7 +564,7 @@ function deleteZoneMenu(objMenuItem) {
 function deleteZone(objBtn) {
     var zone = $("#titleEditZone").attr("data-zone");
 
-    if (!confirm("Zone '" + zone + "' samt allen Einträgen endgültig löschen?"))
+    if (!confirm(tr("Zone '{0}' samt allen Einträgen endgültig löschen?", zone)))
         return;
 
     var btn = $(objBtn);
@@ -577,7 +577,7 @@ function deleteZone(objBtn) {
             btn.button("reset");
             refreshZones();
 
-            showAlert("success", "Zone gelöscht", "Zone '" + zone + "' wurde gelöscht.");
+            showAlert("success", tr("Zone gelöscht"), tr("Zone '{0}' wurde gelöscht.", zone));
         },
         error: function () {
             btn.button("reset");
@@ -650,7 +650,7 @@ function saveEditZoneFile() {
             if ($("#divEditZone").is(":visible"))
                 showEditZone(zone);
 
-            showAlert("success", "Zone gespeichert", "Die Zonendatei wurde gespeichert.");
+            showAlert("success", tr("Zone gespeichert"), tr("Die Zonendatei wurde gespeichert."));
         },
         error: function () {
             btn.button("reset");
@@ -702,7 +702,7 @@ function importZone() {
             var fileImportZone = $("#fileImportZone");
 
             if (fileImportZone[0].files.length === 0) {
-                showAlert("warning", "Angabe fehlt", "Bitte eine Zonendatei auswählen.", divImportZoneAlert);
+                showAlert("warning", tr("Angabe fehlt"), tr("Bitte eine Zonendatei auswählen."), divImportZoneAlert);
                 fileImportZone.trigger("focus");
                 return;
             }
@@ -734,7 +734,7 @@ function importZone() {
             if ($("#divEditZone").is(":visible"))
                 showEditZone(zone);
 
-            showAlert("success", "Importiert", "Die Einträge wurden importiert.");
+            showAlert("success", tr("Importiert"), tr("Die Einträge wurden importiert."));
         },
         error: function () {
             btn.button("reset");
@@ -754,7 +754,7 @@ function exportZone(zone) {
         success: function (responseJSON) {
             window.open("api/zones/export?token=" + responseJSON.response.token + "&zone=" + encodeURIComponent(zone), "_blank");
 
-            showAlert("success", "Exportiert", "Die Zone wurde exportiert.");
+            showAlert("success", tr("Exportiert"), tr("Die Zone wurde exportiert."));
         },
         invalidToken: function () {
             showPageLogin();
@@ -783,7 +783,7 @@ function cloneZone(objBtn) {
 
     var zone = $("#txtCloneZoneZoneName").val();
     if ((zone == null) || (zone === "")) {
-        showAlert("warning", "Angabe fehlt", "Bitte die Domain der neuen Zone eingeben.", divCloneZoneAlert);
+        showAlert("warning", tr("Angabe fehlt"), tr("Bitte die Domain der neuen Zone eingeben."), divCloneZoneAlert);
         $("#txtCloneZoneZoneName").trigger("focus");
         return;
     }
@@ -801,7 +801,7 @@ function cloneZone(objBtn) {
             if ($("#divEditZone").is(":hidden"))
                 refreshZones();
 
-            showAlert("success", "Zone geklont", "Die Zone wurde geklont.");
+            showAlert("success", tr("Zone geklont"), tr("Die Zone wurde geklont."));
         },
         error: function () {
             btn.button("reset");
@@ -877,7 +877,7 @@ function saveZoneOptions() {
         $("#txtQueryAccessNetworkACL").val(queryAccessNetworkACL.replace(/,/g, "\n"));
 
     if ((queryAccess === "UseSpecifiedNetworkACL") && (queryAccessNetworkACL === false)) {
-        showAlert("warning", "Angabe fehlt", "Bitte mindestens einen Eintrag für die Zugriffsliste angeben.", divZoneOptionsAlert);
+        showAlert("warning", tr("Angabe fehlt"), tr("Bitte mindestens einen Eintrag für die Zugriffsliste angeben."), divZoneOptionsAlert);
         $("#txtQueryAccessNetworkACL").trigger("focus");
         return;
     }
@@ -892,7 +892,7 @@ function saveZoneOptions() {
             btn.button("reset");
             $("#modalZoneOptions").modal("hide");
 
-            showAlert("success", "Gespeichert", "Die Zonenoptionen wurden übernommen.");
+            showAlert("success", tr("Gespeichert"), tr("Die Zonenoptionen wurden übernommen."));
         },
         error: function () {
             btn.button("reset");
@@ -912,7 +912,7 @@ function showZonePermissionsModal(zone) {
     var divEditPermissionsLoader = $("#divEditPermissionsLoader");
     var divEditPermissionsViewer = $("#divEditPermissionsViewer");
 
-    $("#lblEditPermissionsName").text("Weiterleitungszonen / " + (zone === "." ? "<root>" : zone));
+    $("#lblEditPermissionsName").text(tr("Weiterleitungszonen") + " / " + (zone === "." ? "<root>" : zone));
     $("#tbodyEditPermissionsUser").html("");
     $("#tbodyEditPermissionsGroup").html("");
 
@@ -936,7 +936,7 @@ function showZonePermissionsModal(zone) {
                 addEditPermissionUserRow(i, responseJSON.response.userPermissions[i].username, responseJSON.response.userPermissions[i].canView, responseJSON.response.userPermissions[i].canModify, responseJSON.response.userPermissions[i].canDelete);
             }
 
-            var userListHtml = "<option value=\"blank\" selected></option><option value=\"none\">Leeren</option>";
+            var userListHtml = "<option value=\"blank\" selected></option><option value=\"none\">" + tr("Leeren") + "</option>";
 
             for (var i = 0; i < responseJSON.response.users.length; i++) {
                 userListHtml += "<option>" + htmlEncode(responseJSON.response.users[i]) + "</option>";
@@ -948,7 +948,7 @@ function showZonePermissionsModal(zone) {
                 addEditPermissionGroupRow(i, responseJSON.response.groupPermissions[i].name, responseJSON.response.groupPermissions[i].canView, responseJSON.response.groupPermissions[i].canModify, responseJSON.response.groupPermissions[i].canDelete);
             }
 
-            var groupListHtml = "<option value=\"blank\" selected></option><option value=\"none\">Leeren</option>";
+            var groupListHtml = "<option value=\"blank\" selected></option><option value=\"none\">" + tr("Leeren") + "</option>";
 
             for (var i = 0; i < responseJSON.response.groups.length; i++) {
                 groupListHtml += "<option>" + htmlEncode(responseJSON.response.groups[i]) + "</option>";
@@ -993,7 +993,7 @@ function saveZonePermissions(objBtn) {
             btn.button("reset");
             $("#modalEditPermissions").modal("hide");
 
-            showAlert("success", "Berechtigungen gespeichert", "Die Berechtigungen der Zone wurden gespeichert.");
+            showAlert("success", tr("Berechtigungen gespeichert"), tr("Die Berechtigungen der Zone wurden gespeichert."));
         },
         error: function () {
             btn.button("reset");
@@ -1017,7 +1017,7 @@ function showAddZoneModal() {
     $("#rdAddZoneForwarderProtocolUdp").prop("checked", true);
     $("#chkAddZoneForwarderThisServer").prop("checked", false);
     $("#txtAddZoneForwarder").prop("disabled", false);
-    $("#txtAddZoneForwarder").attr("placeholder", "8.8.8.8 oder [2620:fe::10]")
+    $("#txtAddZoneForwarder").attr("placeholder", tr("8.8.8.8 oder [2620:fe::10]"))
     $("#txtAddZoneForwarder").val("");
     $("#chkAddZoneForwarderDnssecValidation").prop("checked", $("#chkDnssecValidation").prop("checked"));
     $("#rdAddZoneForwarderProxyTypeDefaultProxy").prop("checked", true);
@@ -1058,7 +1058,7 @@ function updateAddZoneFormForwarderThisServer() {
     if (useThisServer) {
         $("input[name=rdAddZoneForwarderProtocol]:radio").attr("disabled", true);
         $("#rdAddZoneForwarderProtocolUdp").prop("checked", true);
-        $("#txtAddZoneForwarder").attr("placeholder", "8.8.8.8 oder [2620:fe::10]")
+        $("#txtAddZoneForwarder").attr("placeholder", tr("8.8.8.8 oder [2620:fe::10]"))
 
         $("#txtAddZoneForwarder").prop("disabled", true);
         $("#txtAddZoneForwarder").val("this-server");
@@ -1078,7 +1078,7 @@ function addZone() {
     var zone = $("#txtAddZone").val();
 
     if ((zone == null) || (zone === "")) {
-        showAlert("warning", "Angabe fehlt", "Bitte die Domain für die Zone eingeben.", divAddZoneAlert);
+        showAlert("warning", tr("Angabe fehlt"), tr("Bitte die Domain für die Zone eingeben."), divAddZoneAlert);
         $("#txtAddZone").trigger("focus");
         return;
     }
@@ -1091,7 +1091,7 @@ function addZone() {
 
         var forwarder = $("#txtAddZoneForwarder").val();
         if ((forwarder == null) || (forwarder === "")) {
-            showAlert("warning", "Angabe fehlt", "Bitte die Adresse des Zielservers eingeben.", divAddZoneAlert);
+            showAlert("warning", tr("Angabe fehlt"), tr("Bitte die Adresse des Zielservers eingeben."), divAddZoneAlert);
             $("#txtAddZoneForwarder").trigger("focus");
             return;
         }
@@ -1114,13 +1114,13 @@ function addZone() {
                     var proxyPassword = $("#txtAddZoneForwarderProxyPassword").val();
 
                     if ((proxyAddress == null) || (proxyAddress === "")) {
-                        showAlert("warning", "Angabe fehlt", "Bitte die Adresse des Proxys eingeben.", divAddZoneAlert);
+                        showAlert("warning", tr("Angabe fehlt"), tr("Bitte die Adresse des Proxys eingeben."), divAddZoneAlert);
                         $("#txtAddZoneForwarderProxyAddress").trigger("focus");
                         return;
                     }
 
                     if ((proxyPort == null) || (proxyPort === "")) {
-                        showAlert("warning", "Angabe fehlt", "Bitte den Port des Proxys eingeben.", divAddZoneAlert);
+                        showAlert("warning", tr("Angabe fehlt"), tr("Bitte den Port des Proxys eingeben."), divAddZoneAlert);
                         $("#txtAddZoneForwarderProxyPort").trigger("focus");
                         return;
                     }
@@ -1158,7 +1158,7 @@ function addZone() {
             $("#modalAddZone").modal("hide");
             showEditZone(responseJSON.response.domain);
 
-            showAlert("success", "Zone angelegt", "Die Weiterleitungszone wurde angelegt.");
+            showAlert("success", tr("Zone angelegt"), tr("Die Weiterleitungszone wurde angelegt."));
         },
         error: function () {
             btn.button("reset");
@@ -1201,19 +1201,19 @@ function showEditZone(zone, showPageNumber, zoneFilterName, zoneFilterType) {
                 zone = ".";
 
             if (responseJSON.response.zone.disabled) {
-                $("#titleEditZoneStatus").text("Deaktiviert");
+                $("#titleEditZoneStatus").text(tr("Deaktiviert"));
                 $("#titleEditZoneStatus").attr("class", "label label-default");
                 $("#btnEnableZoneEditZone").show();
                 $("#btnDisableZoneEditZone").hide();
             }
             else {
-                $("#titleEditZoneStatus").text("Aktiv");
+                $("#titleEditZoneStatus").text(tr("Aktiv"));
                 $("#titleEditZoneStatus").attr("class", "label label-success");
                 $("#btnEnableZoneEditZone").hide();
                 $("#btnDisableZoneEditZone").show();
             }
 
-            $("#titleEditZoneType").text("Weiterleitungszone");
+            $("#titleEditZoneType").text(tr("Weiterleitungszone"));
             $("#btnEditZoneAddRecord").show();
             editZoneInfo = responseJSON.response.zone;
             editZoneRecords = [];
@@ -1356,7 +1356,7 @@ function showEditZonePage(pageNumber) {
 
     if (pageNumber > 1) {
         paginationHtml += "<li><a href=\"#\" aria-label=\"First\" onClick=\"showEditZonePage(1); return false;\"><span aria-hidden=\"true\">&laquo;</span></a></li>";
-        paginationHtml += "<li><a href=\"#\" aria-label=\"Zurück\" onClick=\"showEditZonePage(" + (pageNumber - 1) + "); return false;\"><span aria-hidden=\"true\">&lsaquo;</span></a></li>";
+        paginationHtml += "<li><a href=\"#\" aria-label=\"" + tr("Zurück") + "\" onClick=\"showEditZonePage(" + (pageNumber - 1) + "); return false;\"><span aria-hidden=\"true\">&lsaquo;</span></a></li>";
     }
 
     var pageStart = pageNumber - 5;
@@ -1381,16 +1381,16 @@ function showEditZonePage(pageNumber) {
     }
 
     if (pageNumber < totalPages) {
-        paginationHtml += "<li><a href=\"#\" aria-label=\"Weiter\" onClick=\"showEditZonePage(" + (pageNumber + 1) + "); return false;\"><span aria-hidden=\"true\">&rsaquo;</span></a></li>";
+        paginationHtml += "<li><a href=\"#\" aria-label=\"" + tr("Weiter") + "\" onClick=\"showEditZonePage(" + (pageNumber + 1) + "); return false;\"><span aria-hidden=\"true\">&rsaquo;</span></a></li>";
         paginationHtml += "<li><a href=\"#\" aria-label=\"Last\" onClick=\"showEditZonePage(-1); return false;\"><span aria-hidden=\"true\">&raquo;</span></a></li>";
     }
 
     var statusHtml;
 
     if (editZoneFilteredRecords.length > 0)
-        statusHtml = (start + 1) + "–" + end + " von " + editZoneFilteredRecords.length + " Einträgen (Seite " + pageNumber + " von " + totalPages + ")";
+        statusHtml = tr("{0}–{1} von {2} Einträgen (Seite {3} von {4})", start + 1, end, editZoneFilteredRecords.length, pageNumber, totalPages);
     else
-        statusHtml = "0 Einträge";
+        statusHtml = tr("0 Einträge");
 
     $("#txtEditZonePageNumber").val(pageNumber);
     $("#tableEditZoneBody").html(tableHtmlRows);
@@ -1405,10 +1405,10 @@ function showEditZonePage(pageNumber) {
 function getProxyTypeLabel(proxyType) {
     switch (proxyType) {
         case "NoProxy":
-            return "kein Proxy";
+            return tr("kein Proxy");
 
         case "DefaultProxy":
-            return "Standard-Proxy des Servers";
+            return tr("Standard-Proxy des Servers");
 
         case "Http":
             return "HTTP";
@@ -1454,7 +1454,7 @@ function getZoneRecordRowHtml(index, zone, zoneType, record) {
             break;
 
         case "NS":
-            tableHtmlRow += "<b>Nameserver:</b> " + htmlEncode(record.rData.nameServer);
+            tableHtmlRow += "<b>" + tr("Nameserver:") + "</b> " + htmlEncode(record.rData.nameServer);
 
             if (record.glueRecords != null) {
                 var glue = null;
@@ -1466,7 +1466,7 @@ function getZoneRecordRowHtml(index, zone, zoneType, record) {
                         glue += ", " + record.glueRecords[i];
                 }
 
-                tableHtmlRow += "<br /><b>Glue-Adressen:</b> " + glue;
+                tableHtmlRow += "<br /><b>" + tr("Glue-Adressen:") + "</b> " + glue;
 
                 additionalDataAttributes = "data-record-glue=\"" + htmlEncode(glue) + "\" ";
             } else {
@@ -1493,8 +1493,8 @@ function getZoneRecordRowHtml(index, zone, zoneType, record) {
             break;
 
         case "MX":
-            tableHtmlRow += "<b>Priorität: </b> " + htmlEncode(record.rData.preference) +
-                "<br /><b>Mailserver:</b> " + htmlEncode(record.rData.exchange);
+            tableHtmlRow += "<b>" + tr("Priorität:") + " </b> " + htmlEncode(record.rData.preference) +
+                "<br /><b>" + tr("Mailserver:") + "</b> " + htmlEncode(record.rData.exchange);
 
             tableHtmlRow += "<br /><br />";
 
@@ -1540,7 +1540,7 @@ function getZoneRecordRowHtml(index, zone, zoneType, record) {
             break;
 
         case "RP":
-            tableHtmlRow += "<b>Postfach: </b> " + htmlEncode(record.rData.mailbox) +
+            tableHtmlRow += "<b>" + tr("Postfach:") + " </b> " + htmlEncode(record.rData.mailbox) +
                 "<br /><b>TXT-Domain:</b> " + htmlEncode(record.rData.txtDomain);
 
             tableHtmlRow += "<br /><br />";
@@ -1550,10 +1550,10 @@ function getZoneRecordRowHtml(index, zone, zoneType, record) {
             break;
 
         case "SRV":
-            tableHtmlRow += "<b>Priorität: </b> " + htmlEncode(record.rData.priority) +
-                "<br /><b>Gewichtung:</b> " + htmlEncode(record.rData.weight) +
+            tableHtmlRow += "<b>" + tr("Priorität:") + " </b> " + htmlEncode(record.rData.priority) +
+                "<br /><b>" + tr("Gewichtung:") + "</b> " + htmlEncode(record.rData.weight) +
                 "<br /><b>Port:</b> " + htmlEncode(record.rData.port) +
-                "<br /><b>Ziel:</b> " + htmlEncode(record.rData.target);
+                "<br /><b>" + tr("Ziel:") + "</b> " + htmlEncode(record.rData.target);
 
             tableHtmlRow += "<br /><br />";
 
@@ -1564,12 +1564,12 @@ function getZoneRecordRowHtml(index, zone, zoneType, record) {
             break;
 
         case "NAPTR":
-            tableHtmlRow += "<b>Reihenfolge: </b> " + htmlEncode(record.rData.order) +
-                "<br /><b>Priorität:</b> " + htmlEncode(record.rData.preference) +
+            tableHtmlRow += "<b>" + tr("Reihenfolge:") + " </b> " + htmlEncode(record.rData.order) +
+                "<br /><b>" + tr("Priorität:") + "</b> " + htmlEncode(record.rData.preference) +
                 "<br /><b>Flags:</b> " + htmlEncode(record.rData.flags) +
-                "<br /><b>Dienste:</b> " + htmlEncode(record.rData.services) +
-                "<br /><b>Regulärer Ausdruck:</b> " + htmlEncode(record.rData.regexp) +
-                "<br /><b>Ersetzung:</b> " + htmlEncode(record.rData.replacement);
+                "<br /><b>" + tr("Dienste:") + "</b> " + htmlEncode(record.rData.services) +
+                "<br /><b>" + tr("Regulärer Ausdruck:") + "</b> " + htmlEncode(record.rData.regexp) +
+                "<br /><b>" + tr("Ersetzung:") + "</b> " + htmlEncode(record.rData.replacement);
 
             tableHtmlRow += "<br /><br />";
 
@@ -1589,7 +1589,7 @@ function getZoneRecordRowHtml(index, zone, zoneType, record) {
             break;
 
         case "APL":
-            tableHtmlRow += "<table class=\"table\" style=\"background: transparent;\"><thead><tr><th>Adressfamilie</th><th>Negation</th><th>AFD-Teil</th><th>Präfix</th></tr></thead><tbody>";
+            tableHtmlRow += "<table class=\"table\" style=\"background: transparent;\"><thead><tr><th>" + tr("Adressfamilie") + "</th><th>Negation</th><th>" + tr("AFD-Teil") + "</th><th>" + tr("Präfix") + "</th></tr></thead><tbody>";
 
             for (var i = 0; i < record.rData.addressPrefixes.length; i++) {
                 tableHtmlRow += "<tr><td>" + htmlEncode(record.rData.addressPrefixes[i].addressFamily) + "</td>";
@@ -1611,10 +1611,10 @@ function getZoneRecordRowHtml(index, zone, zoneType, record) {
                 tableHtmlSvcParams = "<br />";
             }
             else {
-                tableHtmlSvcParams = "<br /><b>Parameter: </b><table class=\"table table-condensed\" style=\"background: transparent; margin-bottom: 0px;\">" +
+                tableHtmlSvcParams = "<br /><b>" + tr("Parameter:") + " </b><table class=\"table table-condensed\" style=\"background: transparent; margin-bottom: 0px;\">" +
                     "<thead><tr>" +
-                    "<th>Schlüssel</th>" +
-                    "<th>Wert</th>" +
+                    "<th>" + tr("Schlüssel") + "</th>" +
+                    "<th>" + tr("Wert") + "</th>" +
                     "</thead>" +
                     "<tbody>";
 
@@ -1639,11 +1639,11 @@ function getZoneRecordRowHtml(index, zone, zoneType, record) {
                 tableHtmlSvcParams += "</tbody></table>";
             }
 
-            tableHtmlRow += "<b>Priorität: </b> " + htmlEncode(record.rData.svcPriority) + (record.rData.svcPriority == 0 ? " (alias mode)" : " (service mode)") +
-                "<br /><b>Zielname: </b> " + (record.rData.svcTargetName == "" ? "." : htmlEncode(record.rData.svcTargetName)) +
+            tableHtmlRow += "<b>" + tr("Priorität:") + " </b> " + htmlEncode(record.rData.svcPriority) + (record.rData.svcPriority == 0 ? " (alias mode)" : " (service mode)") +
+                "<br /><b>" + tr("Zielname:") + " </b> " + (record.rData.svcTargetName == "" ? "." : htmlEncode(record.rData.svcTargetName)) +
                 tableHtmlSvcParams +
-                "<br /><b>IPv4-Hint automatisch: </b> " + record.rData.autoIpv4Hint +
-                "<br /><b>IPv6-Hint automatisch: </b> " + record.rData.autoIpv6Hint +
+                "<br /><b>" + tr("IPv4-Hint automatisch:") + " </b> " + record.rData.autoIpv4Hint +
+                "<br /><b>" + tr("IPv6-Hint automatisch:") + " </b> " + record.rData.autoIpv6Hint +
                 "<br />";
 
             tableHtmlRow += "<br />";
@@ -1656,8 +1656,8 @@ function getZoneRecordRowHtml(index, zone, zoneType, record) {
             break;
 
         case "URI":
-            tableHtmlRow += "<b>Priorität: </b> " + htmlEncode(record.rData.priority) +
-                "<br /><b>Gewichtung:</b> " + htmlEncode(record.rData.weight) +
+            tableHtmlRow += "<b>" + tr("Priorität:") + " </b> " + htmlEncode(record.rData.priority) +
+                "<br /><b>" + tr("Gewichtung:") + "</b> " + htmlEncode(record.rData.weight) +
                 "<br /><b>URI:</b> " + htmlEncode(record.rData.uri);
 
             tableHtmlRow += "<br /><br />";
@@ -1687,19 +1687,19 @@ function getZoneRecordRowHtml(index, zone, zoneType, record) {
             break;
 
         case "FWD":
-            tableHtmlRow += "<b>Protokoll: </b> " + htmlEncode(record.rData.protocol) +
-                "<br /><b>Forwarder:</b> " + (record.rData.forwarder == "this-server" ? "Dieser Server (rekursiv)" : htmlEncode(record.rData.forwarder)) +
-                "<br /><b>Priorität:</b> " + htmlEncode(record.rData.priority) +
-                "<br /><b>DNSSEC-Validierung:</b> " + (record.rData.dnssecValidation ? "ja" : "nein") +
+            tableHtmlRow += "<b>" + tr("Protokoll:") + " </b> " + htmlEncode(record.rData.protocol) +
+                "<br /><b>Forwarder:</b> " + (record.rData.forwarder == "this-server" ? tr("Dieser Server (rekursiv)") : htmlEncode(record.rData.forwarder)) +
+                "<br /><b>" + tr("Priorität:") + "</b> " + htmlEncode(record.rData.priority) +
+                "<br /><b>" + tr("DNSSEC-Validierung:") + "</b> " + (record.rData.dnssecValidation ? tr("ja") : tr("nein")) +
                 "<br /><b>Proxy:</b> " + htmlEncode(getProxyTypeLabel(record.rData.proxyType));
 
             switch (record.rData.proxyType) {
                 case "Http":
                 case "Socks5":
-                    tableHtmlRow += "<br /><b>Proxy-Adresse:</b> " + htmlEncode(record.rData.proxyAddress) +
+                    tableHtmlRow += "<br /><b>" + tr("Proxy-Adresse:") + "</b> " + htmlEncode(record.rData.proxyAddress) +
                         "<br /><b>Proxy-Port:</b> " + htmlEncode(record.rData.proxyPort) +
-                        "<br /><b>Proxy-Benutzer:</b> " + htmlEncode(record.rData.proxyUsername) +
-                        "<br /><b>Proxy-Passwort:</b> ************";
+                        "<br /><b>" + tr("Proxy-Benutzer:") + "</b> " + htmlEncode(record.rData.proxyUsername) +
+                        "<br /><b>" + tr("Proxy-Passwort:") + "</b> ************";
                     break;
             }
 
@@ -1724,8 +1724,8 @@ function getZoneRecordRowHtml(index, zone, zoneType, record) {
 
         case "APP":
             tableHtmlRow += "<b>App: </b> " + htmlEncode(record.rData.appName) +
-                "<br /><b>Klassenpfad:</b> " + htmlEncode(record.rData.classPath) +
-                "<br /><b>Daten:</b> " + (record.rData.data == "" ? "<br />" : "<pre style=\"white-space: pre-wrap;\">" + htmlEncode(record.rData.data) + "</pre>");
+                "<br /><b>" + tr("Klassenpfad:") + "</b> " + htmlEncode(record.rData.classPath) +
+                "<br /><b>" + tr("Daten:") + "</b> " + (record.rData.data == "" ? "<br />" : "<pre style=\"white-space: pre-wrap;\">" + htmlEncode(record.rData.data) + "</pre>");
 
             tableHtmlRow += "<br />";
 
@@ -1735,14 +1735,14 @@ function getZoneRecordRowHtml(index, zone, zoneType, record) {
             break;
 
         case "ALIAS":
-            tableHtmlRow += "<b>Typ: </b> " + htmlEncode(record.rData.type) +
+            tableHtmlRow += "<b>" + tr("Typ:") + " </b> " + htmlEncode(record.rData.type) +
                 "<br /><b>Alias:</b> " + htmlEncode(record.rData.alias);
 
             tableHtmlRow += "<br /><br />";
             break;
 
         default:
-            tableHtmlRow += "<b>RDATA:</b> " + htmlEncode(record.rData.value);
+            tableHtmlRow += "<b>" + tr("RDATA:") + "</b> " + htmlEncode(record.rData.value);
             tableHtmlRow += "<br /><br />";
 
             additionalDataAttributes = "data-record-rdata=\"" + htmlEncode(record.rData.value) + "\"";
@@ -1751,30 +1751,30 @@ function getZoneRecordRowHtml(index, zone, zoneType, record) {
 
     if (record.expiryTtl > 0) {
         var expiresOn = moment(record.lastModified).add(record.expiryTtl, "s");
-        tableHtmlRow += "<b>Ablaufzeit:</b> " + record.expiryTtl + " (" + record.expiryTtlString + ")";
-        tableHtmlRow += "<br /><b>Läuft ab am:</b> " + expiresOn.local().format("DD.MM.YYYY HH:mm:ss") + " (" + expiresOn.fromNow() + ")";
+        tableHtmlRow += "<b>" + tr("Ablaufzeit:") + "</b> " + record.expiryTtl + " (" + record.expiryTtlString + ")";
+        tableHtmlRow += "<br /><b>" + tr("Läuft ab am:") + "</b> " + expiresOn.local().format(tr("DD.MM.YYYY HH:mm:ss")) + " (" + expiresOn.fromNow() + ")";
         tableHtmlRow += "<br />";
     }
 
     if ((record.lastUsedOn == "0001-01-01T00:00:00") || (record.lastUsedOn == "0001-01-01T00:00:00Z"))
-        tableHtmlRow += "<b>Zuletzt genutzt:</b> nie";
+        tableHtmlRow += "<b>" + tr("Zuletzt genutzt:") + "</b> " + tr("nie");
     else
-        tableHtmlRow += "<b>Zuletzt genutzt:</b> " + moment(record.lastUsedOn).local().format("DD.MM.YYYY HH:mm:ss") + " (" + moment(record.lastUsedOn).fromNow() + ")";
+        tableHtmlRow += "<b>" + tr("Zuletzt genutzt:") + "</b> " + moment(record.lastUsedOn).local().format(tr("DD.MM.YYYY HH:mm:ss")) + " (" + moment(record.lastUsedOn).fromNow() + ")";
 
     if ((record.lastModified != "0001-01-01T00:00:00") && (record.lastModified != "0001-01-01T00:00:00Z"))
-        tableHtmlRow += "<br /><b>Zuletzt geändert:</b> " + moment(record.lastModified).local().format("DD.MM.YYYY HH:mm:ss") + " (" + moment(record.lastModified).fromNow() + ")";
+        tableHtmlRow += "<br /><b>" + tr("Zuletzt geändert:") + "</b> " + moment(record.lastModified).local().format(tr("DD.MM.YYYY HH:mm:ss")) + " (" + moment(record.lastModified).fromNow() + ")";
 
     if ((record.comments != null) && (record.comments.length > 0))
-        tableHtmlRow += "<br /><b>Kommentar:</b> <pre style=\"white-space: pre-wrap;\">" + htmlEncode(record.comments) + "</pre>";
+        tableHtmlRow += "<br /><b>" + tr("Kommentar:") + "</b> <pre style=\"white-space: pre-wrap;\">" + htmlEncode(record.comments) + "</pre>";
 
     tableHtmlRow += "</td>";
 
     tableHtmlRow += "<td class=\"record-actions\">";
     tableHtmlRow += "<div id=\"data" + index + "\" data-record-index=\"" + (record.index == null ? index : record.index) + "\" data-record-name=\"" + htmlEncode(record.name) + "\" data-record-type=\"" + record.type + "\" data-record-ttl=\"" + record.ttl + "\" " + additionalDataAttributes + " data-record-disabled=\"" + record.disabled + "\" data-record-comments=\"" + htmlEncode(record.comments) + "\" data-record-expiry-ttl=\"" + record.expiryTtl + "\" style=\"display: none;\"></div>";
-    tableHtmlRow += "<button type=\"button\" class=\"btn btn-primary btn-xs\" data-id=\"" + index + "\" onclick=\"showEditRecordModal(this);\">Bearbeiten</button>";
-    tableHtmlRow += "<button type=\"button\" class=\"btn btn-default btn-xs\" id=\"btnEnableRecord" + index + "\"" + (record.disabled ? "" : " style=\"display: none;\"") + " data-id=\"" + index + "\" onclick=\"updateRecordState(this, false);\" data-loading-text=\"Aktiviere...\">Aktivieren</button>";
-    tableHtmlRow += "<button type=\"button\" class=\"btn btn-warning btn-xs\" id=\"btnDisableRecord" + index + "\"" + (!record.disabled ? "" : " style=\"display: none;\"") + " data-id=\"" + index + "\" onclick=\"updateRecordState(this, true);\" data-loading-text=\"Deaktiviere...\">Deaktivieren</button>";
-    tableHtmlRow += "<button type=\"button\" class=\"btn btn-danger btn-xs\" data-loading-text=\"Lösche...\" data-id=\"" + index + "\" onclick=\"deleteRecord(this);\">Löschen</button></td>";
+    tableHtmlRow += "<button type=\"button\" class=\"btn btn-primary btn-xs\" data-id=\"" + index + "\" onclick=\"showEditRecordModal(this);\">" + tr("Bearbeiten") + "</button>";
+    tableHtmlRow += "<button type=\"button\" class=\"btn btn-default btn-xs\" id=\"btnEnableRecord" + index + "\"" + (record.disabled ? "" : " style=\"display: none;\"") + " data-id=\"" + index + "\" onclick=\"updateRecordState(this, false);\" data-loading-text=\"" + tr("Aktiviere...") + "\">" + tr("Aktivieren") + "</button>";
+    tableHtmlRow += "<button type=\"button\" class=\"btn btn-warning btn-xs\" id=\"btnDisableRecord" + index + "\"" + (!record.disabled ? "" : " style=\"display: none;\"") + " data-id=\"" + index + "\" onclick=\"updateRecordState(this, true);\" data-loading-text=\"" + tr("Deaktiviere...") + "\">" + tr("Deaktivieren") + "</button>";
+    tableHtmlRow += "<button type=\"button\" class=\"btn btn-danger btn-xs\" data-loading-text=\"" + tr("Lösche...") + "\" data-id=\"" + index + "\" onclick=\"deleteRecord(this);\">" + tr("Löschen") + "</button></td>";
 
     tableHtmlRow += "</tr>";
 
@@ -1793,19 +1793,19 @@ function clearAddEditRecordForm() {
     $("#optAddEditRecordType").val("A");
     $("#txtAddEditRecordTtl").val("");
     $("#txtAddEditRecordTtl").attr("placeholder", sessionData.info.defaultRecordTtl);
-    $("#spanAddEditRecordTtlUnit").text("Sekunden (Standard " + sessionData.info.defaultRecordTtl + ")");
+    $("#spanAddEditRecordTtlUnit").text(tr("Sekunden (Standard {0})", sessionData.info.defaultRecordTtl));
 
     $("#divAddEditRecordData").show();
     $("#divAddEditRecordDataUnknownType").hide();
     $("#txtAddEditRecordDataUnknownType").val("");
     $("#txtAddEditRecordDataUnknownType").prop("disabled", false);
-    $("#lblAddEditRecordDataValue").text("IPv4-Adresse");
+    $("#lblAddEditRecordDataValue").text(tr("IPv4-Adresse"));
     $("#txtAddEditRecordDataValue").val("");
     $("#divAddEditRecordDataPtr").show();
     $("#chkAddEditRecordDataPtr").prop("checked", false);
     $("#chkAddEditRecordDataCreatePtrZone").prop("disabled", true);
     $("#chkAddEditRecordDataCreatePtrZone").prop("checked", false);
-    $("#chkAddEditRecordDataPtrLabel").text("Reverse-Eintrag (PTR) anlegen");
+    $("#chkAddEditRecordDataPtrLabel").text(tr("Reverse-Eintrag (PTR) anlegen"));
 
     $("#divAddEditRecordDataNs").hide();
     $("#txtAddEditRecordDataNsNameServer").prop("disabled", false);
@@ -1857,7 +1857,7 @@ function clearAddEditRecordForm() {
     $("input[name=rdAddEditRecordDataForwarderProtocol]:radio").attr("disabled", false);
     $("#chkAddEditRecordDataForwarderThisServer").prop("checked", false);
     $('#txtAddEditRecordDataForwarder').prop("disabled", false);
-    $("#txtAddEditRecordDataForwarder").attr("placeholder", "8.8.8.8 or [2620:fe::10]")
+    $("#txtAddEditRecordDataForwarder").attr("placeholder", tr("8.8.8.8 oder [2620:fe::10]"))
     $("#txtAddEditRecordDataForwarder").val("");
     $("#txtAddEditRecordDataForwarderPriority").val("");
     $("#chkAddEditRecordDataForwarderDnssecValidation").prop("checked", $("#chkDnssecValidation").prop("checked"));
@@ -1906,7 +1906,7 @@ function showAddRecordModal() {
         modifyAddRecordFormByType(true);
     }
 
-    $("#titleAddEditRecord").text("Eintrag hinzufügen");
+    $("#titleAddEditRecord").text(tr("Eintrag hinzufügen"));
     $("#lblAddEditRecordZoneName").text(zone === "." ? "" : zone);
     $("#btnAddEditRecord").attr("onclick", "addRecord(); return false;");
 
@@ -1972,7 +1972,7 @@ function modifyAddRecordFormByType(addMode) {
     $("#txtAddEditRecordTtl").prop("disabled", false);
     $("#txtAddEditRecordTtl").val("");
     $("#txtAddEditRecordTtl").attr("placeholder", sessionData.info.defaultRecordTtl);
-    $("#spanAddEditRecordTtlUnit").text("Sekunden (Standard " + sessionData.info.defaultRecordTtl + ")");
+    $("#spanAddEditRecordTtlUnit").text(tr("Sekunden (Standard {0})", sessionData.info.defaultRecordTtl));
     $("#txtAddEditRecordDataValue").attr("placeholder", "");
 
     var type = $("#optAddEditRecordType").val();
@@ -1994,23 +1994,23 @@ function modifyAddRecordFormByType(addMode) {
 
     switch (type) {
         case "A":
-            $("#lblAddEditRecordDataValue").text("IPv4-Adresse");
+            $("#lblAddEditRecordDataValue").text(tr("IPv4-Adresse"));
             $("#txtAddEditRecordDataValue").val("");
             $("#chkAddEditRecordDataPtr").prop("checked", false);
             $("#chkAddEditRecordDataCreatePtrZone").prop('disabled', true);
             $("#chkAddEditRecordDataCreatePtrZone").prop("checked", false);
-            $("#chkAddEditRecordDataPtrLabel").text("Reverse-Eintrag (PTR) anlegen");
+            $("#chkAddEditRecordDataPtrLabel").text(tr("Reverse-Eintrag (PTR) anlegen"));
             $("#divAddEditRecordData").show();
             $("#divAddEditRecordDataPtr").show();
             break;
 
         case "AAAA":
-            $("#lblAddEditRecordDataValue").text("IPv6-Adresse");
+            $("#lblAddEditRecordDataValue").text(tr("IPv6-Adresse"));
             $("#txtAddEditRecordDataValue").val("");
             $("#chkAddEditRecordDataPtr").prop("checked", false);
             $("#chkAddEditRecordDataCreatePtrZone").prop('disabled', true);
             $("#chkAddEditRecordDataCreatePtrZone").prop("checked", false);
-            $("#chkAddEditRecordDataPtrLabel").text("Reverse-Eintrag (PTR) anlegen");
+            $("#chkAddEditRecordDataPtrLabel").text(tr("Reverse-Eintrag (PTR) anlegen"));
             $("#divAddEditRecordData").show();
             $("#divAddEditRecordDataPtr").show();
             break;
@@ -2020,14 +2020,14 @@ function modifyAddRecordFormByType(addMode) {
             $("#txtAddEditRecordDataNsGlue").val("");
             $("#divAddEditRecordDataNs").show();
             $("#txtAddEditRecordTtl").attr("placeholder", sessionData.info.defaultNsRecordTtl);
-            $("#spanAddEditRecordTtlUnit").text("Sekunden (Standard " + sessionData.info.defaultNsRecordTtl + ")");
+            $("#spanAddEditRecordTtlUnit").text(tr("Sekunden (Standard {0})", sessionData.info.defaultNsRecordTtl));
             break;
 
         case "PTR":
         case "CNAME":
         case "DNAME":
         case "ANAME":
-            $("#lblAddEditRecordDataValue").text("Domainname");
+            $("#lblAddEditRecordDataValue").text(tr("Domainname"));
             $("#txtAddEditRecordDataValue").val("");
             $("#divAddEditRecordData").show();
             break;
@@ -2192,7 +2192,7 @@ function addRecord() {
         case "AAAA":
             var ipAddress = $("#txtAddEditRecordDataValue").val();
             if (ipAddress === "") {
-                showAlert("warning", "Angabe fehlt", "Bitte eine IP-Adresse eingeben.", divAddEditRecordAlert);
+                showAlert("warning", tr("Angabe fehlt"), tr("Bitte eine IP-Adresse eingeben."), divAddEditRecordAlert);
                 $("#txtAddEditRecordDataValue").trigger("focus");
                 return;
             }
@@ -2205,7 +2205,7 @@ function addRecord() {
         case "NS":
             var nameServer = $("#txtAddEditRecordDataNsNameServer").val();
             if (nameServer === "") {
-                showAlert("warning", "Angabe fehlt", "Bitte einen Nameserver eingeben.", divAddEditRecordAlert);
+                showAlert("warning", tr("Angabe fehlt"), tr("Bitte einen Nameserver eingeben."), divAddEditRecordAlert);
                 $("#txtAddEditRecordDataNsNameServer").trigger("focus");
                 return;
             }
@@ -2218,14 +2218,14 @@ function addRecord() {
         case "CNAME":
             var subDomainName = $("#txtAddEditRecordName").val();
             if ((subDomainName === "") || (subDomainName === "@")) {
-                showAlert("warning", "Angabe fehlt", "Bitte einen Namen für den CNAME-Eintrag eingeben. Am Zonenursprung ist CNAME nicht erlaubt; dafür ANAME verwenden.", divAddEditRecordAlert);
+                showAlert("warning", tr("Angabe fehlt"), tr("Bitte einen Namen für den CNAME-Eintrag eingeben. Am Zonenursprung ist CNAME nicht erlaubt; dafür ANAME verwenden."), divAddEditRecordAlert);
                 $("#txtAddEditRecordName").trigger("focus");
                 return;
             }
 
             var cname = $("#txtAddEditRecordDataValue").val();
             if (cname === "") {
-                showAlert("warning", "Angabe fehlt", "Bitte einen Domainnamen eingeben.", divAddEditRecordAlert);
+                showAlert("warning", tr("Angabe fehlt"), tr("Bitte einen Domainnamen eingeben."), divAddEditRecordAlert);
                 $("#txtAddEditRecordDataValue").trigger("focus");
                 return;
             }
@@ -2236,7 +2236,7 @@ function addRecord() {
         case "PTR":
             var ptrName = $("#txtAddEditRecordDataValue").val();
             if (ptrName === "") {
-                showAlert("warning", "Angabe fehlt", "Bitte einen gültigen Wert eingeben.", divAddEditRecordAlert);
+                showAlert("warning", tr("Angabe fehlt"), tr("Bitte einen gültigen Wert eingeben."), divAddEditRecordAlert);
                 $("#txtAddEditRecordDataValue").trigger("focus");
                 return;
             }
@@ -2251,7 +2251,7 @@ function addRecord() {
 
             var exchange = $("#txtAddEditRecordDataMxExchange").val();
             if (exchange === "") {
-                showAlert("warning", "Angabe fehlt", "Bitte den Mailserver eingeben.", divAddEditRecordAlert);
+                showAlert("warning", tr("Angabe fehlt"), tr("Bitte den Mailserver eingeben."), divAddEditRecordAlert);
                 $("#txtAddEditRecordDataMxExchange").trigger("focus");
                 return;
             }
@@ -2262,7 +2262,7 @@ function addRecord() {
         case "TXT":
             var text = $("#txtAddEditRecordDataTxt").val();
             if (text === "") {
-                showAlert("warning", "Angabe fehlt", "Bitte einen gültigen Wert eingeben.", divAddEditRecordAlert);
+                showAlert("warning", tr("Angabe fehlt"), tr("Bitte einen gültigen Wert eingeben."), divAddEditRecordAlert);
                 $("#txtAddEditRecordDataTxt").trigger("focus");
                 return;
             }
@@ -2286,35 +2286,35 @@ function addRecord() {
 
         case "SRV":
             if ($("#txtAddEditRecordName").val() === "") {
-                showAlert("warning", "Angabe fehlt", "Bitte einen Namen mit Dienst- und Protokoll-Label eingeben (z. B. _sip._tcp).", divAddEditRecordAlert);
+                showAlert("warning", tr("Angabe fehlt"), tr("Bitte einen Namen mit Dienst- und Protokoll-Label eingeben (z. B. _sip._tcp)."), divAddEditRecordAlert);
                 $("#txtAddEditRecordName").trigger("focus");
                 return;
             }
 
             var priority = $("#txtAddEditRecordDataSrvPriority").val();
             if (priority === "") {
-                showAlert("warning", "Angabe fehlt", "Bitte eine gültige Priorität eingeben.", divAddEditRecordAlert);
+                showAlert("warning", tr("Angabe fehlt"), tr("Bitte eine gültige Priorität eingeben."), divAddEditRecordAlert);
                 $("#txtAddEditRecordDataSrvPriority").trigger("focus");
                 return;
             }
 
             var weight = $("#txtAddEditRecordDataSrvWeight").val();
             if (weight === "") {
-                showAlert("warning", "Angabe fehlt", "Bitte eine gültige Gewichtung eingeben.", divAddEditRecordAlert);
+                showAlert("warning", tr("Angabe fehlt"), tr("Bitte eine gültige Gewichtung eingeben."), divAddEditRecordAlert);
                 $("#txtAddEditRecordDataSrvWeight").trigger("focus");
                 return;
             }
 
             var port = $("#txtAddEditRecordDataSrvPort").val();
             if (port === "") {
-                showAlert("warning", "Angabe fehlt", "Bitte einen gültigen Port eingeben.", divAddEditRecordAlert);
+                showAlert("warning", tr("Angabe fehlt"), tr("Bitte einen gültigen Port eingeben."), divAddEditRecordAlert);
                 $("#txtAddEditRecordDataSrvPort").trigger("focus");
                 return;
             }
 
             var target = $("#txtAddEditRecordDataSrvTarget").val();
             if (target === "") {
-                showAlert("warning", "Angabe fehlt", "Bitte ein gültiges Ziel eingeben.", divAddEditRecordAlert);
+                showAlert("warning", tr("Angabe fehlt"), tr("Bitte ein gültiges Ziel eingeben."), divAddEditRecordAlert);
                 $("#txtAddEditRecordDataSrvTarget").trigger("focus");
                 return;
             }
@@ -2325,14 +2325,14 @@ function addRecord() {
         case "NAPTR":
             var order = $("#txtAddEditRecordDataNaptrOrder").val();
             if (order === "") {
-                showAlert("warning", "Angabe fehlt", "Bitte eine gültige Reihenfolge eingeben.", divAddEditRecordAlert);
+                showAlert("warning", tr("Angabe fehlt"), tr("Bitte eine gültige Reihenfolge eingeben."), divAddEditRecordAlert);
                 $("#txtAddEditRecordDataNaptrOrder").trigger("focus");
                 return;
             }
 
             var preference = $("#txtAddEditRecordDataNaptrPreference").val();
             if (preference === "") {
-                showAlert("warning", "Angabe fehlt", "Bitte eine gültige Priorität eingeben.", divAddEditRecordAlert);
+                showAlert("warning", tr("Angabe fehlt"), tr("Bitte eine gültige Priorität eingeben."), divAddEditRecordAlert);
                 $("#txtAddEditRecordDataNaptrPreference").trigger("focus");
                 return;
             }
@@ -2348,7 +2348,7 @@ function addRecord() {
         case "DNAME":
             var dname = $("#txtAddEditRecordDataValue").val();
             if (dname === "") {
-                showAlert("warning", "Angabe fehlt", "Bitte einen Domainnamen eingeben.", divAddEditRecordAlert);
+                showAlert("warning", tr("Angabe fehlt"), tr("Bitte einen Domainnamen eingeben."), divAddEditRecordAlert);
                 $("#txtAddEditRecordDataValue").trigger("focus");
                 return;
             }
@@ -2360,14 +2360,14 @@ function addRecord() {
         case "HTTPS":
             var svcPriority = $("#txtAddEditRecordDataSvcbPriority").val();
             if ((svcPriority === null) || (svcPriority === "")) {
-                showAlert("warning", "Angabe fehlt", "Bitte eine Priorität eingeben.", divAddEditRecordAlert);
+                showAlert("warning", tr("Angabe fehlt"), tr("Bitte eine Priorität eingeben."), divAddEditRecordAlert);
                 $("#txtAddEditRecordDataSvcbPriority").trigger("focus");
                 return;
             }
 
             var svcTargetName = $("#txtAddEditRecordDataSvcbTargetName").val();
             if ((svcTargetName === null) || (svcTargetName === "")) {
-                showAlert("warning", "Angabe fehlt", "Bitte einen Zielnamen eingeben.", divAddEditRecordAlert);
+                showAlert("warning", tr("Angabe fehlt"), tr("Bitte einen Zielnamen eingeben."), divAddEditRecordAlert);
                 $("#txtAddEditRecordDataSvcbTargetName").trigger("focus");
                 return;
             }
@@ -2388,21 +2388,21 @@ function addRecord() {
         case "URI":
             var uriPriority = $("#txtAddEditRecordDataUriPriority").val();
             if (uriPriority === "") {
-                showAlert("warning", "Angabe fehlt", "Bitte eine gültige Priorität eingeben.", divAddEditRecordAlert);
+                showAlert("warning", tr("Angabe fehlt"), tr("Bitte eine gültige Priorität eingeben."), divAddEditRecordAlert);
                 $("#txtAddEditRecordDataUriPriority").trigger("focus");
                 return;
             }
 
             var uriWeight = $("#txtAddEditRecordDataUriWeight").val();
             if (uriWeight === "") {
-                showAlert("warning", "Angabe fehlt", "Bitte eine gültige Gewichtung eingeben.", divAddEditRecordAlert);
+                showAlert("warning", tr("Angabe fehlt"), tr("Bitte eine gültige Gewichtung eingeben."), divAddEditRecordAlert);
                 $("#txtAddEditRecordDataUriWeight").trigger("focus");
                 return;
             }
 
             var uri = $("#txtAddEditRecordDataUri").val();
             if (uri === "") {
-                showAlert("warning", "Angabe fehlt", "Bitte eine gültige URI eingeben.", divAddEditRecordAlert);
+                showAlert("warning", tr("Angabe fehlt"), tr("Bitte eine gültige URI eingeben."), divAddEditRecordAlert);
                 $("#txtAddEditRecordDataUri").trigger("focus");
                 return;
             }
@@ -2421,7 +2421,7 @@ function addRecord() {
 
             var value = $("#txtAddEditRecordDataCaaValue").val();
             if (value === "") {
-                showAlert("warning", "Angabe fehlt", "Bitte eine gültige Authority eingeben.", divAddEditRecordAlert);
+                showAlert("warning", tr("Angabe fehlt"), tr("Bitte eine gültige Authority eingeben."), divAddEditRecordAlert);
                 $("#txtAddEditRecordDataCaaValue").trigger("focus");
                 return;
             }
@@ -2432,7 +2432,7 @@ function addRecord() {
         case "ANAME":
             var aname = $("#txtAddEditRecordDataValue").val();
             if (aname === "") {
-                showAlert("warning", "Angabe fehlt", "Bitte einen gültigen Wert eingeben.", divAddEditRecordAlert);
+                showAlert("warning", tr("Angabe fehlt"), tr("Bitte einen gültigen Wert eingeben."), divAddEditRecordAlert);
                 $("#txtAddEditRecordDataValue").trigger("focus");
                 return;
             }
@@ -2443,7 +2443,7 @@ function addRecord() {
         case "FWD":
             var forwarder = $("#txtAddEditRecordDataForwarder").val();
             if (forwarder === "") {
-                showAlert("warning", "Angabe fehlt", "Bitte Domainname, IP-Adresse oder URL des Forwarders eingeben.", divAddEditRecordAlert);
+                showAlert("warning", tr("Angabe fehlt"), tr("Bitte Domainname, IP-Adresse oder URL des Forwarders eingeben."), divAddEditRecordAlert);
                 $("#txtAddEditRecordDataForwarder").trigger("focus");
                 return;
             }
@@ -2464,13 +2464,13 @@ function addRecord() {
                     var proxyPassword = $("#txtAddEditRecordDataForwarderProxyPassword").val();
 
                     if ((proxyAddress == null) || (proxyAddress === "")) {
-                        showAlert("warning", "Angabe fehlt", "Bitte die Proxy-Adresse eingeben.", divAddEditRecordAlert);
+                        showAlert("warning", tr("Angabe fehlt"), tr("Bitte die Proxy-Adresse eingeben."), divAddEditRecordAlert);
                         $("#txtAddEditRecordDataForwarderProxyAddress").trigger("focus");
                         return;
                     }
 
                     if ((proxyPort == null) || (proxyPort === "")) {
-                        showAlert("warning", "Angabe fehlt", "Bitte den Proxy-Port eingeben.", divAddEditRecordAlert);
+                        showAlert("warning", tr("Angabe fehlt"), tr("Bitte den Proxy-Port eingeben."), divAddEditRecordAlert);
                         $("#txtAddEditRecordDataForwarderProxyPort").trigger("focus");
                         return;
                     }
@@ -2484,7 +2484,7 @@ function addRecord() {
             var appName = $("#optAddEditRecordDataAppName").val();
 
             if ((appName === null) || (appName === "")) {
-                showAlert("warning", "Angabe fehlt", "Bitte eine App auswählen.", divAddEditRecordAlert);
+                showAlert("warning", tr("Angabe fehlt"), tr("Bitte eine App auswählen."), divAddEditRecordAlert);
                 $("#optAddEditRecordDataAppName").trigger("focus");
                 return;
             }
@@ -2492,7 +2492,7 @@ function addRecord() {
             var classPath = $("#optAddEditRecordDataClassPath").val();
 
             if ((classPath === null) || (classPath === "")) {
-                showAlert("warning", "Angabe fehlt", "Bitte einen Klassenpfad auswählen.", divAddEditRecordAlert);
+                showAlert("warning", tr("Angabe fehlt"), tr("Bitte einen Klassenpfad auswählen."), divAddEditRecordAlert);
                 $("#optAddEditRecordDataClassPath").trigger("focus");
                 return;
             }
@@ -2505,14 +2505,14 @@ function addRecord() {
         default:
             type = $("#txtAddEditRecordDataUnknownType").val();
             if ((type === null) || (type === "")) {
-                showAlert("warning", "Angabe fehlt", "Bitte Name oder Nummer des Eintragstyps eingeben.", divAddEditRecordAlert);
+                showAlert("warning", tr("Angabe fehlt"), tr("Bitte Name oder Nummer des Eintragstyps eingeben."), divAddEditRecordAlert);
                 $("#txtAddEditRecordDataUnknownType").trigger("focus");
                 return;
             }
 
             var rdata = $("#txtAddEditRecordDataValue").val();
             if ((rdata === null) || (rdata === "")) {
-                showAlert("warning", "Angabe fehlt", "Bitte die RDATA als Hex-Wert eingeben.", divAddEditRecordAlert);
+                showAlert("warning", tr("Angabe fehlt"), tr("Bitte die RDATA als Hex-Wert eingeben."), divAddEditRecordAlert);
                 $("#txtAddEditRecordDataValue").trigger("focus");
                 return;
             }
@@ -2545,7 +2545,7 @@ function addRecord() {
                 showEditZonePage(1);
             }
 
-            showAlert("success", "Eintrag hinzugefügt", "Der Eintrag wurde hinzugefügt.");
+            showAlert("success", tr("Eintrag hinzugefügt"), tr("Der Eintrag wurde hinzugefügt."));
         },
         error: function () {
             btn.button("reset");
@@ -2563,7 +2563,7 @@ function updateAddEditFormForwarderPlaceholder() {
     switch (protocol) {
         case "Udp":
         case "Tcp":
-            $("#txtAddEditRecordDataForwarder").attr("placeholder", "8.8.8.8 or [2620:fe::10]")
+            $("#txtAddEditRecordDataForwarder").attr("placeholder", tr("8.8.8.8 oder [2620:fe::10]"))
             break;
 
         case "Tls":
@@ -2593,7 +2593,7 @@ function updateAddEditFormForwarderThisServer() {
     if (useThisServer) {
         $("input[name=rdAddEditRecordDataForwarderProtocol]:radio").attr("disabled", true);
         $("#rdAddEditRecordDataForwarderProtocolUdp").prop("checked", true);
-        $("#txtAddEditRecordDataForwarder").attr("placeholder", "8.8.8.8 or [2620:fe::10]")
+        $("#txtAddEditRecordDataForwarder").attr("placeholder", tr("8.8.8.8 oder [2620:fe::10]"))
 
         $("#txtAddEditRecordDataForwarder").prop("disabled", true);
         $("#txtAddEditRecordDataForwarder").val("this-server");
@@ -2616,26 +2616,26 @@ function addSvcbRecordParamEditRow(paramKey, paramValue) {
     var tableHtmlRows = "<tr id=\"tableAddEditRecordDataSvcbParamsRow" + id + "\">";
 
     if ((paramKey != "") && isFinite(paramKey)) {
-        tableHtmlRows += "<td><input type=\"text\" class=\"form-control\" placeholder=\"key number\" value=\"" + htmlEncode(paramKey) + "\"></td>";
-        tableHtmlRows += "<td><input type=\"text\" data-optional=\"true\" class=\"form-control\" placeholder=\"hex string\" value=\"" + htmlEncode(paramValue) + "\"></td>";
+        tableHtmlRows += "<td><input type=\"text\" class=\"form-control\" placeholder=\"" + tr("key number") + "\" value=\"" + htmlEncode(paramKey) + "\"></td>";
+        tableHtmlRows += "<td><input type=\"text\" data-optional=\"true\" class=\"form-control\" placeholder=\"" + tr("hex string") + "\" value=\"" + htmlEncode(paramValue) + "\"></td>";
     }
     else {
         tableHtmlRows += "<td id=\"tableAddEditRecordDataSvcbParamsRowColumn1" + id + "\">";
         tableHtmlRows += "<select class=\"form-control\" onchange=\"if (event.target.value === 'Unknown') { $('#tableAddEditRecordDataSvcbParamsRowColumn1" + id + "').html('<input type=\\\'text\\\' class=\\\'form-control\\\' placeholder=\\\'key number\\\' >'); $('#tableAddEditRecordDataSvcbParamsRowColumn2" + id + "').html('<input type=\\\'text\\\' data-optional=\\\'true\\\' class=\\\'form-control\\\' placeholder=\\\'hex string\\\' >'); }\">";
         tableHtmlRows += "<option" + (paramKey == "mandatory" ? " selected" : "") + ">mandatory</option>";
-        tableHtmlRows += "<option" + (paramKey == "alpn" ? " selected" : "") + ">alpn</option>";
-        tableHtmlRows += "<option" + (paramKey == "no-default-alpn" ? " selected" : "") + ">no-default-alpn</option>";
+        tableHtmlRows += "<option" + (paramKey == "alpn" ? " selected" : "") + ">" + tr("alpn") + "</option>";
+        tableHtmlRows += "<option" + (paramKey == "no-default-alpn" ? " selected" : "") + ">" + tr("no-default-alpn") + "</option>";
         tableHtmlRows += "<option" + (paramKey == "port" ? " selected" : "") + ">port</option>";
-        tableHtmlRows += "<option" + (paramKey == "ipv4hint" ? " selected" : "") + ">ipv4hint</option>";
-        tableHtmlRows += "<option" + (paramKey == "ipv6hint" ? " selected" : "") + ">ipv6hint</option>";
-        tableHtmlRows += "<option" + (paramKey == "dohpath" ? " selected" : "") + ">dohpath</option>";
+        tableHtmlRows += "<option" + (paramKey == "ipv4hint" ? " selected" : "") + ">" + tr("ipv4hint") + "</option>";
+        tableHtmlRows += "<option" + (paramKey == "ipv6hint" ? " selected" : "") + ">" + tr("ipv6hint") + "</option>";
+        tableHtmlRows += "<option" + (paramKey == "dohpath" ? " selected" : "") + ">" + tr("dohpath") + "</option>";
         tableHtmlRows += "<option>Unknown</option>";
         tableHtmlRows += "</select></td>";
 
         tableHtmlRows += "<td id=\"tableAddEditRecordDataSvcbParamsRowColumn2" + id + "\"><input type=\"text\" data-optional=\"true\" class=\"form-control\" value=\"" + htmlEncode(paramValue) + "\"></td>";
     }
 
-    tableHtmlRows += "<td><button type=\"button\" class=\"btn btn-warning\" onclick=\"$('#tableAddEditRecordDataSvcbParamsRow" + id + "').remove();\">Entfernen</button></td></tr>";
+    tableHtmlRows += "<td><button type=\"button\" class=\"btn btn-warning\" onclick=\"$('#tableAddEditRecordDataSvcbParamsRow" + id + "').remove();\">" + tr("Entfernen") + "</button></td></tr>";
 
     $("#tableAddEditRecordDataSvcbParams").append(tableHtmlRows);
 }
@@ -2659,7 +2659,7 @@ function showEditRecordModal(objBtn) {
         name = name.replace("." + zone, "");
 
     clearAddEditRecordForm();
-    $("#titleAddEditRecord").text("Eintrag bearbeiten");
+    $("#titleAddEditRecord").text(tr("Eintrag bearbeiten"));
     $("#lblAddEditRecordZoneName").text(zone === "." ? "" : zone);
     $("#optAddEditRecordType").val(type);
     $("#divAddEditRecordOverwrite").hide();
@@ -2677,7 +2677,7 @@ function showEditRecordModal(objBtn) {
             $("#chkAddEditRecordDataPtr").prop("checked", false);
             $("#chkAddEditRecordDataCreatePtrZone").prop("disabled", true);
             $("#chkAddEditRecordDataCreatePtrZone").prop("checked", false);
-            $("#chkAddEditRecordDataPtrLabel").text("Reverse-Eintrag (PTR) mit aktualisieren");
+            $("#chkAddEditRecordDataPtrLabel").text(tr("Reverse-Eintrag (PTR) mit aktualisieren"));
             break;
 
         case "NS":
@@ -2831,7 +2831,7 @@ function showEditRecordModal(objBtn) {
             var rdata = divData.attr("data-record-rdata");
 
             if (rdata == null) {
-                showAlert("danger", "Nicht unterstützt", "Dieser Eintragstyp kann nicht bearbeitet werden.");
+                showAlert("danger", tr("Nicht unterstützt"), tr("Dieser Eintragstyp kann nicht bearbeitet werden."));
                 return;
             }
 
@@ -2898,7 +2898,7 @@ function updateRecord() {
 
             var newIpAddress = $("#txtAddEditRecordDataValue").val();
             if (newIpAddress === "") {
-                showAlert("warning", "Angabe fehlt", "Bitte eine IP-Adresse eingeben.", divAddEditRecordAlert);
+                showAlert("warning", tr("Angabe fehlt"), tr("Bitte eine IP-Adresse eingeben."), divAddEditRecordAlert);
                 $("#txtAddEditRecordDataValue").trigger("focus");
                 return;
             }
@@ -2913,7 +2913,7 @@ function updateRecord() {
 
             var newNameServer = $("#txtAddEditRecordDataNsNameServer").val();
             if (newNameServer === "") {
-                showAlert("warning", "Angabe fehlt", "Bitte einen Nameserver eingeben.", divAddEditRecordAlert);
+                showAlert("warning", tr("Angabe fehlt"), tr("Bitte einen Nameserver eingeben."), divAddEditRecordAlert);
                 $("#txtAddEditRecordDataNsNameServer").trigger("focus");
                 return;
             }
@@ -2926,14 +2926,14 @@ function updateRecord() {
         case "CNAME":
             var subDomainName = $("#txtAddEditRecordName").val();
             if ((subDomainName === "") || (subDomainName === "@")) {
-                showAlert("warning", "Angabe fehlt", "Bitte einen Namen für den CNAME-Eintrag eingeben. Am Zonenursprung ist CNAME nicht erlaubt; dafür ANAME verwenden.", divAddEditRecordAlert);
+                showAlert("warning", tr("Angabe fehlt"), tr("Bitte einen Namen für den CNAME-Eintrag eingeben. Am Zonenursprung ist CNAME nicht erlaubt; dafür ANAME verwenden."), divAddEditRecordAlert);
                 $("#txtAddEditRecordName").trigger("focus");
                 return;
             }
 
             var cname = $("#txtAddEditRecordDataValue").val();
             if (cname === "") {
-                showAlert("warning", "Angabe fehlt", "Bitte einen Domainnamen eingeben.", divAddEditRecordAlert);
+                showAlert("warning", tr("Angabe fehlt"), tr("Bitte einen Domainnamen eingeben."), divAddEditRecordAlert);
                 $("#txtAddEditRecordDataValue").trigger("focus");
                 return;
             }
@@ -2946,7 +2946,7 @@ function updateRecord() {
 
             var newPtrName = $("#txtAddEditRecordDataValue").val();
             if (newPtrName === "") {
-                showAlert("warning", "Angabe fehlt", "Bitte einen gültigen Wert eingeben.", divAddEditRecordAlert);
+                showAlert("warning", tr("Angabe fehlt"), tr("Bitte einen gültigen Wert eingeben."), divAddEditRecordAlert);
                 $("#txtAddEditRecordDataValue").trigger("focus");
                 return;
             }
@@ -2965,7 +2965,7 @@ function updateRecord() {
 
             var newExchange = $("#txtAddEditRecordDataMxExchange").val();
             if (newExchange === "") {
-                showAlert("warning", "Angabe fehlt", "Bitte den Mailserver eingeben.", divAddEditRecordAlert);
+                showAlert("warning", tr("Angabe fehlt"), tr("Bitte den Mailserver eingeben."), divAddEditRecordAlert);
                 $("#txtAddEditRecordDataMxExchange").trigger("focus");
                 return;
             }
@@ -2976,7 +2976,7 @@ function updateRecord() {
         case "TXT":
             var newText = $("#txtAddEditRecordDataTxt").val();
             if (newText === "") {
-                showAlert("warning", "Angabe fehlt", "Bitte einen gültigen Wert eingeben.", divAddEditRecordAlert);
+                showAlert("warning", tr("Angabe fehlt"), tr("Bitte einen gültigen Wert eingeben."), divAddEditRecordAlert);
                 $("#txtAddEditRecordDataTxt").trigger("focus");
                 return;
             }
@@ -3004,7 +3004,7 @@ function updateRecord() {
 
         case "SRV":
             if ($("#txtAddEditRecordName").val() === "") {
-                showAlert("warning", "Angabe fehlt", "Bitte einen Namen mit Dienst- und Protokoll-Label eingeben (z. B. _sip._tcp).", divAddEditRecordAlert);
+                showAlert("warning", tr("Angabe fehlt"), tr("Bitte einen Namen mit Dienst- und Protokoll-Label eingeben (z. B. _sip._tcp)."), divAddEditRecordAlert);
                 $("#txtAddEditRecordName").trigger("focus");
                 return;
             }
@@ -3013,7 +3013,7 @@ function updateRecord() {
 
             var newPriority = $("#txtAddEditRecordDataSrvPriority").val();
             if (newPriority === "") {
-                showAlert("warning", "Angabe fehlt", "Bitte eine gültige Priorität eingeben.", divAddEditRecordAlert);
+                showAlert("warning", tr("Angabe fehlt"), tr("Bitte eine gültige Priorität eingeben."), divAddEditRecordAlert);
                 $("#txtAddEditRecordDataSrvPriority").trigger("focus");
                 return;
             }
@@ -3022,7 +3022,7 @@ function updateRecord() {
 
             var newWeight = $("#txtAddEditRecordDataSrvWeight").val();
             if (newWeight === "") {
-                showAlert("warning", "Angabe fehlt", "Bitte eine gültige Gewichtung eingeben.", divAddEditRecordAlert);
+                showAlert("warning", tr("Angabe fehlt"), tr("Bitte eine gültige Gewichtung eingeben."), divAddEditRecordAlert);
                 $("#txtAddEditRecordDataSrvWeight").trigger("focus");
                 return;
             }
@@ -3031,7 +3031,7 @@ function updateRecord() {
 
             var newPort = $("#txtAddEditRecordDataSrvPort").val();
             if (newPort === "") {
-                showAlert("warning", "Angabe fehlt", "Bitte einen gültigen Port eingeben.", divAddEditRecordAlert);
+                showAlert("warning", tr("Angabe fehlt"), tr("Bitte einen gültigen Port eingeben."), divAddEditRecordAlert);
                 $("#txtAddEditRecordDataSrvPort").trigger("focus");
                 return;
             }
@@ -3040,7 +3040,7 @@ function updateRecord() {
 
             var newTarget = $("#txtAddEditRecordDataSrvTarget").val();
             if (newTarget === "") {
-                showAlert("warning", "Angabe fehlt", "Bitte ein gültiges Ziel eingeben.", divAddEditRecordAlert);
+                showAlert("warning", tr("Angabe fehlt"), tr("Bitte ein gültiges Ziel eingeben."), divAddEditRecordAlert);
                 $("#txtAddEditRecordDataSrvTarget").trigger("focus");
                 return;
             }
@@ -3058,14 +3058,14 @@ function updateRecord() {
 
             var newOrder = $("#txtAddEditRecordDataNaptrOrder").val();
             if (newOrder === "") {
-                showAlert("warning", "Angabe fehlt", "Bitte eine gültige Reihenfolge eingeben.", divAddEditRecordAlert);
+                showAlert("warning", tr("Angabe fehlt"), tr("Bitte eine gültige Reihenfolge eingeben."), divAddEditRecordAlert);
                 $("#txtAddEditRecordDataNaptrOrder").trigger("focus");
                 return;
             }
 
             var newPreference = $("#txtAddEditRecordDataNaptrPreference").val();
             if (newPreference === "") {
-                showAlert("warning", "Angabe fehlt", "Bitte eine gültige Priorität eingeben.", divAddEditRecordAlert);
+                showAlert("warning", tr("Angabe fehlt"), tr("Bitte eine gültige Priorität eingeben."), divAddEditRecordAlert);
                 $("#txtAddEditRecordDataNaptrPreference").trigger("focus");
                 return;
             }
@@ -3084,7 +3084,7 @@ function updateRecord() {
         case "DNAME":
             var dname = $("#txtAddEditRecordDataValue").val();
             if (dname === "") {
-                showAlert("warning", "Angabe fehlt", "Bitte einen Domainnamen eingeben.", divAddEditRecordAlert);
+                showAlert("warning", tr("Angabe fehlt"), tr("Bitte einen Domainnamen eingeben."), divAddEditRecordAlert);
                 $("#txtAddEditRecordDataValue").trigger("focus");
                 return;
             }
@@ -3113,14 +3113,14 @@ function updateRecord() {
 
             var newSvcPriority = $("#txtAddEditRecordDataSvcbPriority").val();
             if ((newSvcPriority === null) || (newSvcPriority === "")) {
-                showAlert("warning", "Angabe fehlt", "Bitte eine Priorität eingeben.", divAddEditRecordAlert);
+                showAlert("warning", tr("Angabe fehlt"), tr("Bitte eine Priorität eingeben."), divAddEditRecordAlert);
                 $("#txtAddEditRecordDataSvcbPriority").trigger("focus");
                 return;
             }
 
             var newSvcTargetName = $("#txtAddEditRecordDataSvcbTargetName").val();
             if ((newSvcTargetName === null) || (newSvcTargetName === "")) {
-                showAlert("warning", "Angabe fehlt", "Bitte einen Zielnamen eingeben.", divAddEditRecordAlert);
+                showAlert("warning", tr("Angabe fehlt"), tr("Bitte einen Zielnamen eingeben."), divAddEditRecordAlert);
                 $("#txtAddEditRecordDataSvcbTargetName").trigger("focus");
                 return;
             }
@@ -3143,7 +3143,7 @@ function updateRecord() {
 
             var newUriPriority = $("#txtAddEditRecordDataUriPriority").val();
             if (newUriPriority === "") {
-                showAlert("warning", "Angabe fehlt", "Bitte eine gültige Priorität eingeben.", divAddEditRecordAlert);
+                showAlert("warning", tr("Angabe fehlt"), tr("Bitte eine gültige Priorität eingeben."), divAddEditRecordAlert);
                 $("#txtAddEditRecordDataUriPriority").trigger("focus");
                 return;
             }
@@ -3152,7 +3152,7 @@ function updateRecord() {
 
             var newUriWeight = $("#txtAddEditRecordDataUriWeight").val();
             if (newUriWeight === "") {
-                showAlert("warning", "Angabe fehlt", "Bitte eine gültige Gewichtung eingeben.", divAddEditRecordAlert);
+                showAlert("warning", tr("Angabe fehlt"), tr("Bitte eine gültige Gewichtung eingeben."), divAddEditRecordAlert);
                 $("#txtAddEditRecordDataUriWeight").trigger("focus");
                 return;
             }
@@ -3161,7 +3161,7 @@ function updateRecord() {
 
             var newUri = $("#txtAddEditRecordDataUri").val();
             if (newUri === "") {
-                showAlert("warning", "Angabe fehlt", "Bitte eine gültige URI eingeben.", divAddEditRecordAlert);
+                showAlert("warning", tr("Angabe fehlt"), tr("Bitte eine gültige URI eingeben."), divAddEditRecordAlert);
                 $("#txtAddEditRecordDataUri").trigger("focus");
                 return;
             }
@@ -3185,7 +3185,7 @@ function updateRecord() {
 
             var newValue = $("#txtAddEditRecordDataCaaValue").val();
             if (newValue === "") {
-                showAlert("warning", "Angabe fehlt", "Bitte eine gültige Authority eingeben.", divAddEditRecordAlert);
+                showAlert("warning", tr("Angabe fehlt"), tr("Bitte eine gültige Authority eingeben."), divAddEditRecordAlert);
                 $("#txtAddEditRecordDataCaaValue").trigger("focus");
                 return;
             }
@@ -3198,7 +3198,7 @@ function updateRecord() {
 
             var newAName = $("#txtAddEditRecordDataValue").val();
             if (newAName === "") {
-                showAlert("warning", "Angabe fehlt", "Bitte einen gültigen Wert eingeben.", divAddEditRecordAlert);
+                showAlert("warning", tr("Angabe fehlt"), tr("Bitte einen gültigen Wert eingeben."), divAddEditRecordAlert);
                 $("#txtAddEditRecordDataValue").trigger("focus");
                 return;
             }
@@ -3214,7 +3214,7 @@ function updateRecord() {
 
             var newForwarder = $("#txtAddEditRecordDataForwarder").val();
             if (newForwarder === "") {
-                showAlert("warning", "Angabe fehlt", "Bitte Domainname, IP-Adresse oder URL des Forwarders eingeben.", divAddEditRecordAlert);
+                showAlert("warning", tr("Angabe fehlt"), tr("Bitte Domainname, IP-Adresse oder URL des Forwarders eingeben."), divAddEditRecordAlert);
                 $("#txtAddEditRecordDataForwarder").trigger("focus");
                 return;
             }
@@ -3238,13 +3238,13 @@ function updateRecord() {
                         var proxyPassword = $("#txtAddEditRecordDataForwarderProxyPassword").val();
 
                         if ((proxyAddress == null) || (proxyAddress === "")) {
-                            showAlert("warning", "Angabe fehlt", "Bitte die Proxy-Adresse eingeben.", divAddEditRecordAlert);
+                            showAlert("warning", tr("Angabe fehlt"), tr("Bitte die Proxy-Adresse eingeben."), divAddEditRecordAlert);
                             $("#txtAddEditRecordDataForwarderProxyAddress").trigger("focus");
                             return;
                         }
 
                         if ((proxyPort == null) || (proxyPort === "")) {
-                            showAlert("warning", "Angabe fehlt", "Bitte den Proxy-Port eingeben.", divAddEditRecordAlert);
+                            showAlert("warning", tr("Angabe fehlt"), tr("Bitte den Proxy-Port eingeben."), divAddEditRecordAlert);
                             $("#txtAddEditRecordDataForwarderProxyPort").trigger("focus");
                             return;
                         }
@@ -3265,7 +3265,7 @@ function updateRecord() {
 
             var newRData = $("#txtAddEditRecordDataValue").val();
             if ((newRData === null) || (newRData === "")) {
-                showAlert("warning", "Angabe fehlt", "Bitte die RDATA als Hex-Wert eingeben.", divAddEditRecordAlert);
+                showAlert("warning", tr("Angabe fehlt"), tr("Bitte die RDATA als Hex-Wert eingeben."), divAddEditRecordAlert);
                 $("#txtAddEditRecordDataValue").trigger("focus");
                 return;
             }
@@ -3303,7 +3303,7 @@ function updateRecord() {
                 $("#trZoneRecord" + index).replaceWith(tableHtmlRow);
             }
 
-            showAlert("success", "Eintrag gespeichert", "Der Eintrag wurde geändert.");
+            showAlert("success", tr("Eintrag gespeichert"), tr("Der Eintrag wurde geändert."));
         },
         error: function () {
             btn.button("reset");
@@ -3332,7 +3332,7 @@ function updateRecordState(objBtn, disable) {
     if (domain === "")
         domain = ".";
 
-    if (disable && !confirm(type + "-Eintrag '" + domain + "' deaktivieren?"))
+    if (disable && !confirm(tr("{0}-Eintrag '{1}' deaktivieren?", type, domain)))
         return;
 
     var formData = "zone=" + encodeURIComponent(zone) + "&type=" + encodeURIComponent(type) + "&domain=" + encodeURIComponent(domain) + "&ttl=" + ttl + "&disable=" + disable + "&comments=" + encodeURIComponent(comments) + "&expiryTtl=" + expiryTtl;
@@ -3462,9 +3462,9 @@ function updateRecordState(objBtn, disable) {
             $("#trZoneRecord" + index).replaceWith(tableHtmlRow);
 
             if (disable)
-                showAlert("success", "Eintrag deaktiviert", "Der Eintrag ist deaktiviert.");
+                showAlert("success", tr("Eintrag deaktiviert"), tr("Der Eintrag ist deaktiviert."));
             else
-                showAlert("success", "Eintrag aktiviert", "Der Eintrag ist aktiv.");
+                showAlert("success", tr("Eintrag aktiviert"), tr("Der Eintrag ist aktiv."));
         },
         error: function () {
             btn.button("reset");
@@ -3488,7 +3488,7 @@ function deleteRecord(objBtn) {
     if (domain === "")
         domain = ".";
 
-    if (!confirm(type + "-Eintrag '" + domain + "' endgültig löschen?"))
+    if (!confirm(tr("{0}-Eintrag '{1}' endgültig löschen?", type, domain)))
         return;
 
     var formData = "zone=" + encodeURIComponent(zone) + "&domain=" + encodeURIComponent(domain) + "&type=" + encodeURIComponent(type);
@@ -3587,7 +3587,7 @@ function deleteRecord(objBtn) {
 
             showEditZonePage();
 
-            showAlert("success", "Eintrag gelöscht", "Der Eintrag wurde gelöscht.");
+            showAlert("success", tr("Eintrag gelöscht"), tr("Der Eintrag wurde gelöscht."));
         },
         error: function () {
             btn.button("reset");

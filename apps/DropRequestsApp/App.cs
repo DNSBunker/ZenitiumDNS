@@ -200,7 +200,7 @@ namespace DropRequests
         #region properties
 
         public string Description
-        { get { return "Verwirft eingehende DNS-Anfragen, die zu gesperrten Netzen oder gesperrten Anfragen passen."; } }
+        { get { return Lang.T("Verwirft eingehende DNS-Anfragen, die zu gesperrten Netzen oder gesperrten Anfragen passen.", "Drops incoming DNS queries that match blocked networks or blocked questions."); } }
 
         #endregion
 
@@ -227,7 +227,7 @@ namespace DropRequests
                 if (jsonQuestion.TryGetProperty("type", out JsonElement jsonType))
                 {
                     if (!Enum.TryParse(jsonType.GetString(), true, out DnsResourceRecordType type))
-                        throw new NotSupportedException("Dieser DNS-Eintragstyp wird nicht unterstützt: " + jsonType.GetString());
+                        throw new NotSupportedException(Lang.T("Dieser DNS-Eintragstyp wird nicht unterstützt: ", "This DNS record type is not supported: ") + jsonType.GetString());
 
                     _type = type;
                 }

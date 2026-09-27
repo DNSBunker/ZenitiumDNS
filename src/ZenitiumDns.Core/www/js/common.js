@@ -80,7 +80,7 @@ function HTTPRequest(url, method, data, isTextResponse, success, error, invalidT
         objLoaderPlaceholder = arguments[0].objLoaderPlaceholder;
 
     if (objLoaderPlaceholder != null)
-        objLoaderPlaceholder.html("<div class='loader-block' role='status' aria-label='Wird geladen'><span class='spinner'></span></div>");
+        objLoaderPlaceholder.html("<div class='loader-block' role='status' aria-label='" + tr("Wird geladen") + "'><span class='spinner'></span></div>");
 
     if (processData == null)
         processData = arguments[0].processData;
@@ -144,7 +144,7 @@ function HTTPRequest(url, method, data, isTextResponse, success, error, invalidT
                         if (invalidToken != null)
                             invalidToken();
                         else {
-                            showAlert("danger", "Fehler", response.errorMessage + (showInnerError && (response.innerErrorMessage != null) ? " " + response.innerErrorMessage : ""), objAlertPlaceholder);
+                            showAlert("danger", tr("Fehler"), response.errorMessage + (showInnerError && (response.innerErrorMessage != null) ? " " + response.innerErrorMessage : ""), objAlertPlaceholder);
 
                             if (error != null)
                                 error();
@@ -158,7 +158,7 @@ function HTTPRequest(url, method, data, isTextResponse, success, error, invalidT
                             twoFactorAuthRequired();
                         }
                         else {
-                            showAlert("danger", "Fehler", response.errorMessage + (showInnerError && (response.innerErrorMessage != null) ? " " + response.innerErrorMessage : ""), objAlertPlaceholder);
+                            showAlert("danger", tr("Fehler"), response.errorMessage + (showInnerError && (response.innerErrorMessage != null) ? " " + response.innerErrorMessage : ""), objAlertPlaceholder);
 
                             if (error != null)
                                 error();
@@ -167,7 +167,7 @@ function HTTPRequest(url, method, data, isTextResponse, success, error, invalidT
                         break;
 
                     case "error":
-                        showAlert("danger", "Fehler", response.errorMessage + (showInnerError && (response.innerErrorMessage != null) ? " " + response.innerErrorMessage : ""), objAlertPlaceholder);
+                        showAlert("danger", tr("Fehler"), response.errorMessage + (showInnerError && (response.innerErrorMessage != null) ? " " + response.innerErrorMessage : ""), objAlertPlaceholder);
 
                         if (error != null)
                             error();
@@ -175,7 +175,7 @@ function HTTPRequest(url, method, data, isTextResponse, success, error, invalidT
                         break;
 
                     default:
-                        showAlert("danger", "Ungültige Antwort", "Der Server lieferte einen ungültigen Status: " + response.status, objAlertPlaceholder);
+                        showAlert("danger", tr("Ungültige Antwort"), tr("Der Server lieferte einen ungültigen Status: {0}", response.status), objAlertPlaceholder);
 
                         if (error != null)
                             error();
@@ -194,11 +194,11 @@ function HTTPRequest(url, method, data, isTextResponse, success, error, invalidT
             var msg;
 
             if ((textStatus === "error") && (errorThrown === ""))
-                msg = "Keine Verbindung zum Server. Bitte erneut versuchen."
+                msg = tr("Keine Verbindung zum Server. Bitte erneut versuchen.");
             else
                 msg = textStatus + " - " + errorThrown;
 
-            showAlert("danger", "Fehler", msg, objAlertPlaceholder);
+            showAlert("danger", tr("Fehler"), msg, objAlertPlaceholder);
         }
     });
 
@@ -292,13 +292,13 @@ function serializeTableData(table, columns, objAlertPlaceholder) {
                 var optional = (cell.attr("data-optional") === "true");
 
                 if ((cellValue === "") && !optional) {
-                    showAlert("warning", "Angabe fehlt", "Bitte im markierten Feld einen gültigen Wert eingeben.", objAlertPlaceholder);
+                    showAlert("warning", tr("Angabe fehlt"), tr("Bitte im markierten Feld einen gültigen Wert eingeben."), objAlertPlaceholder);
                     cell.focus();
                     return false;
                 }
 
                 if (cellValue.includes("|")) {
-                    showAlert("warning", "Ungültiges Zeichen", "Bitte das Zeichen '|' aus dem markierten Feld entfernen.", objAlertPlaceholder);
+                    showAlert("warning", tr("Ungültiges Zeichen"), tr("Bitte das Zeichen '|' aus dem markierten Feld entfernen."), objAlertPlaceholder);
                     cell.focus();
                     return false;
                 }
@@ -346,17 +346,17 @@ function setCookie(name, value, maxAge) {
 }
 
 var APP_DISPLAY_NAMES = {
-    "AdvancedBlockingApp": "Erweiterte Blockierung",
-    "AdvancedForwardingApp": "Erweiterte Weiterleitung",
+    "AdvancedBlockingApp": tr("Erweiterte Blockierung"),
+    "AdvancedForwardingApp": tr("Erweiterte Weiterleitung"),
     "Dns64App": "DNS64",
-    "DnsRebindingProtectionApp": "Schutz vor DNS-Rebinding",
-    "DropRequestsApp": "Anfragen verwerfen",
-    "LogExporterApp": "Protokoll-Export",
-    "NxDomainApp": "NXDOMAIN-Blockierung",
-    "QueryLogsMySqlApp": "Anfrageprotokoll (MySQL/MariaDB)",
-    "QueryLogsPostgreSqlApp": "Anfrageprotokoll (PostgreSQL)",
-    "QueryLogsSqliteApp": "Anfrageprotokoll (SQLite)",
-    "QueryLogsSqlServerApp": "Anfrageprotokoll (SQL Server)"
+    "DnsRebindingProtectionApp": tr("Schutz vor DNS-Rebinding"),
+    "DropRequestsApp": tr("Anfragen verwerfen"),
+    "LogExporterApp": tr("Protokoll-Export"),
+    "NxDomainApp": tr("NXDOMAIN-Blockierung"),
+    "QueryLogsMySqlApp": tr("Anfrageprotokoll (MySQL/MariaDB)"),
+    "QueryLogsPostgreSqlApp": tr("Anfrageprotokoll (PostgreSQL)"),
+    "QueryLogsSqliteApp": tr("Anfrageprotokoll (SQLite)"),
+    "QueryLogsSqlServerApp": tr("Anfrageprotokoll (SQL Server)")
 };
 
 function getAppDisplayName(name) {

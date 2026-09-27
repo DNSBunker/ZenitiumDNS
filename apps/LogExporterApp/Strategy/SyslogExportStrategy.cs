@@ -28,6 +28,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using System.Threading.Tasks;
+using ZenitiumDns.ApplicationCommon;
 
 namespace LogExporter.Strategy
 {
@@ -62,7 +63,7 @@ namespace LogExporter.Strategy
                 "tcp" => conf.WriteTo.TcpSyslog(address, port.Value, _appName, FramingType.OCTET_COUNTING, SyslogFormat.RFC5424, _facility, useTls: false).Enrich.FromLogContext().CreateLogger(),
                 "udp" => conf.WriteTo.UdpSyslog(address, port.Value, _appName, SyslogFormat.RFC5424, _facility).Enrich.FromLogContext().CreateLogger(),
                 "local" => conf.WriteTo.LocalSyslog(_appName, _facility).Enrich.FromLogContext().CreateLogger(),
-                _ => throw new NotSupportedException("Dieses Syslog-Protokoll wird nicht unterstützt: " + protocol),
+                _ => throw new NotSupportedException(Lang.T("Dieses Syslog-Protokoll wird nicht unterstützt: ", "This syslog protocol is not supported: ") + protocol),
             };
         }
 

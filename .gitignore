@@ -247,3 +247,5 @@ ModelManifest.xml
 Other/
 
 setup/debian/dist/
+
+__pycache__/

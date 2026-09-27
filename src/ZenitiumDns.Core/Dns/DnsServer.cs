@@ -5862,6 +5862,14 @@ namespace ZenitiumDns.Core.Dns
 
                 _dohWebService = builder.Build();
 
+                _dohWebService.Use(delegate (HttpContext context, RequestDelegate next)
+                {
+                    if (!Lang.IsEnglish && ((context.Request.Path == "/") || (context.Request.Path == "/index.html")) && File.Exists(Path.Combine(_dohwwwFolder, "index.de.html")))
+                        context.Request.Path = "/index.de.html";
+
+                    return next(context);
+                });
+
                 _dohWebService.UseDefaultFiles();
                 _dohWebService.UseStaticFiles(new StaticFileOptions()
                 {

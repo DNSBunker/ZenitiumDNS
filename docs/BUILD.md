@@ -1,59 +1,61 @@
-# Build-Anleitung
+# Build instructions
 
-Alle Projekte gehören zu einer gemeinsamen Solution (`ZenitiumDNS.slnx`) und verwenden Projektreferenzen, daher ist kein separater Build der Bibliothek nötig. Zum Bauen wird das [.NET 10 SDK](https://dotnet.microsoft.com/download) benötigt.
+[Deutsche Version](BUILD.de.md)
+
+All projects belong to one solution (`ZenitiumDNS.slnx`) and use project references, so no separate build of the library is needed. Building requires the [.NET 10 SDK](https://dotnet.microsoft.com/download).
 
 ## Linux
 
-Mit den folgenden Schritten wird der DNS-Server aus dem Quellcode gebaut und installiert. Die Anleitung ist für Debian, Ubuntu und Raspberry Pi OS geschrieben, lässt sich aber leicht auf andere Distributionen übertragen.
+The following steps build the DNS server from source and install it. The instructions are written for Debian, Ubuntu and Raspberry Pi OS but can easily be adapted to other distributions.
 
-1. Voraussetzungen wie curl und git installieren.
+1. Install prerequisites such as curl and git.
 ```
 sudo apt update
 sudo apt install curl git -y
 ```
 
-2. Das .NET 10 SDK nach der [Installationsanleitung von Microsoft](https://learn.microsoft.com/de-de/dotnet/core/install/linux) für die jeweilige Distribution installieren.
+2. Install the .NET 10 SDK following [Microsoft's installation guide](https://learn.microsoft.com/dotnet/core/install/linux) for your distribution.
 
-3. Das .NET 10 SDK und `libmsquic` für DNS-over-QUIC installieren.
+3. Install the .NET 10 SDK and `libmsquic` for DNS-over-QUIC.
 ```
 sudo apt install dotnet-sdk-10.0 libmsquic -y
 ```
 
-Hinweis: Wer DNS-over-QUIC und HTTP/3 nicht nutzen möchte, kann `libmsquic` weglassen.
+Note: If you do not want to use DNS-over-QUIC and HTTP/3, you can leave out `libmsquic`.
 
-4. Den DNS-Server im Wurzelverzeichnis des Quellbaums bauen.
+4. Build the DNS server in the root folder of the source tree.
 ```
 dotnet publish src/ZenitiumDns/ZenitiumDns.csproj -c Release -o publish
 ```
 
-5. Bei Bedarf die mitgelieferten DNS-Apps bauen. Jede App landet in ihrem eigenen Ordner `apps/<AppName>/bin/Release`, der als ZIP-Datei gepackt und im Bereich Apps der Weboberfläche installiert werden kann.
+5. Optionally build the bundled DNS apps. Each app ends up in its own folder `apps/<AppName>/bin/Release`, which can be packed as a ZIP file and installed in the Apps section of the web interface.
 ```
 dotnet build apps/AdvancedBlockingApp/AdvancedBlockingApp.csproj -c Release
 ```
 
-6. Den DNS-Server als Dienst installieren. Der Installer kopiert die Dateien nach `/opt/zenitiumdns` und legt den Systembenutzer `zenitiumdns` an. Als Konfigurationsordner dient `/etc/zenitiumdns`, als Log-Ordner `/var/log/zenitiumdns`. Eingerichtet wird ein systemd- oder OpenRC-Dienst namens `zenitiumdns`.
+6. Install the DNS server as a service. The installer copies the files to `/opt/zenitiumdns` and creates the system user `zenitiumdns`. `/etc/zenitiumdns` serves as the configuration folder and `/var/log/zenitiumdns` as the log folder. A systemd or OpenRC service named `zenitiumdns` is set up.
 
 ```
 sudo sh publish/install.sh
 ```
 
-Zum Deinstallieren `sudo sh /opt/zenitiumdns/uninstall.sh` ausführen.
+To uninstall, run `sudo sh /opt/zenitiumdns/uninstall.sh`.
 
-7. Die Weboberfläche im Browser unter `http://<IP-Adresse-des-Servers>:5380/` öffnen und ein Passwort festlegen, um die Installation abzuschließen.
+7. Open the web interface in your browser at `http://<server-ip-address>:5380/`, choose the interface language and set a password to complete the installation.
 
-## Debian-Paket
+## Debian package
 
-Ein eigenständiges Debian-Paket für Debian 13 (trixie), das keine separat installierte .NET-Laufzeit benötigt, lässt sich auf jeder Linux-Distribution mit dem .NET 10 SDK bauen. Die mitgelieferten DNS-Apps sind als ZIP-Dateien enthalten.
+A standalone Debian package for Debian 13 (trixie) that needs no separately installed .NET runtime can be built on any Linux distribution with the .NET 10 SDK. The bundled DNS apps are included as ZIP files.
 
 ```
 setup/debian/build-deb.sh --arch amd64
 setup/debian/build-deb.sh --arch arm64
 ```
 
-Das Paket wird im Ordner `setup/debian/dist` erzeugt und so installiert:
+The package is created in the folder `setup/debian/dist` and installed like this:
 
 ```
 sudo apt install ./zenitiumdns_<version>_<arch>.deb
 ```
 
-Paketaufbau, erste Anmeldung und Build-Optionen sind in [setup/debian/README.Debian.md](../setup/debian/README.Debian.md) beschrieben.
+Package layout, first sign-in and build options are described in [setup/debian/README.Debian.md](../setup/debian/README.Debian.md).

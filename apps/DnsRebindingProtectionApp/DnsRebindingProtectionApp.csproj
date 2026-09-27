@@ -10,6 +10,12 @@
 	</PropertyGroup>
 
 	<ItemGroup>
+		<AssemblyMetadata Include="DescriptionEn">
+			<Value>Protects against DNS rebinding attacks based on the configured private domains and networks.\n\nWarning: The app removes private IP addresses from the answers for all domains that are not managed locally.</Value>
+		</AssemblyMetadata>
+	</ItemGroup>
+
+	<ItemGroup>
 		<ProjectReference Include="..\..\src\ZenitiumDns.ApplicationCommon\ZenitiumDns.ApplicationCommon.csproj">
 			<Private>false</Private>
 		</ProjectReference>

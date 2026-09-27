@@ -192,7 +192,7 @@ namespace DnsRebindingProtection
         #region properties
 
         public string Description
-        { get { return "Schützt vor DNS-Rebinding-Angriffen anhand der konfigurierten privaten Domains und Netze."; } }
+        { get { return Lang.T("Schützt vor DNS-Rebinding-Angriffen anhand der konfigurierten privaten Domains und Netze.", "Protects against DNS rebinding attacks based on the configured private domains and networks."); } }
 
         #endregion
     }

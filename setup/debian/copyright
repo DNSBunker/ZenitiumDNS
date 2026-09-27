@@ -1,6 +1,6 @@
 Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
 Upstream-Name: ZenitiumDNS
-Source: https://github.com/DNSBunker/ZenitiumDNS-DE
+Source: https://github.com/DNSBunker/ZenitiumDNS
 Comment: ZenitiumDNS is a fork of Technitium DNS Server. See /usr/share/doc/zenitiumdns/NOTICE.md for details.
 
 Files: *

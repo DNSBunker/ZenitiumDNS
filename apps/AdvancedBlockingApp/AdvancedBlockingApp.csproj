@@ -11,6 +11,12 @@
 	</PropertyGroup>
 
 	<ItemGroup>
+		<AssemblyMetadata Include="DescriptionEn">
+			<Value>Blocks domains based on block lists, regular expression lists and Adblock lists. Groups with their own lists can be created for client IP addresses, subnets or local endpoints.\n\nNote: The app works independently of the server's built-in blocking. The blocking settings under Settings do not apply to this app.</Value>
+		</AssemblyMetadata>
+	</ItemGroup>
+
+	<ItemGroup>
 		<ProjectReference Include="..\..\src\ZenitiumDns.ApplicationCommon\ZenitiumDns.ApplicationCommon.csproj">
 			<Private>false</Private>
 		</ProjectReference>

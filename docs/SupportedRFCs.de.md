@@ -1,10 +1,10 @@
-# Supported RFCs
+# Unterstützte RFCs
 
-[Deutsche Version](SupportedRFCs.de.md)
+[English version](SupportedRFCs.md)
 
-The following list contains the RFCs that ZenitiumDNS implements.
+Die folgende Liste enthält die RFCs, die ZenitiumDNS umsetzt. Die Titel sind die offiziellen englischen Titel der jeweiligen RFCs.
 
-| RFC      | Title									                                                                         |
+| RFC      | Titel									                                                                         |
 |----------|-----------------------------------------------------------------------------------------------------------------|
 | RFC 1034 | Domain names - concepts and facilities
 | RFC 1035 | Domain names - implementation and specification

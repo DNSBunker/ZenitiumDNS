@@ -17,43 +17,59 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 */
 
-if (moment.locales().indexOf("de") < 0) {
-    moment.defineLocale("de", {
-        months: "Januar_Februar_März_April_Mai_Juni_Juli_August_September_Oktober_November_Dezember".split("_"),
-        monthsShort: "Jan._Feb._März_Apr._Mai_Juni_Juli_Aug._Sep._Okt._Nov._Dez.".split("_"),
-        weekdays: "Sonntag_Montag_Dienstag_Mittwoch_Donnerstag_Freitag_Samstag".split("_"),
-        weekdaysShort: "So._Mo._Di._Mi._Do._Fr._Sa.".split("_"),
-        weekdaysMin: "So_Mo_Di_Mi_Do_Fr_Sa".split("_"),
+if (zdnsI18n.language === "de") {
+    if (moment.locales().indexOf("de") < 0) {
+        moment.defineLocale("de", {
+            months: "Januar_Februar_März_April_Mai_Juni_Juli_August_September_Oktober_November_Dezember".split("_"),
+            monthsShort: "Jan._Feb._März_Apr._Mai_Juni_Juli_Aug._Sep._Okt._Nov._Dez.".split("_"),
+            weekdays: "Sonntag_Montag_Dienstag_Mittwoch_Donnerstag_Freitag_Samstag".split("_"),
+            weekdaysShort: "So._Mo._Di._Mi._Do._Fr._Sa.".split("_"),
+            weekdaysMin: "So_Mo_Di_Mi_Do_Fr_Sa".split("_"),
+            longDateFormat: {
+                LT: "HH:mm",
+                LTS: "HH:mm:ss",
+                L: "DD.MM.YYYY",
+                LL: "D. MMMM YYYY",
+                LLL: "D. MMMM YYYY HH:mm",
+                LLLL: "dddd, D. MMMM YYYY HH:mm",
+                lll: "D. MMM YYYY HH:mm"
+            },
+            relativeTime: {
+                future: "in %s",
+                past: "vor %s",
+                s: "ein paar Sekunden",
+                ss: "%d Sekunden",
+                m: "einer Minute",
+                mm: "%d Minuten",
+                h: "einer Stunde",
+                hh: "%d Stunden",
+                d: "einem Tag",
+                dd: "%d Tagen",
+                M: "einem Monat",
+                MM: "%d Monaten",
+                y: "einem Jahr",
+                yy: "%d Jahren"
+            },
+            week: { dow: 1, doy: 4 }
+        });
+    }
+    else {
+        moment.locale("de");
+    }
+}
+else {
+    moment.defineLocale("en-zdns", {
+        parentLocale: "en",
         longDateFormat: {
             LT: "HH:mm",
             LTS: "HH:mm:ss",
-            L: "DD.MM.YYYY",
-            LL: "D. MMMM YYYY",
-            LLL: "D. MMMM YYYY HH:mm",
-            LLLL: "dddd, D. MMMM YYYY HH:mm",
-            lll: "D. MMM YYYY HH:mm"
-        },
-        relativeTime: {
-            future: "in %s",
-            past: "vor %s",
-            s: "ein paar Sekunden",
-            ss: "%d Sekunden",
-            m: "einer Minute",
-            mm: "%d Minuten",
-            h: "einer Stunde",
-            hh: "%d Stunden",
-            d: "einem Tag",
-            dd: "%d Tagen",
-            M: "einem Monat",
-            MM: "%d Monaten",
-            y: "einem Jahr",
-            yy: "%d Jahren"
+            L: "YYYY-MM-DD",
+            LL: "D MMMM YYYY",
+            LLL: "D MMMM YYYY HH:mm",
+            LLLL: "dddd, D MMMM YYYY HH:mm"
         },
         week: { dow: 1, doy: 4 }
     });
-}
-else {
-    moment.locale("de");
 }
 
 
@@ -62,17 +78,17 @@ var dashboardMainChartData = null;
 var dashboardResponseTimeData = null;
 
 var dashboardSeries = {
-    "Total": { label: "Gesamt", token: "--c1" },
+    "Total": { label: tr("Gesamt"), token: "--c1" },
     "No Error": { label: "NOERROR", token: "--c1" },
     "NX Domain": { label: "NXDOMAIN", token: "--c4" },
     "Refused": { label: "REFUSED", token: "--c6" },
     "Server Failure": { label: "SERVFAIL", token: "--c7" },
     "Cached": { label: "Cache", token: "--c2" },
-    "Recursive": { label: "Rekursiv", token: "--c3" },
-    "Blocked": { label: "Blockiert", token: "--c4" },
-    "Authoritative": { label: "Lokal", token: "--c5" },
-    "Upstream Blocked": { label: "Upstream blockiert", token: "--c5" },
-    "Dropped": { label: "Verworfen", token: "--c-neutral" },
+    "Recursive": { label: tr("Rekursiv"), token: "--c3" },
+    "Blocked": { label: tr("Blockiert"), token: "--c4" },
+    "Authoritative": { label: tr("Lokal"), token: "--c5" },
+    "Upstream Blocked": { label: tr("Upstream blockiert"), token: "--c5" },
+    "Dropped": { label: tr("Verworfen"), token: "--c-neutral" },
     "Clients": { label: "Clients", token: "--c1" }
 };
 
@@ -101,9 +117,9 @@ function formatNumber(value, decimals) {
         return "0";
 
     if (decimals == null)
-        return Number(value).toLocaleString("de-DE");
+        return Number(value).toLocaleString(zdnsI18n.locale);
 
-    return Number(value).toLocaleString("de-DE", { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+    return Number(value).toLocaleString(zdnsI18n.locale, { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
 }
 
 function formatPercent(part, total, decimals) {
@@ -223,7 +239,7 @@ function getDashboardStatsQuery(showAlerts) {
         var txtStart = $("#dpCustomDayWiseStart").val();
         if (txtStart === null || (txtStart === "")) {
             if (showAlerts) {
-                showAlert("warning", "Angabe fehlt", "Bitte einen Startzeitpunkt wählen.");
+                showAlert("warning", tr("Angabe fehlt"), tr("Bitte einen Startzeitpunkt wählen."));
                 $("#dpCustomDayWiseStart").trigger("focus");
             }
 
@@ -233,7 +249,7 @@ function getDashboardStatsQuery(showAlerts) {
         var txtEnd = $("#dpCustomDayWiseEnd").val();
         if (txtEnd === null || (txtEnd === "")) {
             if (showAlerts) {
-                showAlert("warning", "Angabe fehlt", "Bitte einen Endzeitpunkt wählen.");
+                showAlert("warning", tr("Angabe fehlt"), tr("Bitte einen Endzeitpunkt wählen."));
                 $("#dpCustomDayWiseEnd").trigger("focus");
             }
 
@@ -417,8 +433,8 @@ function renderResponseTimeChart(animate) {
     var data = {
         labels: dashboardMainChartData.labels,
         datasets: [
-            { label: "Durchschnitt", data: dashboardResponseTimeData.average, borderColor: average, backgroundColor: withAlpha(average, 0.08), pointBackgroundColor: average, pointBorderColor: average, borderWidth: 2, pointRadius: 0, pointHoverRadius: 4, pointHitRadius: 8, lineTension: 0.3, fill: "origin", spanGaps: true },
-            { label: "95. Perzentil", data: dashboardResponseTimeData.p95, borderColor: p95, backgroundColor: p95, pointBackgroundColor: p95, pointBorderColor: p95, borderWidth: 2, borderDash: [5, 4], pointRadius: 0, pointHoverRadius: 4, pointHitRadius: 8, lineTension: 0.3, fill: false, spanGaps: true }
+            { label: tr("Durchschnitt"), data: dashboardResponseTimeData.average, borderColor: average, backgroundColor: withAlpha(average, 0.08), pointBackgroundColor: average, pointBorderColor: average, borderWidth: 2, pointRadius: 0, pointHoverRadius: 4, pointHitRadius: 8, lineTension: 0.3, fill: "origin", spanGaps: true },
+            { label: tr("95. Perzentil"), data: dashboardResponseTimeData.p95, borderColor: p95, backgroundColor: p95, pointBackgroundColor: p95, pointBorderColor: p95, borderWidth: 2, borderDash: [5, 4], pointRadius: 0, pointHoverRadius: 4, pointHitRadius: 8, lineTension: 0.3, fill: false, spanGaps: true }
         ]
     };
 
@@ -496,7 +512,7 @@ function renderDoughnutChart(chartName, canvasId, labels, values, colors, animat
         overlay.remove();
     }
     else if (overlay.length == 0) {
-        container.append("<div class=\"chart-empty\">Keine Daten im gewählten Zeitraum</div>");
+        container.append("<div class=\"chart-empty\">" + tr("Keine Daten im gewählten Zeitraum") + "</div>");
     }
 }
 
@@ -536,7 +552,7 @@ function renderDashboardDoughnuts(response, animate) {
 
         for (var k = 0; k < chartData2.labels.length; k++) {
             var isOthers = chartData2.labels[k] === "Others";
-            labels2.push(isOthers ? "Andere" : chartData2.labels[k]);
+            labels2.push(isOthers ? tr("Andere") : chartData2.labels[k]);
             colors2.push(getThemeValue(isOthers || (k >= dashboardCategoricalTokens.length) ? "--c-neutral" : dashboardCategoricalTokens[k]));
         }
 
@@ -596,8 +612,8 @@ function renderDashboardStatsTables(stats) {
 
 var dashboardKpiStates = {
     good: { icon: "fa-check", text: "Normal" },
-    warn: { icon: "fa-exclamation", text: "Erhöht" },
-    bad: { icon: "fa-times", text: "Kritisch" }
+    warn: { icon: "fa-exclamation", text: tr("Erhöht") },
+    bad: { icon: "fa-times", text: tr("Kritisch") }
 };
 
 function setKpi(id, value, sub, level, stateText) {
@@ -723,15 +739,15 @@ function renderDashboardKpis(response) {
     var periodSeconds = getDashboardPeriodSeconds();
     var periodQps = periodSeconds > 0 ? total / periodSeconds : 0;
 
-    setKpi("divKpiQps", formatNumber(live.queriesPerSecond, live.queriesPerSecond < 10 ? 2 : 1), "letzte 5 Minuten, Ø Zeitraum " + formatNumber(periodQps, periodQps < 10 ? 2 : 1) + "/s", null);
+    setKpi("divKpiQps", formatNumber(live.queriesPerSecond, live.queriesPerSecond < 10 ? 2 : 1), tr("letzte 5 Minuten, Ø Zeitraum {0}/s", formatNumber(periodQps, periodQps < 10 ? 2 : 1)), null);
     renderSparkline("divKpiQps", getMainChartSeries("Total"));
 
     if (live.count > 0) {
         var latencyLevel = live.median > 300 ? "bad" : (live.median > 80 ? "warn" : "good");
-        setKpi("divKpiLatency", formatMilliseconds(live.median), "p95 " + formatMilliseconds(live.p95) + ", p99 " + formatMilliseconds(live.p99), latencyLevel, latencyLevel === "bad" ? "Hoch" : null);
+        setKpi("divKpiLatency", formatMilliseconds(live.median), "p95 " + formatMilliseconds(live.p95) + ", p99 " + formatMilliseconds(live.p99), latencyLevel, latencyLevel === "bad" ? tr("Hoch") : null);
     }
     else {
-        setKpi("divKpiLatency", "–", "keine Anfragen in den letzten 5 Minuten", null);
+        setKpi("divKpiLatency", "–", tr("keine Anfragen in den letzten 5 Minuten"), null);
     }
 
     renderSparkline("divKpiLatency", dashboardResponseTimeData == null ? null : dashboardResponseTimeData.average);
@@ -739,20 +755,20 @@ function renderDashboardKpis(response) {
     var cacheBase = stats.totalCached + stats.totalRecursive;
     var cacheRate = cacheBase > 0 ? stats.totalCached * 100 / cacheBase : 0;
     var cacheLevel = cacheBase === 0 ? null : (cacheRate < 40 ? "bad" : (cacheRate < 70 ? "warn" : "good"));
-    var cacheStateText = cacheLevel === "good" ? "Gut" : (cacheLevel === "warn" ? "Mittel" : "Niedrig");
-    var cacheSub = (live.count > 0) ? ("Cache Ø " + formatMilliseconds(live.cachedAverage) + ", rekursiv Ø " + formatMilliseconds(live.recursiveAverage)) : "Cache-Antworten im Verhältnis zu rekursiven";
+    var cacheStateText = cacheLevel === "good" ? tr("Gut") : (cacheLevel === "warn" ? tr("Mittel") : tr("Niedrig"));
+    var cacheSub = (live.count > 0) ? tr("Cache Ø {0}, rekursiv Ø {1}", formatMilliseconds(live.cachedAverage), formatMilliseconds(live.recursiveAverage)) : tr("Cache-Antworten im Verhältnis zu rekursiven");
     setKpi("divKpiCacheHit", formatNumber(cacheRate, 1) + " %", cacheSub, cacheLevel, cacheStateText);
     renderSparkline("divKpiCacheHit", getRatioSeries("Cached", ["Cached", "Recursive"]));
 
     var failureRate = total > 0 ? stats.totalServerFailure * 100 / total : 0;
     var failureLevel = total === 0 ? null : (failureRate > 5 ? "bad" : (failureRate > 1 ? "warn" : "good"));
-    setKpi("divKpiFailure", formatNumber(failureRate, 2) + " %", formatNumber(stats.totalServerFailure) + " fehlgeschlagene Anfragen", failureLevel);
+    setKpi("divKpiFailure", formatNumber(failureRate, 2) + " %", tr("{0} fehlgeschlagene Anfragen", formatNumber(stats.totalServerFailure)), failureLevel);
     renderSparkline("divKpiFailure", getRatioSeries("Server Failure", ["Total"]));
 
-    setKpi("divKpiBlocked", formatPercent(stats.totalBlocked, total, 1), formatNumber(stats.totalBlocked) + " blockierte Anfragen", null);
+    setKpi("divKpiBlocked", formatPercent(stats.totalBlocked, total, 1), tr("{0} blockierte Anfragen", formatNumber(stats.totalBlocked)), null);
     renderSparkline("divKpiBlocked", getRatioSeries("Blocked", ["Total"]));
 
-    setKpi("divKpiClients", formatNumber(stats.totalClients), "im gewählten Zeitraum", null);
+    setKpi("divKpiClients", formatNumber(stats.totalClients), tr("im gewählten Zeitraum"), null);
     renderSparkline("divKpiClients", getMainChartSeries("Clients"));
 }
 
@@ -765,24 +781,24 @@ function renderDashboardStatus(serverStatus) {
     var items = [];
 
     if (serverStatus.enableBlocking)
-        items.push({ cls: "success", icon: "fa-shield", text: "Blockierung aktiv" });
+        items.push({ cls: "success", icon: "fa-shield", text: tr("Blockierung aktiv") });
     else if (serverStatus.temporaryDisableBlockingTill != null)
-        items.push({ cls: "warning", icon: "fa-pause", text: "Blockierung pausiert bis " + moment(serverStatus.temporaryDisableBlockingTill).local().format("HH:mm") });
+        items.push({ cls: "warning", icon: "fa-pause", text: tr("Blockierung pausiert bis {0}", moment(serverStatus.temporaryDisableBlockingTill).local().format("HH:mm")) });
     else
-        items.push({ cls: "default", icon: "fa-shield", text: "Blockierung aus" });
+        items.push({ cls: "default", icon: "fa-shield", text: tr("Blockierung aus") });
 
-    items.push(serverStatus.dnssecValidation ? { cls: "success", icon: "fa-lock", text: "DNSSEC-Validierung an" } : { cls: "default", icon: "fa-unlock", text: "DNSSEC-Validierung aus" });
+    items.push(serverStatus.dnssecValidation ? { cls: "success", icon: "fa-lock", text: tr("DNSSEC-Validierung an") } : { cls: "default", icon: "fa-unlock", text: tr("DNSSEC-Validierung aus") });
 
     if (serverStatus.ipv6Mode === "Disabled")
-        items.push({ cls: "default", icon: "fa-globe", text: "IPv6 ausgehend deaktiviert" });
+        items.push({ cls: "default", icon: "fa-globe", text: tr("IPv6 ausgehend deaktiviert") });
     else if (serverStatus.ipv6UpstreamAvailable)
-        items.push({ cls: "success", icon: "fa-globe", text: "IPv6 ausgehend aktiv" });
+        items.push({ cls: "success", icon: "fa-globe", text: tr("IPv6 ausgehend aktiv") });
     else
-        items.push({ cls: "warning", icon: "fa-globe", text: "IPv6 ausgesetzt" + (serverStatus.ipv6UpstreamUnavailableUntil != null ? " bis " + moment(serverStatus.ipv6UpstreamUnavailableUntil).local().format("HH:mm") : "") + ", nur IPv4" });
+        items.push({ cls: "warning", icon: "fa-globe", text: (serverStatus.ipv6UpstreamUnavailableUntil != null ? tr("IPv6 ausgesetzt bis {0}, nur IPv4", moment(serverStatus.ipv6UpstreamUnavailableUntil).local().format("HH:mm")) : tr("IPv6 ausgesetzt, nur IPv4")) });
 
-    items.push(serverStatus.forwarding ? { cls: "info", icon: "fa-share", text: "Auflösung über Forwarder" } : { cls: "info", icon: "fa-sitemap", text: serverStatus.localRootZone ? "Rekursiv mit lokaler Root-Zone" : "Rekursive Auflösung ab Root" });
+    items.push(serverStatus.forwarding ? { cls: "info", icon: "fa-share", text: tr("Auflösung über Forwarder") } : { cls: "info", icon: "fa-sitemap", text: serverStatus.localRootZone ? tr("Rekursiv mit lokaler Root-Zone") : tr("Rekursive Auflösung ab Root") });
 
-    items.push({ cls: "default", icon: "fa-clock-o", text: "Läuft seit " + moment.duration(serverStatus.uptimeSeconds, "seconds").humanize() });
+    items.push({ cls: "default", icon: "fa-clock-o", text: tr("Läuft seit {0}", moment.duration(serverStatus.uptimeSeconds, "seconds").humanize()) });
 
     var html = "";
 
@@ -805,12 +821,12 @@ function getTopDomainName(item) {
 }
 
 function getTopMenuToggleHtml(id) {
-    return "<td class=\"top-menu\"><div class=\"dropdown\"><a href=\"#\" id=\"" + id + "\" class=\"dropdown-toggle\" data-toggle=\"dropdown\" aria-haspopup=\"true\" aria-expanded=\"false\" aria-label=\"Aktionen\"><span class=\"fa fa-ellipsis-v\" aria-hidden=\"true\"></span></a><ul class=\"dropdown-menu dropdown-menu-right\">";
+    return "<td class=\"top-menu\"><div class=\"dropdown\"><a href=\"#\" id=\"" + id + "\" class=\"dropdown-toggle\" data-toggle=\"dropdown\" aria-haspopup=\"true\" aria-expanded=\"false\" aria-label=\"" + tr("Aktionen") + "\"><span class=\"fa fa-ellipsis-v\" aria-hidden=\"true\"></span></a><ul class=\"dropdown-menu dropdown-menu-right\">";
 }
 
 function renderTopClients(tbody, topClients, total, idPrefix) {
     if (topClients.length < 1) {
-        tbody.html("<tr><td colspan=\"3\" class=\"text-center text-muted\">Keine Anfragen im gewählten Zeitraum</td></tr>");
+        tbody.html("<tr><td colspan=\"3\" class=\"text-center text-muted\">" + tr("Keine Anfragen im gewählten Zeitraum") + "</td></tr>");
         return;
     }
 
@@ -819,14 +835,14 @@ function renderTopClients(tbody, topClients, total, idPrefix) {
     for (var i = 0; i < topClients.length; i++) {
         var item = topClients[i];
 
-        html += "<tr" + (item.rateLimited ? " class=\"rate-limited\"" : "") + "><td class=\"top-name\">" + htmlEncode(item.name) + (item.rateLimited ? " <span class=\"label label-warning\">gebremst</span>" : "");
+        html += "<tr" + (item.rateLimited ? " class=\"rate-limited\"" : "") + "><td class=\"top-name\">" + htmlEncode(item.name) + (item.rateLimited ? " <span class=\"label label-warning\">" + tr("gebremst") + "</span>" : "");
 
         if ((item.domain != null) && (item.domain !== ""))
             html += "<div class=\"top-sub\">" + htmlEncode(item.domain) + "</div>";
 
         html += getTopShareHtml(item.hits, total) + "</td><td class=\"top-hits\">" + formatNumber(item.hits) + "<div class=\"top-sub\">" + formatPercent(item.hits, total) + "</div></td>";
         html += getTopMenuToggleHtml(idPrefix + i);
-        html += "<li><a href=\"#\" data-id=\"" + i + "\" onclick=\"showQueryLogs(null, " + jsArg(item.name) + "); return false;\">Abfrageprotokoll anzeigen</a></li>";
+        html += "<li><a href=\"#\" data-id=\"" + i + "\" onclick=\"showQueryLogs(null, " + jsArg(item.name) + "); return false;\">" + tr("Abfrageprotokoll anzeigen") + "</a></li>";
         html += "</ul></div></td></tr>";
     }
 
@@ -835,7 +851,7 @@ function renderTopClients(tbody, topClients, total, idPrefix) {
 
 function renderTopDomains(tbody, topDomains, total, idPrefix, blocked, alertPlaceholderId) {
     if (topDomains.length < 1) {
-        tbody.html("<tr><td colspan=\"3\" class=\"text-center text-muted\">" + (blocked ? "Keine blockierten Anfragen im gewählten Zeitraum" : "Keine Anfragen im gewählten Zeitraum") + "</td></tr>");
+        tbody.html("<tr><td colspan=\"3\" class=\"text-center text-muted\">" + (blocked ? tr("Keine blockierten Anfragen im gewählten Zeitraum") : tr("Keine Anfragen im gewählten Zeitraum")) + "</td></tr>");
         return;
     }
 
@@ -847,13 +863,13 @@ function renderTopDomains(tbody, topDomains, total, idPrefix, blocked, alertPlac
 
         html += "<tr><td class=\"top-name\">" + htmlEncode(getTopDomainName(item)) + getTopShareHtml(item.hits, total) + "</td><td class=\"top-hits\">" + formatNumber(item.hits) + "<div class=\"top-sub\">" + formatPercent(item.hits, total) + "</div></td>";
         html += getTopMenuToggleHtml(idPrefix + i);
-        html += "<li><a href=\"#\" data-id=\"" + i + "\" onclick=\"showQueryLogs(" + jsArg(item.name) + ", null); return false;\">Abfrageprotokoll anzeigen</a></li>";
-        html += "<li><a href=\"#\" data-id=\"" + i + "\" onclick=\"queryDnsServer(" + jsArg(item.name) + ", null); return false;\">Mit DNS-Client abfragen</a></li>";
+        html += "<li><a href=\"#\" data-id=\"" + i + "\" onclick=\"showQueryLogs(" + jsArg(item.name) + ", null); return false;\">" + tr("Abfrageprotokoll anzeigen") + "</a></li>";
+        html += "<li><a href=\"#\" data-id=\"" + i + "\" onclick=\"queryDnsServer(" + jsArg(item.name) + ", null); return false;\">" + tr("Mit DNS-Client abfragen") + "</a></li>";
 
         if (blocked)
-            html += "<li><a href=\"#\" data-id=\"" + i + "\" data-domain=\"" + htmlEncode(item.name) + "\" onclick=\"allowDomain(this, " + jsArg(idPrefix) + "" + alertArg + "); return false;\">Domain erlauben</a></li>";
+            html += "<li><a href=\"#\" data-id=\"" + i + "\" data-domain=\"" + htmlEncode(item.name) + "\" onclick=\"allowDomain(this, " + jsArg(idPrefix) + "" + alertArg + "); return false;\">" + tr("Domain erlauben") + "</a></li>";
         else
-            html += "<li><a href=\"#\" data-id=\"" + i + "\" data-domain=\"" + htmlEncode(item.name) + "\" onclick=\"blockDomain(this, " + jsArg(idPrefix) + "" + alertArg + "); return false;\">Domain blockieren</a></li>";
+            html += "<li><a href=\"#\" data-id=\"" + i + "\" data-domain=\"" + htmlEncode(item.name) + "\" onclick=\"blockDomain(this, " + jsArg(idPrefix) + "" + alertArg + "); return false;\">" + tr("Domain blockieren") + "</a></li>";
 
         html += "</ul></div></td></tr>";
     }
@@ -924,7 +940,7 @@ function refreshDashboard(hideLoader) {
             renderTopDomains($("#tableTopDomains"), response.topDomains, response.stats.totalQueries, "btnDashboardTopDomainsRowOption", false, null);
             renderTopDomains($("#tableTopBlockedDomains"), response.topBlockedDomains, response.stats.totalBlocked, "btnDashboardTopBlockedDomainsRowOption", true, null);
 
-            $("#lblDashboardUpdated").text("Stand " + moment().format("HH:mm:ss"));
+            $("#lblDashboardUpdated").text(tr("Stand {0}", moment().format("HH:mm:ss")));
         },
         invalidToken: function () {
             showPageLogin();
@@ -949,15 +965,15 @@ function showTopStats(statsType, limit) {
 
     switch (statsType) {
         case "TopClients":
-            $("#lblTopStatsTitle").text("Top " + formatNumber(limit) + " Clients");
+            $("#lblTopStatsTitle").text(tr("Top {0} Clients", formatNumber(limit)));
             break;
 
         case "TopDomains":
-            $("#lblTopStatsTitle").text("Top " + formatNumber(limit) + " Domains");
+            $("#lblTopStatsTitle").text(tr("Top {0} Domains", formatNumber(limit)));
             break;
 
         case "TopBlockedDomains":
-            $("#lblTopStatsTitle").text("Top " + formatNumber(limit) + " blockierte Domains");
+            $("#lblTopStatsTitle").text(tr("Top {0} blockierte Domains", formatNumber(limit)));
             break;
     }
 
@@ -1083,13 +1099,13 @@ var liveSystem = { seq: 0, samples: [], capacity: 300, charts: {}, busy: false, 
 
 var liveSystemCharts = {
     Cpu: { series: [{ key: "cpu", label: "CPU", token: "--c1" }], format: function (v) { return formatNumber(v, 1) + " %"; }, max: 100 },
-    Memory: { series: [{ key: "workingSet", label: "Prozess", token: "--c1", scale: 1048576 }, { key: "gcHeap", label: "GC-Heap", token: "--c2", scale: 1048576 }], format: function (v) { return formatNumber(v, 0) + " MB"; } },
-    Qps: { series: [{ key: "qps", label: "Anfragen/s", token: "--c1" }], format: function (v) { return formatNumber(v, 0); }, integer: true },
-    Queues: { series: [{ key: "queryQueue", label: "Anfragen", token: "--c1" }, { key: "resolverQueue", label: "Resolver", token: "--c2" }, { key: "statsQueue", label: "Statistik", token: "--c3" }], format: function (v) { return formatNumber(v, 0); }, integer: true },
-    Resolutions: { series: [{ key: "pendingResolutions", label: "Laufend", token: "--c1" }], format: function (v) { return formatNumber(v, 0); }, integer: true },
+    Memory: { series: [{ key: "workingSet", label: tr("Prozess"), token: "--c1", scale: 1048576 }, { key: "gcHeap", label: "GC-Heap", token: "--c2", scale: 1048576 }], format: function (v) { return formatNumber(v, 0) + " MB"; } },
+    Qps: { series: [{ key: "qps", label: tr("Anfragen/s"), token: "--c1" }], format: function (v) { return formatNumber(v, 0); }, integer: true },
+    Queues: { series: [{ key: "queryQueue", label: tr("Anfragen"), token: "--c1" }, { key: "resolverQueue", label: "Resolver", token: "--c2" }, { key: "statsQueue", label: tr("Statistik"), token: "--c3" }], format: function (v) { return formatNumber(v, 0); }, integer: true },
+    Resolutions: { series: [{ key: "pendingResolutions", label: tr("Laufend"), token: "--c1" }], format: function (v) { return formatNumber(v, 0); }, integer: true },
     Gc: { series: [{ key: "gen0", label: "Gen 0", token: "--c1" }, { key: "gen1", label: "Gen 1", token: "--c2" }, { key: "gen2", label: "Gen 2", token: "--c3" }], format: function (v) { return formatNumber(v, 1) + "/s"; } },
-    Threads: { series: [{ key: "threads", label: "Threads", token: "--c1" }, { key: "threadPoolQueue", label: "Wartend", token: "--c2" }], format: function (v) { return formatNumber(v, 0); }, integer: true },
-    Locks: { series: [{ key: "lockContentions", label: "Konflikte/s", token: "--c1" }], format: function (v) { return formatNumber(v, 1); } }
+    Threads: { series: [{ key: "threads", label: "Threads", token: "--c1" }, { key: "threadPoolQueue", label: tr("Wartend"), token: "--c2" }], format: function (v) { return formatNumber(v, 0); }, integer: true },
+    Locks: { series: [{ key: "lockContentions", label: tr("Konflikte/s"), token: "--c1" }], format: function (v) { return formatNumber(v, 1); } }
 };
 
 function getLiveSeriesValue(sample, series) {
@@ -1164,7 +1180,7 @@ function renderLiveSystemCharts() {
             text = info.format(getLiveSeriesValue(latest, info.series[0]));
 
             if (name === "Gc")
-                text = "Pause " + formatNumber(latest.gcPause, 2) + " %";
+                text = tr("Pause {0} %", formatNumber(latest.gcPause, 2));
             else if (name === "Memory")
                 text = formatNumber(latest.workingSet / 1048576, 0) + " MB";
         }

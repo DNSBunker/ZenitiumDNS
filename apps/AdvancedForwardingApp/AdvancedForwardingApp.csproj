@@ -11,6 +11,12 @@
 	</PropertyGroup>
 
 	<ItemGroup>
+		<AssemblyMetadata Include="DescriptionEn">
+			<Value>Forwards queries for many domains in bulk to custom forwarders (conditional forwarding). Groups with their own forwarding can be created for client IP addresses or subnets. Upstream files in AdGuard format are supported.\n\nNote: The app works independently of the server's built-in forwarder zones.</Value>
+		</AssemblyMetadata>
+	</ItemGroup>
+
+	<ItemGroup>
 		<ProjectReference Include="..\..\src\ZenitiumDns.ApplicationCommon\ZenitiumDns.ApplicationCommon.csproj">
 			<Private>false</Private>
 		</ProjectReference>

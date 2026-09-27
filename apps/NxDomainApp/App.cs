@@ -147,7 +147,7 @@ namespace NxDomain
         #region properties
 
         public string Description
-        { get { return "Blockiert die konfigurierten Domains mit einer NXDOMAIN-Antwort."; } }
+        { get { return Lang.T("Blockiert die konfigurierten Domains mit einer NXDOMAIN-Antwort.", "Blocks the configured domains with an NXDOMAIN response."); } }
 
         public byte Preference
         { get { return _appPreference; } }

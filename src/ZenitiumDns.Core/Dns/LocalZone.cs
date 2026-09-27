@@ -19,6 +19,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 using System;
 using System.Collections.Generic;
+using ZenitiumDns.ApplicationCommon;
 using ZenitiumLibrary.Net.Dns;
 using ZenitiumLibrary.Net.Dns.ResourceRecords;
 
@@ -32,7 +33,7 @@ namespace ZenitiumDns.Core.Dns
         readonly uint _serial;
         readonly uint _expire;
         readonly bool _verified;
-        readonly string _verification;
+        readonly LocalizedText _verification;
         readonly DateTime _validUntil;
 
         readonly DnsResourceRecord _soa;
@@ -50,7 +51,7 @@ namespace ZenitiumDns.Core.Dns
 
         #region constructor
 
-        private LocalZone(string name, IReadOnlyList<DnsResourceRecord> records, bool verified, string verification, DateTime validUntil)
+        private LocalZone(string name, IReadOnlyList<DnsResourceRecord> records, bool verified, LocalizedText verification, DateTime validUntil)
         {
             _name = name;
             _verified = verified;
@@ -301,16 +302,16 @@ namespace ZenitiumDns.Core.Dns
                 throw new InvalidOperationException("The zone file has no NS records for the zone apex.");
 
             bool verified = false;
-            string verification;
+            LocalizedText verification;
             DateTime validUntil = DateTime.MaxValue;
 
             if ((apexDS is null) || (apexDS.Count == 0))
             {
-                verification = "Keine DS-Einträge für die Zone vorhanden, die Signaturen wurden nicht geprüft.";
+                verification = Lang.L("Keine DS-Einträge für die Zone vorhanden, die Signaturen wurden nicht geprüft.", "No DS records exist for the zone, the signatures were not verified.");
             }
             else if (!rrsets.TryGetValue((zoneName, DnsResourceRecordType.DNSKEY), out List<DnsResourceRecord> dnsKeys))
             {
-                verification = "Die Zone ist nicht signiert.";
+                verification = Lang.L("Die Zone ist nicht signiert.", "The zone is not signed.");
             }
             else
             {
@@ -330,11 +331,11 @@ namespace ZenitiumDns.Core.Dns
 
                 if (keySigningKeys.Count == 0)
                 {
-                    verification = "Kein DNSKEY der Zone passt zu den Trust Anchors bzw. DS-Einträgen.";
+                    verification = Lang.L("Kein DNSKEY der Zone passt zu den Trust Anchors bzw. DS-Einträgen.", "No DNSKEY of the zone matches the trust anchors or DS records.");
                 }
                 else if (!VerifyRRset(dnsKeys, GetSignatures(signatures, zoneName, DnsResourceRecordType.DNSKEY), keySigningKeys, ref validUntil))
                 {
-                    verification = "Die Signatur der DNSKEY-Einträge ist ungültig oder abgelaufen.";
+                    verification = Lang.L("Die Signatur der DNSKEY-Einträge ist ungültig oder abgelaufen.", "The signature of the DNSKEY records is invalid or expired.");
                 }
                 else if (rrsets.TryGetValue((zoneName, DnsResourceRecordType.ZONEMD), out List<DnsResourceRecord> zonemdRecords))
                 {
@@ -352,17 +353,17 @@ namespace ZenitiumDns.Core.Dns
                     }
 
                     if (zonemd is null)
-                        verification = "Die Zone enthält keinen unterstützten ZONEMD-Eintrag.";
+                        verification = Lang.L("Die Zone enthält keinen unterstützten ZONEMD-Eintrag.", "The zone contains no supported ZONEMD record.");
                     else if (zonemd.Serial != (soaRecords[0].RDATA as DnsSOARecordData).Serial)
-                        verification = "Die Seriennummer im ZONEMD-Eintrag passt nicht zum SOA.";
+                        verification = Lang.L("Die Seriennummer im ZONEMD-Eintrag passt nicht zum SOA.", "The serial in the ZONEMD record does not match the SOA.");
                     else if (!VerifyRRset(zonemdRecords, GetSignatures(signatures, zoneName, DnsResourceRecordType.ZONEMD), dnsKeys, ref validUntil))
-                        verification = "Die Signatur des ZONEMD-Eintrags ist ungültig oder abgelaufen.";
+                        verification = Lang.L("Die Signatur des ZONEMD-Eintrags ist ungültig oder abgelaufen.", "The signature of the ZONEMD record is invalid or expired.");
                     else if (!DnsZONEMDRecordData.ComputeDigest(zoneRecords, zoneName, zonemd.HashAlgorithm).AsSpan().SequenceEqual(zonemd.Digest))
-                        verification = "Die ZONEMD-Prüfsumme stimmt nicht, die Zonendatei ist verändert oder unvollständig.";
+                        verification = Lang.L("Die ZONEMD-Prüfsumme stimmt nicht, die Zonendatei ist verändert oder unvollständig.", "The ZONEMD digest does not match, the zone file is modified or incomplete.");
                     else
                     {
                         verified = true;
-                        verification = "ZONEMD-Prüfsumme und DNSSEC-Signaturen sind gültig.";
+                        verification = Lang.L("ZONEMD-Prüfsumme und DNSSEC-Signaturen sind gültig.", "ZONEMD digest and DNSSEC signatures are valid.");
                     }
                 }
                 else
@@ -386,18 +387,18 @@ namespace ZenitiumDns.Core.Dns
 
                     if (failed is not null)
                     {
-                        verification = "Die Signatur für " + failed + " ist ungültig oder abgelaufen.";
+                        verification = Lang.L("Die Signatur für " + failed + " ist ungültig oder abgelaufen.", "The signature for " + failed + " is invalid or expired.");
                     }
                     else
                     {
                         verified = true;
-                        verification = "Alle " + signedRRsets + " signierten Eintragsgruppen sind gültig signiert.";
+                        verification = Lang.L("Alle " + signedRRsets + " signierten Eintragsgruppen sind gültig signiert.", "All " + signedRRsets + " signed RRsets are validly signed.");
                     }
                 }
             }
 
             if (requireVerification && !verified)
-                throw new InvalidOperationException(verification);
+                throw new LocalizedException(verification);
 
             return new LocalZone(zoneName, zoneRecords, verified, verification, validUntil);
         }
@@ -512,7 +513,7 @@ namespace ZenitiumDns.Core.Dns
         public bool Verified
         { get { return _verified; } }
 
-        public string Verification
+        public LocalizedText Verification
         { get { return _verification; } }
 
         public DateTime ValidUntil

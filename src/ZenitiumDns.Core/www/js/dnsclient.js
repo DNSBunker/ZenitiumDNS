@@ -68,7 +68,7 @@ function loadServerList() {
                     loadServerListFrom(responseJSON);
                 },
                 error: function (jqXHR, textStatus, errorThrown) {
-                    showAlert("danger", "Fehler", "Die Serverliste konnte nicht geladen werden: " + jqXHR.status + " " + jqXHR.statusText);
+                    showAlert("danger", tr("Fehler"), tr("Die Serverliste konnte nicht geladen werden: {0}", jqXHR.status + " " + jqXHR.statusText));
                 }
             });
         }
@@ -76,9 +76,9 @@ function loadServerList() {
 }
 
 function loadServerListFrom(responseJSON) {
-    $("#txtDnsClientNameServer").val("Dieser Server {this-server}");
+    $("#txtDnsClientNameServer").val(tr("Dieser Server") + " {this-server}");
 
-    var htmlList = "<li><a href=\"#\">Dieser Server {this-server}</a></li>";
+    var htmlList = "<li><a href=\"#\">" + tr("Dieser Server") + " {this-server}</a></li>";
 
     for (var i = 0; i < responseJSON.length; i++) {
         for (var j = 0; j < responseJSON[i].addresses.length; j++) {
@@ -115,13 +115,13 @@ function resolveQuery() {
     server = server.trim();
 
     if ((server === null) || (server === "")) {
-        showAlert("warning", "Angabe fehlt", "Bitte einen gültigen Server eingeben.");
+        showAlert("warning", tr("Angabe fehlt"), tr("Bitte einen gültigen Server eingeben."));
         $("#txtDnsClientNameServer").trigger("focus");
         return;
     }
 
     if ((domain === null) || (domain === "")) {
-        showAlert("warning", "Angabe fehlt", "Bitte die abzufragende Domain eingeben.");
+        showAlert("warning", tr("Angabe fehlt"), tr("Bitte die abzufragende Domain eingeben."));
         $("#txtDnsClientDomain").trigger("focus");
         return;
     }
@@ -182,7 +182,7 @@ function resolveQuery() {
             }
 
             if (responseJSON.response.warningMessage != null)
-                showAlert("warning", "Warnung", responseJSON.response.warningMessage);
+                showAlert("warning", tr("Warnung"), responseJSON.response.warningMessage);
         },
         error: function () {
             divDnsClientLoader.hide();
@@ -213,7 +213,7 @@ function queryDnsServer(domain, type) {
     if (type == null)
         type = "A";
 
-    $("#txtDnsClientNameServer").val("Dieser Server {this-server}");
+    $("#txtDnsClientNameServer").val(tr("Dieser Server") + " {this-server}");
     $("#txtDnsClientDomain").val(domain);
     $("#optDnsClientType").val(type);
     $("#optDnsClientProtocol").val("UDP");

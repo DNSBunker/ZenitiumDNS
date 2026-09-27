@@ -771,7 +771,7 @@ LIMIT @limit OFFSET @offset";
         #region properties
 
         public string Description
-        { get { return "Schreibt alle eingehenden DNS-Anfragen und ihre Antworten in eine SQLite-Datenbank, die sich in der Weboberfläche durchsuchen lässt."; } }
+        { get { return Lang.T("Schreibt alle eingehenden DNS-Anfragen und ihre Antworten in eine SQLite-Datenbank, die sich in der Weboberfläche durchsuchen lässt.", "Writes all incoming DNS queries and their responses to an SQLite database that can be searched in the web interface."); } }
 
         #endregion
 

@@ -1,15 +1,19 @@
-# Richtlinien für Beiträge
-Danke, dass du zu ZenitiumDNS beitragen möchtest! Beiträge verbessern das Projekt und helfen allen, die es nutzen. Bitte lies die folgenden Richtlinien, bevor du Code, Dokumentation oder andere Inhalte einreichst.
+# Contribution guidelines
 
-## Lizenz
-- Das Projekt steht unter der GNU General Public License v3 (GPLv3).
-- Beiträge werden unter der GPLv3 in das Projekt aufgenommen. So können alle den Code zu denselben Bedingungen frei nutzen, verändern und weitergeben.
+[Deutsche Version](CONTRIBUTING.de.md)
 
-## Beiträge einreichen
-Mit dem Einreichen eines Beitrags bestätigst du:
-- Du bist der ursprüngliche Urheber der Arbeit oder berechtigt, sie einzureichen.
-- Du bist damit einverstanden, dass dein Beitrag als Teil des Projekts unter der GPLv3 lizenziert wird.
+Thank you for wanting to contribute to ZenitiumDNS! Contributions improve the project and help everyone who uses it. Please read the following guidelines before submitting code, documentation or other content.
 
-## Richtlinien
-- Vorhandene Urheberrechts- und Lizenzhinweise in bestehenden Quelldateien bleiben unverändert.
-- Die Solution muss vor dem Einreichen fehlerfrei bauen.
+## License
+- The project is licensed under the GNU General Public License v3 (GPLv3).
+- Contributions are accepted into the project under the GPLv3. This way everyone can freely use, modify and distribute the code under the same terms.
+
+## Submitting contributions
+By submitting a contribution you confirm:
+- You are the original author of the work or are entitled to submit it.
+- You agree that your contribution is licensed under the GPLv3 as part of the project.
+
+## Guidelines
+- Existing copyright and license notices in existing source files remain unchanged.
+- The solution must build without errors before submitting.
+- New or changed texts in the web interface are written in German and need an English translation in `src/ZenitiumDns.Core/www/lang/en.json`; `python3 tools/i18n.py check` must pass. Server-side texts use `Lang.T("German", "English")`.

@@ -18,6 +18,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 */
 
+using ZenitiumDns.ApplicationCommon;
 using ZenitiumDns.Core.Auth;
 using ZenitiumDns.Core.Dns;
 using ZenitiumDns.Core.Dns.Zones;
@@ -71,7 +72,7 @@ namespace ZenitiumDns.Core
 
         readonly static char[] commaSeparator = new char[] { ',' };
         static readonly IPEndPoint IPENDPOINT_ANY_0 = new IPEndPoint(IPAddress.Any, 0);
-        const string DEFAULT_UPDATE_CHECK_URL = "https://api.github.com/repos/DNSBunker/ZenitiumDNS-DE/releases/latest";
+        const string DEFAULT_UPDATE_CHECK_URL = "https://api.github.com/repos/DNSBunker/ZenitiumDNS/releases/latest";
 
         readonly Version _currentVersion;
         readonly string _packageVersion;
@@ -132,6 +133,12 @@ namespace ZenitiumDns.Core
         string _webServiceTlsCertificateKeyPath;
         string _webServiceRealIpHeader = "X-Real-IP";
         string _webServiceCspFrameAncestorsHeader = "'none'";
+        internal string _webServiceLanguage;
+
+        string _wwwFolderPath;
+        readonly Lock _languageScriptLock = new Lock();
+        DateTime _languageDictionaryLastModified;
+        byte[] _languageDictionary;
 
         Timer _tlsCertificateUpdateTimer;
         const int TLS_CERTIFICATE_UPDATE_TIMER_INITIAL_INTERVAL = 60000;
@@ -419,7 +426,7 @@ namespace ZenitiumDns.Core
             BinaryReader bR = new BinaryReader(s);
 
             int version = bR.ReadByte();
-            if (version > 5)
+            if (version > 6)
                 throw new InvalidDataException("Web Service config version not supported.");
 
             _webServiceHttpPort = bR.ReadInt32();
@@ -521,6 +528,16 @@ namespace ZenitiumDns.Core
                 _webServiceTlsCertificateKeyPath = null;
             }
 
+            if (version >= 6)
+            {
+                string webServiceLanguage = s.ReadShortString();
+                SetLanguage(Lang.IsSupported(webServiceLanguage) ? webServiceLanguage : null);
+            }
+            else
+            {
+                SetLanguage(Lang.German);
+            }
+
             if (_webServiceTlsCertificatePath is null)
             {
                 StopTlsCertificateUpdateTimer();
@@ -549,7 +566,7 @@ namespace ZenitiumDns.Core
             BinaryWriter bW = new BinaryWriter(s);
 
             bW.Write(Encoding.ASCII.GetBytes("WC"));
-            bW.Write((byte)5);
+            bW.Write((byte)6);
 
             bW.Write(_webServiceHttpPort);
             bW.Write(_webServiceTlsPort);
@@ -587,6 +604,13 @@ namespace ZenitiumDns.Core
             s.WriteShortString(_webServiceRealIpHeader);
             s.WriteShortString(_webServiceCspFrameAncestorsHeader);
             s.WriteShortString(_webServiceTlsCertificateKeyPath ?? string.Empty);
+            s.WriteShortString(_webServiceLanguage ?? string.Empty);
+        }
+
+        internal void SetLanguage(string language)
+        {
+            _webServiceLanguage = language;
+            Lang.Code = language ?? Lang.English;
         }
 
         #endregion
@@ -1435,6 +1459,8 @@ namespace ZenitiumDns.Core
                 wwwFolderPath = Path.Combine(_appFolder, "www");
             }
 
+            _wwwFolderPath = wwwFolderPath;
+
             builder.Environment.WebRootFileProvider = new PhysicalFileProvider(wwwFolderPath)
             {
                 UseActivePolling = true,
@@ -1827,6 +1853,10 @@ namespace ZenitiumDns.Core
                     needsJsonResponseObject = false;
                     break;
 
+                case "/lang.js":
+                    await WriteLanguageScriptAsync(context);
+                    return;
+
                 case "/api/user/session/get":
                     {
                         if (!TryValidateSession(context, out UserSession _))
@@ -1940,6 +1970,105 @@ namespace ZenitiumDns.Core
                     response.StatusCode = StatusCodes.Status404NotFound;
                     response.ContentLength = 0;
                 }
+            }
+        }
+
+        private string GetRequestLanguage(HttpContext context)
+        {
+            string cookieLanguage = context.Request.Cookies["zdnsLanguage"];
+            if (Lang.IsSupported(cookieLanguage))
+                return cookieLanguage;
+
+            string bestLanguage = null;
+            double bestQuality = -1;
+
+            foreach (Microsoft.Net.Http.Headers.StringWithQualityHeaderValue entry in context.Request.GetTypedHeaders().AcceptLanguage)
+            {
+                string value = entry.Value.Value;
+                if (string.IsNullOrEmpty(value))
+                    continue;
+
+                string language = value.Split('-')[0].ToLowerInvariant();
+                if (!Lang.IsSupported(language))
+                    continue;
+
+                double quality = entry.Quality ?? 1;
+                if (quality > bestQuality)
+                {
+                    bestQuality = quality;
+                    bestLanguage = language;
+                }
+            }
+
+            return bestLanguage ?? Lang.English;
+        }
+
+        private byte[] GetLanguageDictionary()
+        {
+            string dictionaryFile = Path.Combine(_wwwFolderPath ?? Path.Combine(_appFolder, "www"), "lang", "en.json");
+
+            lock (_languageScriptLock)
+            {
+                try
+                {
+                    DateTime lastModified = File.GetLastWriteTimeUtc(dictionaryFile);
+                    if ((_languageDictionary is null) || (lastModified != _languageDictionaryLastModified))
+                    {
+                        byte[] dictionary = File.ReadAllBytes(dictionaryFile);
+                        using (JsonDocument.Parse(dictionary))
+                        { }
+
+                        _languageDictionary = dictionary;
+                        _languageDictionaryLastModified = lastModified;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    if (_languageDictionary is null)
+                    {
+                        _log.Write("Web Service failed to load the English dictionary: " + dictionaryFile, ex);
+                        _languageDictionary = Encoding.UTF8.GetBytes("{}");
+                        _languageDictionaryLastModified = DateTime.MinValue;
+                    }
+                }
+
+                return _languageDictionary;
+            }
+        }
+
+        private async Task WriteLanguageScriptAsync(HttpContext context)
+        {
+            string language = _webServiceLanguage;
+            bool chosen = language is not null;
+
+            if (!chosen)
+                language = GetRequestLanguage(context);
+
+            HttpResponse response = context.Response;
+
+            response.StatusCode = StatusCodes.Status200OK;
+            response.ContentType = "text/javascript; charset=utf-8";
+            response.Headers.CacheControl = "no-cache, no-store, must-revalidate";
+            response.Headers.Pragma = "no-cache";
+            response.Headers.Expires = "0";
+            response.Headers.XContentTypeOptions = "nosniff";
+
+            using (MemoryStream mS = new MemoryStream())
+            {
+                byte[] head = Encoding.UTF8.GetBytes("window.zdnsLanguage={\"language\":\"" + language + "\",\"chosen\":" + (chosen ? "true" : "false") + ",\"dictionary\":");
+                mS.Write(head);
+
+                if (language == Lang.English)
+                    mS.Write(GetLanguageDictionary());
+                else
+                    mS.Write("{}"u8);
+
+                mS.Write("};\n"u8);
+
+                response.ContentLength = mS.Length;
+                mS.Position = 0;
+
+                await mS.CopyToAsync(response.Body);
             }
         }
 

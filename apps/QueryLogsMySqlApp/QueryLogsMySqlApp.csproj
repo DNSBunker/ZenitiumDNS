@@ -12,6 +12,12 @@
 	</PropertyGroup>
 
 	<ItemGroup>
+		<AssemblyMetadata Include="DescriptionEn">
+			<Value>Writes all incoming DNS queries and their responses to a MySQL or MariaDB database that can be searched under Logs in the web interface.\n\nNote: First create a database user with all privileges on the database, for example on the MySQL console as root with the desired database and user name:\nCREATE USER 'user'@'%25' IDENTIFIED BY 'password'%3B\nGRANT ALL PRIVILEGES ON DatabaseName.* TO 'user'@'%25'%3B\n\nThen enter the database name and connection string in the app configuration and enable logging. When saving, the app creates the database schema itself and starts logging.</Value>
+		</AssemblyMetadata>
+	</ItemGroup>
+
+	<ItemGroup>
 		<PackageReference Include="MySqlConnector" Version="2.6.2" />
 	</ItemGroup>
 

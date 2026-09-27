@@ -12,6 +12,12 @@
 	</PropertyGroup>
 
 	<ItemGroup>
+		<AssemblyMetadata Include="DescriptionEn">
+			<Value>Writes all incoming DNS queries and their responses to a PostgreSQL database that can be searched under Logs in the web interface.\n\nNote: First create a user and a database and grant the user all privileges on it, for example on the PostgreSQL console as administrator with the desired database and user name:\nCREATE USER "user" password 'password'%3B\nCREATE DATABASE "DatabaseName" OWNER "user"%3B\nGRANT ALL PRIVILEGES ON DATABASE "DatabaseName" TO "user"%3B\n\nThen enter the database name and connection string in the app configuration and enable logging. When saving, the app creates the table itself and starts logging.</Value>
+		</AssemblyMetadata>
+	</ItemGroup>
+
+	<ItemGroup>
 		<PackageReference Include="Npgsql" Version="10.0.3" />
 	</ItemGroup>
 

@@ -145,7 +145,7 @@ namespace AdvancedForwarding
             _networkGroupMap = jsonConfig.ReadObjectAsMap("networkGroupMap", delegate (string network, JsonElement jsonGroup)
             {
                 if (!NetworkAddress.TryParse(network, out NetworkAddress networkAddress))
-                    throw new FormatException("Die Zuordnung Netz zu Gruppe enthält eine ungültige Netzadresse: " + network);
+                    throw new FormatException(Lang.T("Die Zuordnung Netz zu Gruppe enthält eine ungültige Netzadresse: ", "The network to group mapping contains an invalid network address: ") + network);
 
                 return new Tuple<NetworkAddress, string>(networkAddress, jsonGroup.ToString());
             });
@@ -165,7 +165,7 @@ namespace AdvancedForwarding
             }
             else
             {
-                throw new FormatException("Es sind keine Gruppen ('groups') definiert.");
+                throw new FormatException(Lang.T("Es sind keine Gruppen ('groups') definiert.", "No groups ('groups') are defined."));
             }
 
             return Task.CompletedTask;
@@ -219,7 +219,7 @@ namespace AdvancedForwarding
         #region properties
 
         public string Description
-        { get { return "Leitet Anfragen für die konfigurierten Domains und AdGuard-Upstream-Dateien gebündelt an Forwarder weiter."; } }
+        { get { return Lang.T("Leitet Anfragen für die konfigurierten Domains und AdGuard-Upstream-Dateien gebündelt an Forwarder weiter.", "Forwards queries for the configured domains and AdGuard upstream files in bulk to forwarders."); } }
 
         public byte Preference
         { get { return _appPreference; } }
@@ -379,7 +379,7 @@ namespace AdvancedForwarding
                     string forwarderName = jsonForwarder.ToString();
 
                     if ((configForwarders is null) || !configForwarders.TryGetValue(forwarderName, out ConfigForwarder? configForwarder))
-                        throw new FormatException("Dieser Forwarder ist nicht definiert: " + forwarderName);
+                        throw new FormatException(Lang.T("Dieser Forwarder ist nicht definiert: ", "This forwarder is not defined: ") + forwarderName);
 
                     forwarderRecords.AddRange(configForwarder.ForwarderRecords);
                 }
@@ -651,7 +651,7 @@ namespace AdvancedForwarding
                             {
                                 int i = line.LastIndexOf(']');
                                 if (i < 0)
-                                    throw new FormatException("Ungültige AdGuard-Upstream-Datei: Die schließende Klammer ']' fehlt.");
+                                    throw new FormatException(Lang.T("Ungültige AdGuard-Upstream-Datei: Die schließende Klammer ']' fehlt.", "Invalid AdGuard upstream file: the closing bracket ']' is missing."));
 
                                 string[] domains = line.Substring(1, i - 1).Split('/', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
                                 string forwarder = line.Substring(i + 1);
@@ -659,7 +659,7 @@ namespace AdvancedForwarding
                                 if (forwarder == "#")
                                 {
                                     if (defaultForwarderRecords.Count == 0)
-                                        throw new FormatException("Ungültige AdGuard-Upstream-Datei: Es fehlen die Standard-Upstream-Server.");
+                                        throw new FormatException(Lang.T("Ungültige AdGuard-Upstream-Datei: Es fehlen die Standard-Upstream-Server.", "Invalid AdGuard upstream file: the default upstream servers are missing."));
 
                                     forwardings.Add(new Forwarding(defaultForwarderRecords, domains));
                                 }
@@ -684,7 +684,7 @@ namespace AdvancedForwarding
                                     }
 
                                     if (forwarderRecords.Count == 0)
-                                        throw new FormatException("Ungültige AdGuard-Upstream-Datei: Es fehlen Upstream-Server.");
+                                        throw new FormatException(Lang.T("Ungültige AdGuard-Upstream-Datei: Es fehlen Upstream-Server.", "Invalid AdGuard upstream file: upstream servers are missing."));
 
                                     forwardings.Add(new Forwarding(forwarderRecords, domains));
                                 }
@@ -745,7 +745,7 @@ namespace AdvancedForwarding
                 ConfigProxyServer? configProxyServer = null;
 
                 if (!string.IsNullOrEmpty(proxyName) && ((configProxyServers is null) || !configProxyServers.TryGetValue(proxyName, out configProxyServer)))
-                    throw new FormatException("Dieser Proxyserver ist nicht definiert: " + proxyName);
+                    throw new FormatException(Lang.T("Dieser Proxyserver ist nicht definiert: ", "This proxy server is not defined: ") + proxyName);
 
                 _configProxyServer = configProxyServer;
 
@@ -879,12 +879,12 @@ namespace AdvancedForwarding
                 ConfigProxyServer? configProxyServer = null;
 
                 if (!string.IsNullOrEmpty(proxyName) && ((configProxyServers is null) || !configProxyServers.TryGetValue(proxyName, out configProxyServer)))
-                    throw new FormatException("Dieser Proxyserver ist nicht definiert: " + proxyName);
+                    throw new FormatException(Lang.T("Dieser Proxyserver ist nicht definiert: ", "This proxy server is not defined: ") + proxyName);
 
                 _forwarderRecords = jsonForwarder.ReadArray("forwarderAddresses", delegate (string address)
                 {
                     return GetForwarderRecord(forwarderProtocol, address, dnssecValidation, configProxyServer);
-                }) ?? throw new FormatException("Es sind keine Adressen in 'forwarderAddresses' eingetragen.");
+                }) ?? throw new FormatException(Lang.T("Es sind keine Adressen in 'forwarderAddresses' eingetragen.", "No addresses are entered in 'forwarderAddresses'."));
             }
 
             #endregion

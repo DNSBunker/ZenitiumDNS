@@ -364,7 +364,7 @@ namespace AdvancedBlocking
                 delegate (string localEP, JsonElement jsonGroup)
                 {
                     if (!EndPointExtensions.TryParse(localEP, out EndPoint ep))
-                        throw new InvalidOperationException("Die Zuordnung lokaler Endpunkt zu Gruppe enthält einen ungültigen Endpunkt: " + localEP);
+                        throw new InvalidOperationException(Lang.T("Die Zuordnung lokaler Endpunkt zu Gruppe enthält einen ungültigen Endpunkt: ", "The local endpoint to group mapping contains an invalid endpoint: ") + localEP);
 
                     return new Tuple<EndPoint, string>(ep, jsonGroup.GetString() ?? "");
                 },
@@ -376,7 +376,7 @@ namespace AdvancedBlocking
             _networkGroupMap = jsonConfig.ReadObjectAsMap("networkGroupMap", delegate (string network, JsonElement jsonGroup)
             {
                 if (!NetworkAddress.TryParse(network, out NetworkAddress networkAddress))
-                    throw new InvalidOperationException("Die Zuordnung Netz zu Gruppe enthält eine ungültige Netzadresse: " + network);
+                    throw new InvalidOperationException(Lang.T("Die Zuordnung Netz zu Gruppe enthält eine ungültige Netzadresse: ", "The network to group mapping contains an invalid network address: ") + network);
 
                 return new Tuple<NetworkAddress, string>(networkAddress, jsonGroup.GetString() ?? "");
             });
@@ -708,7 +708,7 @@ namespace AdvancedBlocking
         #region properties
 
         public string Description
-        { get { return "Blockiert Domains anhand von Blocklisten und Listen mit regulären Ausdrücken. Für Client-IP-Adressen oder Subnetze lassen sich Gruppen mit jeweils eigenen Listen anlegen."; } }
+        { get { return Lang.T("Blockiert Domains anhand von Blocklisten und Listen mit regulären Ausdrücken. Für Client-IP-Adressen oder Subnetze lassen sich Gruppen mit jeweils eigenen Listen anlegen.", "Blocks domains based on block lists and regular expression lists. Groups with their own lists can be created for client IP addresses or subnets."); } }
 
         #endregion
 

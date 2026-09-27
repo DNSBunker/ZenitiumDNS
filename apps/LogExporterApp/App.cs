@@ -100,7 +100,7 @@ namespace LogExporter
             _config = AppConfig.Deserialize(config);
 
             if (_config is null)
-                throw new DnsClientException("Ungültige App-Konfiguration.");
+                throw new DnsClientException(Lang.T("Ungültige App-Konfiguration.", "Invalid app configuration."));
 
             if (_config.FileTarget!.Enabled)
             {
@@ -211,7 +211,7 @@ namespace LogExporter
 
         public string Description
         {
-            get { return "Exportiert das Anfrageprotokoll an externe Ziele: Datei, HTTP-Endpunkt oder Syslog (UDP, TCP, TLS oder lokal)."; }
+            get { return Lang.T("Exportiert das Anfrageprotokoll an externe Ziele: Datei, HTTP-Endpunkt oder Syslog (UDP, TCP, TLS oder lokal).", "Exports the query log to external targets: file, HTTP endpoint or syslog (UDP, TCP, TLS or local)."); }
         }
 
         #endregion

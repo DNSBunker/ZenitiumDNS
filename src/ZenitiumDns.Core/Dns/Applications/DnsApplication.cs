@@ -47,6 +47,7 @@ namespace ZenitiumDns.Core.Dns.Applications
         readonly DnsApplicationAssemblyLoadContext _appContext;
 
         readonly string _description;
+        readonly string _descriptionEnglish;
         readonly Version _version;
         readonly IReadOnlyDictionary<string, IDnsApplication> _dnsApplications;
         readonly IReadOnlyDictionary<string, IDnsAppRecordRequestHandler> _dnsAppRecordRequestHandlers;
@@ -129,6 +130,12 @@ namespace ZenitiumDns.Core.Dns.Applications
                                     AssemblyDescriptionAttribute attribute = appAssembly.GetCustomAttribute<AssemblyDescriptionAttribute>();
                                     if (attribute is not null)
                                         _description = attribute.Description.Replace("\\n", "\n");
+
+                                    foreach (AssemblyMetadataAttribute metadata in appAssembly.GetCustomAttributes<AssemblyMetadataAttribute>())
+                                    {
+                                        if ((metadata.Key == "DescriptionEn") && (metadata.Value is not null))
+                                            _descriptionEnglish = metadata.Value.Replace("\\n", "\n");
+                                    }
                                 }
 
                                 if (_version is null)
@@ -288,7 +295,7 @@ namespace ZenitiumDns.Core.Dns.Applications
         { get { return _name; } }
 
         public string Description
-        { get { return _description; } }
+        { get { return Lang.T(_description, _descriptionEnglish ?? _description); } }
 
         public Version Version
         { get { return _version; } }

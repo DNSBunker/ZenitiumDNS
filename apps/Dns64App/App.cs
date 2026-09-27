@@ -72,7 +72,7 @@ namespace Dns64
             _networkGroupMap = jsonConfig.ReadObjectAsMap("networkGroupMap", delegate (string network, JsonElement group)
             {
                 if (!NetworkAddress.TryParse(network, out NetworkAddress networkAddress))
-                    throw new InvalidOperationException("Die Zuordnung Netz zu Gruppe enthält eine ungültige Netzadresse: " + network);
+                    throw new InvalidOperationException(Lang.T("Die Zuordnung Netz zu Gruppe enthält eine ungültige Netzadresse: ", "The network to group mapping contains an invalid network address: ") + network);
 
                 return new Tuple<NetworkAddress, string>(networkAddress, group.GetString());
             });
@@ -256,7 +256,7 @@ namespace Dns64
         #region properties
 
         public string Description
-        { get { return "Stellt DNS64 für Antworten aus lokalen Zonen und aus der rekursiven Auflösung bereit, für Clients, die nur IPv6 haben."; } }
+        { get { return Lang.T("Stellt DNS64 für Antworten aus lokalen Zonen und aus der rekursiven Auflösung bereit, für Clients, die nur IPv6 haben.", "Provides DNS64 for answers from local zones and from recursive resolution, for clients that only have IPv6."); } }
 
         public byte Preference
         { get { return _appPreference; } }
@@ -303,7 +303,7 @@ namespace Dns64
                                 break;
 
                             default:
-                                throw new NotSupportedException("Das DNS64-Präfix muss eine Länge von 32, 40, 48, 56, 64 oder 96 haben.");
+                                throw new NotSupportedException(Lang.T("Das DNS64-Präfix muss eine Länge von 32, 40, 48, 56, 64 oder 96 haben.", "The DNS64 prefix must have a length of 32, 40, 48, 56, 64 or 96."));
                         }
                     }
 
@@ -314,7 +314,7 @@ namespace Dns64
                 {
                     NetworkAddress networkAddress = NetworkAddress.Parse(strNetworkAddress);
                     if (networkAddress.Address.AddressFamily != AddressFamily.InterNetworkV6)
-                        throw new InvalidOperationException("In 'excludedIpv6' sind nur IPv6-Netze erlaubt.");
+                        throw new InvalidOperationException(Lang.T("In 'excludedIpv6' sind nur IPv6-Netze erlaubt.", "Only IPv6 networks are allowed in 'excludedIpv6'."));
 
                     return networkAddress;
                 });

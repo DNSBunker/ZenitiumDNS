@@ -33,7 +33,7 @@ $(function () {
     var errorMessage = urlParams.get("error");
     if (errorMessage != null) {
         showPageLogin();
-        showAlert("danger", "Fehler", errorMessage);
+        showAlert("danger", tr("Fehler"), errorMessage);
     }
     else {
         var token = getCookie("token");
@@ -54,6 +54,9 @@ $(function () {
                     $("#chkDnssecValidation").prop("checked", sessionData.info.dnssecValidation);
 
                     showPageMain();
+
+                    if (consumeChangePasswordPrompt() && !languageChooserVisible)
+                        showChangePasswordModal("admin");
                 },
                 error: function () {
                     showPageLogin(true);
@@ -256,13 +259,13 @@ function login(username, password) {
     }
 
     if ((username === null) || (username === "")) {
-        showAlert("warning", "Angabe fehlt", "Bitte den Benutzernamen eingeben.");
+        showAlert("warning", tr("Angabe fehlt"), tr("Bitte den Benutzernamen eingeben."));
         $("#txtUser").trigger("focus");
         return;
     }
 
     if ((password === null) || (password === "")) {
-        showAlert("warning", "Angabe fehlt", "Bitte das Passwort eingeben.");
+        showAlert("warning", tr("Angabe fehlt"), tr("Bitte das Passwort eingeben."));
         $("#txtPass").trigger("focus");
         return;
     }
@@ -271,7 +274,7 @@ function login(username, password) {
 
     if ($("#div2FAOTP").is(":visible")) {
         if ((totp == null) || (totp.length != 6)) {
-            showAlert("warning", "Angabe fehlt", "Bitte den 6-stelligen Code aus der Authenticator-App eingeben.");
+            showAlert("warning", tr("Angabe fehlt"), tr("Bitte den 6-stelligen Code aus der Authenticator-App eingeben."));
             $("#txt2FATOTP").trigger("focus");
             otpTimerHandle = setTimeout(showPageLogin, OTP_TIMEOUT_INTERVAL);
             return;
@@ -290,8 +293,12 @@ function login(username, password) {
 
             showPageMain();
 
-            if (!sessionData.totpEnabled && (username === "admin") && (password === "admin"))
-                showChangePasswordModal(password);
+            if (!sessionData.totpEnabled && (username === "admin") && (password === "admin")) {
+                if (languageChooserVisible)
+                    languageChooserPasswordPrompt = password;
+                else
+                    showChangePasswordModal(password);
+            }
         },
         error: function () {
             btn.button("reset");
@@ -340,7 +347,7 @@ function logout() {
 }
 
 function showChangePasswordModal(currentPassword) {
-    $("#titleChangePassword").text("Passwort ändern");
+    $("#titleChangePassword").text(tr("Passwort ändern"));
 
     hideAlert($("#divChangePasswordAlert"));
     $("#txtChangePasswordUsername").val(sessionData.username);
@@ -369,7 +376,7 @@ function showChangePasswordModal(currentPassword) {
         $("#divChangePassword2FATOTP").hide();
 
     var btnChangePassword = $("#btnChangePassword");
-    btnChangePassword.text("Ändern");
+    btnChangePassword.text(tr("Ändern"));
     btnChangePassword.attr("onclick", "changePassword(this); return false;");
     btnChangePassword.show();
 
@@ -394,32 +401,32 @@ function changePassword(objBtn) {
     var totp = $("#txtChangePassword2FATOTP").val();
 
     if ((password === null) || (password === "")) {
-        showAlert("warning", "Angabe fehlt", "Bitte das aktuelle Passwort eingeben.", divChangePasswordAlert);
+        showAlert("warning", tr("Angabe fehlt"), tr("Bitte das aktuelle Passwort eingeben."), divChangePasswordAlert);
         $("#txtChangePasswordCurrentPassword").trigger("focus");
         return;
     }
 
     if ((newPassword === null) || (newPassword === "")) {
-        showAlert("warning", "Angabe fehlt", "Bitte das neue Passwort eingeben.", divChangePasswordAlert);
+        showAlert("warning", tr("Angabe fehlt"), tr("Bitte das neue Passwort eingeben."), divChangePasswordAlert);
         $("#txtChangePasswordNewPassword").trigger("focus");
         return;
     }
 
     if ((confirmPassword === null) || (confirmPassword === "")) {
-        showAlert("warning", "Angabe fehlt", "Bitte das neue Passwort wiederholen.", divChangePasswordAlert);
+        showAlert("warning", tr("Angabe fehlt"), tr("Bitte das neue Passwort wiederholen."), divChangePasswordAlert);
         $("#txtChangePasswordConfirmPassword").trigger("focus");
         return;
     }
 
     if (newPassword !== confirmPassword) {
-        showAlert("warning", "Keine Übereinstimmung", "Die Passwörter stimmen nicht überein.", divChangePasswordAlert);
+        showAlert("warning", tr("Keine Übereinstimmung"), tr("Die Passwörter stimmen nicht überein."), divChangePasswordAlert);
         $("#txtChangePasswordNewPassword").trigger("focus");
         return;
     }
 
     if (sessionData.totpEnabled) {
         if ((totp == null) || (totp.length != 6)) {
-            showAlert("warning", "Angabe fehlt", "Bitte den 6-stelligen Code aus der Authenticator-App eingeben.", divChangePasswordAlert);
+            showAlert("warning", tr("Angabe fehlt"), tr("Bitte den 6-stelligen Code aus der Authenticator-App eingeben."), divChangePasswordAlert);
             $("#txtChangePassword2FATOTP").trigger("focus");
             return;
         }
@@ -441,7 +448,7 @@ function changePassword(objBtn) {
             $("#txtChangePassword2FATOTP").val("");
             btn.button("reset");
 
-            showAlert("success", "Passwort geändert", "Das Passwort wurde geändert.");
+            showAlert("success", tr("Passwort geändert"), tr("Das Passwort wurde geändert."));
         },
         error: function () {
             btn.button("reset");
@@ -476,7 +483,7 @@ function showConfigure2FAModal() {
         token: sessionData.token,
         success: function (responseJSON) {
             $("#txtConfigure2FAUsername").val(sessionData.username);
-            $("#lblConfigure2FAStatus").text(responseJSON.response.totpEnabled ? "Aktiv" : "Inaktiv");
+            $("#lblConfigure2FAStatus").text(responseJSON.response.totpEnabled ? tr("Aktiv") : tr("Inaktiv"));
 
             if (responseJSON.response.totpEnabled) {
                 $("#divConfigure2FAInitialize").hide();
@@ -531,7 +538,7 @@ function enable2FA(objBtn) {
     var totp = $("#txtConfigure2FATOTP").val();
 
     if ((totp == null) || (totp.length != 6)) {
-        showAlert("warning", "Angabe fehlt", "Bitte den 6-stelligen Code aus der Authenticator-App eingeben.", divConfigure2FAAlert);
+        showAlert("warning", tr("Angabe fehlt"), tr("Bitte den 6-stelligen Code aus der Authenticator-App eingeben."), divConfigure2FAAlert);
         $("#txtConfigure2FATOTP").trigger("focus");
         return;
     }
@@ -550,7 +557,7 @@ function enable2FA(objBtn) {
             $("#modalConfigure2FA").modal("hide");
             btn.button("reset");
 
-            showAlert("success", "2FA aktiviert", "Die Zwei-Faktor-Anmeldung ist aktiv.");
+            showAlert("success", tr("2FA aktiviert"), tr("Die Zwei-Faktor-Anmeldung ist aktiv."));
         },
         error: function () {
             btn.button("reset");
@@ -567,7 +574,7 @@ function enable2FA(objBtn) {
 }
 
 function disable2FA(objBtn) {
-    if (!confirm("Zwei-Faktor-Anmeldung deaktivieren?"))
+    if (!confirm(tr("Zwei-Faktor-Anmeldung deaktivieren?")))
         return;
 
     var btn = $(objBtn);
@@ -585,7 +592,7 @@ function disable2FA(objBtn) {
             $("#modalConfigure2FA").modal("hide");
             btn.button("reset");
 
-            showAlert("success", "2FA deaktiviert", "Die Zwei-Faktor-Anmeldung ist deaktiviert.");
+            showAlert("success", tr("2FA deaktiviert"), tr("Die Zwei-Faktor-Anmeldung ist deaktiviert."));
         },
         error: function () {
             btn.button("reset");
@@ -627,20 +634,20 @@ function showMyProfileModal() {
                 case "RemoteSSO":
                     $("#txtMyProfileDisplayName").prop("disabled", true);
                     $("#lblMyProfileUserType").text("Remote/SSO");
-                    $("#lblMyProfile2FAStatus").text("über SSO verwaltet");
+                    $("#lblMyProfile2FAStatus").text(tr("über SSO verwaltet"));
                     break;
 
                 case "RemoteLDAP":
                     $("#txtMyProfileDisplayName").prop("disabled", true);
                     $("#lblMyProfileUserType").text("Remote/LDAP");
-                    $("#lblMyProfile2FAStatus").text(responseJSON.response.totpEnabled ? "Aktiv" : "Inaktiv");
+                    $("#lblMyProfile2FAStatus").text(responseJSON.response.totpEnabled ? tr("Aktiv") : tr("Inaktiv"));
                     break;
 
                 case "Local":
                 default:
                     $("#txtMyProfileDisplayName").prop("disabled", false);
                     $("#lblMyProfileUserType").text(responseJSON.response.type);
-                    $("#lblMyProfile2FAStatus").text(responseJSON.response.totpEnabled ? "Aktiv" : "Inaktiv");
+                    $("#lblMyProfile2FAStatus").text(responseJSON.response.totpEnabled ? tr("Aktiv") : tr("Inaktiv"));
                     break;
             }
 
@@ -654,7 +661,7 @@ function showMyProfileModal() {
                 }
 
                 $("#tbodyMyProfileMemberOf").html(groupHtmlRows);
-                $("#tfootMyProfileMemberOf").html("Gruppen gesamt: " + responseJSON.response.memberOfGroups.length);
+                $("#tfootMyProfileMemberOf").html(tr("Gruppen gesamt: {0}", responseJSON.response.memberOfGroups.length));
             }
 
             {
@@ -669,7 +676,7 @@ function showMyProfileModal() {
                         session = htmlEncode(responseJSON.response.sessions[i].tokenName) + "<br />[" + htmlEncode(responseJSON.response.sessions[i].partialToken) + "]";
 
                     if (responseJSON.response.sessions[i].isCurrentSession)
-                        session += "<br />(diese Sitzung)";
+                        session += "<br />(" + tr("diese Sitzung") + ")";
 
                     switch (responseJSON.response.sessions[i].type) {
                         case "Standard":
@@ -677,26 +684,26 @@ function showMyProfileModal() {
                             break;
 
                         case "ApiToken":
-                            session += "<br /><span class=\"label label-info\">API Token</span>";
+                            session += "<br /><span class=\"label label-info\">" + tr("API Token") + "</span>";
                             break;
 
                         default:
-                            session += "<br /><span class=\"label label-warning\">Unbekannt</span>";
+                            session += "<br /><span class=\"label label-warning\">" + tr("Unbekannt") + "</span>";
                             break;
                     }
 
                     sessionHtmlRows += "<tr id=\"trMyProfileActiveSessions" + i + "\"><td style=\"min-width: 155px; word-wrap: anywhere;\">" + session + "</td><td>" +
-                        htmlEncode(moment(responseJSON.response.sessions[i].lastSeen).local().format("DD.MM.YYYY HH:mm:ss")) + "<br /><span style=\"font-size: 12px\">" + htmlEncode("(" + moment(responseJSON.response.sessions[i].lastSeen).fromNow() + ")") + "</span></td><td>" +
+                        htmlEncode(moment(responseJSON.response.sessions[i].lastSeen).local().format(tr("DD.MM.YYYY HH:mm:ss"))) + "<br /><span style=\"font-size: 12px\">" + htmlEncode("(" + moment(responseJSON.response.sessions[i].lastSeen).fromNow() + ")") + "</span></td><td>" +
                         htmlEncode(responseJSON.response.sessions[i].lastSeenRemoteAddress) + "</td><td style=\"word-wrap: anywhere;\">" +
                         htmlEncode(responseJSON.response.sessions[i].lastSeenUserAgent);
 
                     sessionHtmlRows += "</td><td align=\"right\"><div class=\"dropdown\"><a href=\"#\" id=\"btnMyProfileActiveSessionRowOption" + i + "\" class=\"dropdown-toggle\" data-toggle=\"dropdown\" aria-haspopup=\"true\" aria-expanded=\"true\"><span class=\"glyphicon glyphicon-option-vertical\" aria-hidden=\"true\"></span></a><ul class=\"dropdown-menu dropdown-menu-right\">";
-                    sessionHtmlRows += "<li><a href=\"#\" data-id=\"" + i + "\" data-session-type=\"" + htmlEncode(responseJSON.response.sessions[i].type) + "\" data-partial-token=\"" + htmlEncode(responseJSON.response.sessions[i].partialToken) + "\" onclick=\"deleteMySession(this); return false;\">Sitzung beenden</a></li>";
+                    sessionHtmlRows += "<li><a href=\"#\" data-id=\"" + i + "\" data-session-type=\"" + htmlEncode(responseJSON.response.sessions[i].type) + "\" data-partial-token=\"" + htmlEncode(responseJSON.response.sessions[i].partialToken) + "\" onclick=\"deleteMySession(this); return false;\">" + tr("Sitzung beenden") + "</a></li>";
                     sessionHtmlRows += "</ul></div></td></tr>";
                 }
 
                 $("#tbodyMyProfileActiveSessions").html(sessionHtmlRows);
-                $("#tfootMyProfileActiveSessions").html("Sitzungen gesamt: " + responseJSON.response.sessions.length);
+                $("#tfootMyProfileActiveSessions").html(tr("Sitzungen gesamt: {0}", responseJSON.response.sessions.length));
             }
 
             divMyProfileLoader.hide();
@@ -745,7 +752,7 @@ function saveMyProfile(objBtn) {
             btn.button("reset");
             $("#modalMyProfile").modal("hide");
 
-            showAlert("success", "Profil gespeichert", "Das Profil wurde gespeichert.");
+            showAlert("success", tr("Profil gespeichert"), tr("Das Profil wurde gespeichert."));
         },
         error: function () {
             btn.button("reset");
@@ -767,7 +774,7 @@ function deleteMySession(objMenuItem) {
     var sessionType = mnuItem.attr("data-session-type");
     var partialToken = mnuItem.attr("data-partial-token");
 
-    if (!confirm("Sitzung [" + partialToken + "] beenden?"))
+    if (!confirm(tr("Sitzung [{0}] beenden?", partialToken)))
         return;
 
     var apiUrl = "api/user/session/delete?partialToken=" + encodeURIComponent(partialToken);
@@ -775,7 +782,7 @@ function deleteMySession(objMenuItem) {
     var btn = $("#btnMyProfileActiveSessionRowOption" + id);
     var originalBtnHtml = btn.html();
     btn.prop("disabled", true);
-    btn.html("<span class='spinner spinner-sm' role='status' aria-label='Wird geladen'></span>");
+    btn.html("<span class='spinner spinner-sm' role='status' aria-label='" + tr("Wird geladen") + "'></span>");
 
     HTTPRequest({
         url: apiUrl,
@@ -784,9 +791,9 @@ function deleteMySession(objMenuItem) {
             $("#trMyProfileActiveSessions" + id).remove();
 
             var totalSessions = $('#tableMyProfileActiveSessions >tbody >tr').length;
-            $("#tfootMyProfileActiveSessions").html("Sitzungen gesamt: " + totalSessions);
+            $("#tfootMyProfileActiveSessions").html(tr("Sitzungen gesamt: {0}", totalSessions));
 
-            showAlert("success", "Sitzung beendet", "Die Sitzung wurde beendet.", divMyProfileAlert);
+            showAlert("success", tr("Sitzung beendet"), tr("Die Sitzung wurde beendet."), divMyProfileAlert);
         },
         error: function () {
             btn.prop("disabled", false);
@@ -839,7 +846,7 @@ function refreshAdminSessions() {
                     session = htmlEncode(responseJSON.response.sessions[i].tokenName) + "<br />[" + htmlEncode(responseJSON.response.sessions[i].partialToken) + "]";
 
                 if (responseJSON.response.sessions[i].isCurrentSession)
-                    session += "<br />(diese Sitzung)";
+                    session += "<br />(" + tr("diese Sitzung") + ")";
 
                 switch (responseJSON.response.sessions[i].type) {
                     case "Standard":
@@ -847,28 +854,28 @@ function refreshAdminSessions() {
                         break;
 
                     case "ApiToken":
-                        session += "<br /><span class=\"label label-info\">API Token</span>";
+                        session += "<br /><span class=\"label label-info\">" + tr("API Token") + "</span>";
                         break;
 
                     default:
-                        session += "<br /><span class=\"label label-warning\">Unbekannt</span>";
+                        session += "<br /><span class=\"label label-warning\">" + tr("Unbekannt") + "</span>";
                         break;
                 }
 
                 tableHtmlRows += "<tr id=\"trAdminSessions" + i + "\"><td><a href=\"#\" data-username=\"" + htmlEncode(responseJSON.response.sessions[i].username) + "\" onclick=\"showUserDetailsModal(this); return false;\">" + htmlEncode(responseJSON.response.sessions[i].username) + "</a></td><td style=\"min-width: 155px; word-wrap: anywhere;\">" +
                     session + "</td><td>" +
-                    htmlEncode(moment(responseJSON.response.sessions[i].lastSeen).local().format("DD.MM.YYYY HH:mm:ss")) + "<br /><span style=\"font-size: 12px\">" + htmlEncode("(" + moment(responseJSON.response.sessions[i].lastSeen).fromNow() + ")") + "</span></td><td>" +
+                    htmlEncode(moment(responseJSON.response.sessions[i].lastSeen).local().format(tr("DD.MM.YYYY HH:mm:ss"))) + "<br /><span style=\"font-size: 12px\">" + htmlEncode("(" + moment(responseJSON.response.sessions[i].lastSeen).fromNow() + ")") + "</span></td><td>" +
                     htmlEncode(responseJSON.response.sessions[i].lastSeenRemoteAddress) + "</td><td style=\"word-wrap: anywhere;\">" +
                     htmlEncode(responseJSON.response.sessions[i].lastSeenUserAgent);
 
                 tableHtmlRows += "</td><td align=\"right\"><div class=\"dropdown\"><a href=\"#\" id=\"btnAdminSessionRowOption" + i + "\" class=\"dropdown-toggle\" data-toggle=\"dropdown\" aria-haspopup=\"true\" aria-expanded=\"true\"><span class=\"glyphicon glyphicon-option-vertical\" aria-hidden=\"true\"></span></a><ul class=\"dropdown-menu dropdown-menu-right\">";
-                tableHtmlRows += "<li><a href=\"#\" data-username=\"" + htmlEncode(responseJSON.response.sessions[i].username) + "\" onclick=\"showUserDetailsModal(this); return false;\">Benutzer anzeigen</a></li>";
-                tableHtmlRows += "<li><a href=\"#\" data-id=\"" + i + "\" data-session-type=\"" + htmlEncode(responseJSON.response.sessions[i].type) + "\" data-partial-token=\"" + htmlEncode(responseJSON.response.sessions[i].partialToken) + "\" onclick=\"deleteAdminSession(this); return false;\">Sitzung beenden</a></li>";
+                tableHtmlRows += "<li><a href=\"#\" data-username=\"" + htmlEncode(responseJSON.response.sessions[i].username) + "\" onclick=\"showUserDetailsModal(this); return false;\">" + tr("Benutzer anzeigen") + "</a></li>";
+                tableHtmlRows += "<li><a href=\"#\" data-id=\"" + i + "\" data-session-type=\"" + htmlEncode(responseJSON.response.sessions[i].type) + "\" data-partial-token=\"" + htmlEncode(responseJSON.response.sessions[i].partialToken) + "\" onclick=\"deleteAdminSession(this); return false;\">" + tr("Sitzung beenden") + "</a></li>";
                 tableHtmlRows += "</ul></div></td></tr>";
             }
 
             $("#tbodyAdminSessions").html(tableHtmlRows);
-            $("#tfootAdminSessions").html("Sitzungen gesamt: " + responseJSON.response.sessions.length);
+            $("#tfootAdminSessions").html(tr("Sitzungen gesamt: {0}", responseJSON.response.sessions.length));
 
             divAdminSessionsLoader.hide();
             divAdminSessionsView.show();
@@ -891,7 +898,7 @@ function deleteAdminSession(objMenuItem) {
     var sessionType = mnuItem.attr("data-session-type");
     var partialToken = mnuItem.attr("data-partial-token");
 
-    if (!confirm("Sitzung [" + partialToken + "] beenden?"))
+    if (!confirm(tr("Sitzung [{0}] beenden?", partialToken)))
         return;
 
     var apiUrl = "api/admin/sessions/delete?partialToken=" + encodeURIComponent(partialToken);
@@ -899,7 +906,7 @@ function deleteAdminSession(objMenuItem) {
     var btn = $("#btnAdminSessionRowOption" + id);
     var originalBtnHtml = btn.html();
     btn.prop("disabled", true);
-    btn.html("<span class='spinner spinner-sm' role='status' aria-label='Wird geladen'></span>");
+    btn.html("<span class='spinner spinner-sm' role='status' aria-label='" + tr("Wird geladen") + "'></span>");
 
     HTTPRequest({
         url: apiUrl,
@@ -908,9 +915,9 @@ function deleteAdminSession(objMenuItem) {
             $("#trAdminSessions" + id).remove();
 
             var totalSessions = $('#tableAdminSessions >tbody >tr').length;
-            $("#tfootAdminSessions").html("Sitzungen gesamt: " + totalSessions);
+            $("#tfootAdminSessions").html(tr("Sitzungen gesamt: {0}", totalSessions));
 
-            showAlert("success", "Sitzung beendet", "Die Sitzung wurde beendet.");
+            showAlert("success", tr("Sitzung beendet"), tr("Die Sitzung wurde beendet."));
         },
         error: function () {
             btn.prop("disabled", false);
@@ -940,7 +947,7 @@ function refreshAdminUsers() {
             }
 
             $("#tbodyAdminUsers").html(tableHtmlRows);
-            $("#tfootAdminUsers").html("Benutzer gesamt: " + responseJSON.response.users.length);
+            $("#tfootAdminUsers").html(tr("Benutzer gesamt: {0}", responseJSON.response.users.length));
 
             divAdminUsersLoader.hide();
             divAdminUsersView.show();
@@ -959,16 +966,16 @@ function getAdminUsersRowHtml(id, user) {
     switch (user.type) {
         case "RemoteSSO":
             userType = "Remote/SSO";
-            totpStatus = "<span class=\"label label-info\">über SSO verwaltet</span>"
+            totpStatus = "<span class=\"label label-info\">" + tr("über SSO verwaltet") + "</span>"
             break;
 
         case "RemoteLDAP":
             userType = "Remote/LDAP";
 
             if (user.totpEnabled)
-                totpStatus = "<span class=\"label label-success\">Aktiv</span>";
+                totpStatus = "<span class=\"label label-success\">" + tr("Aktiv") + "</span>";
             else
-                totpStatus = "<span class=\"label label-default\">Deaktiviert</span>";
+                totpStatus = "<span class=\"label label-default\">" + tr("Deaktiviert") + "</span>";
 
             break;
 
@@ -977,46 +984,46 @@ function getAdminUsersRowHtml(id, user) {
             userType = user.type;
 
             if (user.totpEnabled)
-                totpStatus = "<span class=\"label label-success\">Aktiv</span>";
+                totpStatus = "<span class=\"label label-success\">" + tr("Aktiv") + "</span>";
             else
-                totpStatus = "<span class=\"label label-default\">Deaktiviert</span>";
+                totpStatus = "<span class=\"label label-default\">" + tr("Deaktiviert") + "</span>";
 
             break;
     }
 
     var status;
     if (user.disabled)
-        status = "<span class=\"label label-default\">Deaktiviert</span>";
+        status = "<span class=\"label label-default\">" + tr("Deaktiviert") + "</span>";
     else
-        status = "<span class=\"label label-success\">Aktiv</span>";
+        status = "<span class=\"label label-success\">" + tr("Aktiv") + "</span>";
 
     var tableHtmlRows = "<tr id=\"trAdminUsers" + id + "\"><td style=\"word-wrap: anywhere;\"><a href=\"#\" data-id=\"" + id + "\" data-username=\"" + htmlEncode(user.username) + "\" onclick=\"showUserDetailsModal(this); return false;\">" + htmlEncode(user.username) + "</a></td><td style=\"word-wrap: anywhere;\">" +
         htmlEncode(user.displayName) + "</td><td>" +
         htmlEncode(userType) + "</td><td>" +
         totpStatus + "</td><td>" +
         status + "</td><td>" +
-        htmlEncode(moment(user.recentSessionLoggedOn).local().format("DD.MM.YYYY HH:mm:ss")) + " von " + htmlEncode(user.recentSessionRemoteAddress) + "</td><td>" +
-        htmlEncode(moment(user.previousSessionLoggedOn).local().format("DD.MM.YYYY HH:mm:ss")) + " von " + htmlEncode(user.previousSessionRemoteAddress);
+        htmlEncode(tr("{0} von {1}", moment(user.recentSessionLoggedOn).local().format(tr("DD.MM.YYYY HH:mm:ss")), user.recentSessionRemoteAddress)) + "</td><td>" +
+        htmlEncode(tr("{0} von {1}", moment(user.previousSessionLoggedOn).local().format(tr("DD.MM.YYYY HH:mm:ss")), user.previousSessionRemoteAddress));
 
     tableHtmlRows += "</td><td align=\"right\"><div class=\"dropdown\"><a href=\"#\" id=\"btnAdminUserRowOption" + id + "\" class=\"dropdown-toggle\" data-toggle=\"dropdown\" aria-haspopup=\"true\" aria-expanded=\"true\"><span class=\"glyphicon glyphicon-option-vertical\" aria-hidden=\"true\"></span></a><ul class=\"dropdown-menu dropdown-menu-right\">";
     tableHtmlRows += "<li><a href=\"#\" data-id=\"" + id + "\" data-username=\"" + htmlEncode(user.username) + "\" onclick=\"showUserDetailsModal(this); return false;\">Details</a></li>";
-    tableHtmlRows += "<li id=\"mnuAdminUserRowEnable" + id + "\"" + (user.disabled ? "" : " style=\"display: none;\"") + "><a href=\"#\" data-id=\"" + id + "\" data-username=\"" + htmlEncode(user.username) + "\" onclick=\"enableUser(this); return false;\">Aktivieren</a></li>";
-    tableHtmlRows += "<li id=\"mnuAdminUserRowDisable" + id + "\"" + (!user.disabled ? "" : " style=\"display: none;\"") + "><a href=\"#\" data-id=\"" + id + "\" data-username=\"" + htmlEncode(user.username) + "\" onclick=\"disableUser(this); return false;\">Deaktivieren</a></li>";
+    tableHtmlRows += "<li id=\"mnuAdminUserRowEnable" + id + "\"" + (user.disabled ? "" : " style=\"display: none;\"") + "><a href=\"#\" data-id=\"" + id + "\" data-username=\"" + htmlEncode(user.username) + "\" onclick=\"enableUser(this); return false;\">" + tr("Aktivieren") + "</a></li>";
+    tableHtmlRows += "<li id=\"mnuAdminUserRowDisable" + id + "\"" + (!user.disabled ? "" : " style=\"display: none;\"") + "><a href=\"#\" data-id=\"" + id + "\" data-username=\"" + htmlEncode(user.username) + "\" onclick=\"disableUser(this); return false;\">" + tr("Deaktivieren") + "</a></li>";
 
     if (user.type == "Local")
-        tableHtmlRows += "<li><a href=\"#\" data-id=\"" + id + "\" data-username=\"" + htmlEncode(user.username) + "\" onclick=\"showResetUserPasswordModal(this); return false;\">Passwort zurücksetzen</a></li>";
+        tableHtmlRows += "<li><a href=\"#\" data-id=\"" + id + "\" data-username=\"" + htmlEncode(user.username) + "\" onclick=\"showResetUserPasswordModal(this); return false;\">" + tr("Passwort zurücksetzen") + "</a></li>";
 
     switch (user.type) {
         case "RemoteLDAP":
         case "Local":
             if (user.totpEnabled)
-                tableHtmlRows += "<li><a href=\"#\" data-id=\"" + id + "\" data-username=\"" + htmlEncode(user.username) + "\" onclick=\"adminDisable2FA(this); return false;\">2FA deaktivieren</a></li>";
+                tableHtmlRows += "<li><a href=\"#\" data-id=\"" + id + "\" data-username=\"" + htmlEncode(user.username) + "\" onclick=\"adminDisable2FA(this); return false;\">" + tr("2FA deaktivieren") + "</a></li>";
 
             break;
     }
 
     tableHtmlRows += "<li role=\"separator\" class=\"divider\"></li>";
-    tableHtmlRows += "<li><a href=\"#\" data-id=\"" + id + "\" data-username=\"" + htmlEncode(user.username) + "\" onclick=\"deleteUser(this); return false;\">Benutzer löschen</a></li>";
+    tableHtmlRows += "<li><a href=\"#\" data-id=\"" + id + "\" data-username=\"" + htmlEncode(user.username) + "\" onclick=\"deleteUser(this); return false;\">" + tr("Benutzer löschen") + "</a></li>";
     tableHtmlRows += "</ul></div></td></tr>";
 
     return tableHtmlRows;
@@ -1043,27 +1050,27 @@ function addUser(objBtn) {
 
     var user = $("#txtAddUserUsername").val();
     if (user === "") {
-        showAlert("warning", "Angabe fehlt", "Bitte einen Benutzernamen eingeben.", divAddUserAlert);
+        showAlert("warning", tr("Angabe fehlt"), tr("Bitte einen Benutzernamen eingeben."), divAddUserAlert);
         $("#txtAddUserUsername").trigger("focus");
         return;
     }
 
     var pass = $("#txtAddUserPassword").val();
     if (pass === "") {
-        showAlert("warning", "Angabe fehlt", "Bitte ein Passwort eingeben.", divAddUserAlert);
+        showAlert("warning", tr("Angabe fehlt"), tr("Bitte ein Passwort eingeben."), divAddUserAlert);
         $("#txtAddUserPassword").trigger("focus");
         return;
     }
 
     var confirmPass = $("#txtAddUserConfirmPassword").val();
     if (confirmPass === "") {
-        showAlert("warning", "Angabe fehlt", "Bitte das neue Passwort wiederholen.", divAddUserAlert);
+        showAlert("warning", tr("Angabe fehlt"), tr("Bitte das neue Passwort wiederholen."), divAddUserAlert);
         $("#txtAddUserConfirmPassword").trigger("focus");
         return;
     }
 
     if (pass !== confirmPass) {
-        showAlert("warning", "Keine Übereinstimmung", "Die Passwörter stimmen nicht überein.", divAddUserAlert);
+        showAlert("warning", tr("Keine Übereinstimmung"), tr("Die Passwörter stimmen nicht überein."), divAddUserAlert);
         $("#txtAddUserConfirmPassword").trigger("focus");
         return;
     }
@@ -1087,9 +1094,9 @@ function addUser(objBtn) {
             $("#tableAdminUsers").prepend(tableHtmlRow);
 
             var totalUsers = $('#tableAdminUsers >tbody >tr').length;
-            $("#tfootAdminUsers").html("Benutzer gesamt: " + totalUsers);
+            $("#tfootAdminUsers").html(tr("Benutzer gesamt: {0}", totalUsers));
 
-            showAlert("success", "Benutzer angelegt", "Der Benutzer wurde angelegt.");
+            showAlert("success", tr("Benutzer angelegt"), tr("Der Benutzer wurde angelegt."));
         },
         error: function () {
             btn.button("reset");
@@ -1131,14 +1138,14 @@ function showUserDetailsModal(objMenuItem) {
                     $("#txtUserDetailsDisplayName").prop("disabled", true);
                     $("#txtUserDetailsUsername").prop("disabled", true);
                     $("#lblUserDetailsUserType").text("Remote/SSO");
-                    $("#lblUserDetails2FAStatus").text("über SSO verwaltet");
+                    $("#lblUserDetails2FAStatus").text(tr("über SSO verwaltet"));
                     break;
 
                 case "RemoteLDAP":
                     $("#txtUserDetailsDisplayName").prop("disabled", true);
                     $("#txtUserDetailsUsername").prop("disabled", true);
                     $("#lblUserDetailsUserType").text("Remote/LDAP");
-                    $("#lblUserDetails2FAStatus").text(responseJSON.response.totpEnabled ? "Aktiv" : "Inaktiv");
+                    $("#lblUserDetails2FAStatus").text(responseJSON.response.totpEnabled ? tr("Aktiv") : tr("Inaktiv"));
                     break;
 
                 case "Local":
@@ -1146,7 +1153,7 @@ function showUserDetailsModal(objMenuItem) {
                     $("#txtUserDetailsDisplayName").prop("disabled", false);
                     $("#txtUserDetailsUsername").prop("disabled", false);
                     $("#lblUserDetailsUserType").text(responseJSON.response.type);
-                    $("#lblUserDetails2FAStatus").text(responseJSON.response.totpEnabled ? "Aktiv" : "Inaktiv");
+                    $("#lblUserDetails2FAStatus").text(responseJSON.response.totpEnabled ? tr("Aktiv") : tr("Inaktiv"));
                     break;
             }
 
@@ -1164,7 +1171,7 @@ function showUserDetailsModal(objMenuItem) {
 
             $("#txtUserDetailsMemberOf").val(memberOf);
 
-            var groupListHtml = "<option value=\"blank\" selected></option><option value=\"none\">Leeren</option>";
+            var groupListHtml = "<option value=\"blank\" selected></option><option value=\"none\">" + tr("Leeren") + "</option>";
 
             for (var i = 0; i < responseJSON.response.groups.length; i++) {
                 groupListHtml += "<option>" + htmlEncode(responseJSON.response.groups[i]) + "</option>";
@@ -1183,7 +1190,7 @@ function showUserDetailsModal(objMenuItem) {
                     session = htmlEncode(responseJSON.response.sessions[i].tokenName) + "<br />[" + htmlEncode(responseJSON.response.sessions[i].partialToken) + "]";
 
                 if (responseJSON.response.sessions[i].isCurrentSession)
-                    session += "<br />(diese Sitzung)";
+                    session += "<br />(" + tr("diese Sitzung") + ")";
 
                 switch (responseJSON.response.sessions[i].type) {
                     case "Standard":
@@ -1191,26 +1198,26 @@ function showUserDetailsModal(objMenuItem) {
                         break;
 
                     case "ApiToken":
-                        session += "<br /><span class=\"label label-info\">API Token</span>";
+                        session += "<br /><span class=\"label label-info\">" + tr("API Token") + "</span>";
                         break;
 
                     default:
-                        session += "<br /><span class=\"label label-warning\">Unbekannt</span>";
+                        session += "<br /><span class=\"label label-warning\">" + tr("Unbekannt") + "</span>";
                         break;
                 }
 
                 sessionHtmlRows += "<tr id=\"trUserDetailsActiveSessions" + i + "\"><td style=\"min-width: 155px; word-wrap: anywhere;\">" + session + "</td><td>" +
-                    htmlEncode(moment(responseJSON.response.sessions[i].lastSeen).local().format("DD.MM.YYYY HH:mm:ss")) + "<br /><span style=\"font-size: 12px\">" + htmlEncode("(" + moment(responseJSON.response.sessions[i].lastSeen).fromNow() + ")") + "</span></td><td>" +
+                    htmlEncode(moment(responseJSON.response.sessions[i].lastSeen).local().format(tr("DD.MM.YYYY HH:mm:ss"))) + "<br /><span style=\"font-size: 12px\">" + htmlEncode("(" + moment(responseJSON.response.sessions[i].lastSeen).fromNow() + ")") + "</span></td><td>" +
                     htmlEncode(responseJSON.response.sessions[i].lastSeenRemoteAddress) + "</td><td style=\"word-wrap: anywhere;\">" +
                     htmlEncode(responseJSON.response.sessions[i].lastSeenUserAgent);
 
                 sessionHtmlRows += "</td><td align=\"right\"><div class=\"dropdown\"><a href=\"#\" id=\"btnUserDetailsActiveSessionRowOption" + i + "\" class=\"dropdown-toggle\" data-toggle=\"dropdown\" aria-haspopup=\"true\" aria-expanded=\"true\"><span class=\"glyphicon glyphicon-option-vertical\" aria-hidden=\"true\"></span></a><ul class=\"dropdown-menu dropdown-menu-right\">";
-                sessionHtmlRows += "<li><a href=\"#\" data-id=\"" + i + "\" data-session-type=\"" + htmlEncode(responseJSON.response.sessions[i].type) + "\" data-partial-token=\"" + htmlEncode(responseJSON.response.sessions[i].partialToken) + "\" onclick=\"deleteUserSession(this); return false;\">Sitzung beenden</a></li>";
+                sessionHtmlRows += "<li><a href=\"#\" data-id=\"" + i + "\" data-session-type=\"" + htmlEncode(responseJSON.response.sessions[i].type) + "\" data-partial-token=\"" + htmlEncode(responseJSON.response.sessions[i].partialToken) + "\" onclick=\"deleteUserSession(this); return false;\">" + tr("Sitzung beenden") + "</a></li>";
                 sessionHtmlRows += "</ul></div></td></tr>";
             }
 
             $("#tbodyUserDetailsActiveSessions").html(sessionHtmlRows);
-            $("#tfootUserDetailsActiveSessions").html("Sitzungen gesamt: " + responseJSON.response.sessions.length);
+            $("#tfootUserDetailsActiveSessions").html(tr("Sitzungen gesamt: {0}", responseJSON.response.sessions.length));
 
             var btnUserDetailsSave = $("#btnUserDetailsSave");
 
@@ -1246,7 +1253,7 @@ function deleteUserSession(objMenuItem) {
     var sessionType = mnuItem.attr("data-session-type");
     var partialToken = mnuItem.attr("data-partial-token");
 
-    if (!confirm("Sitzung [" + partialToken + "] beenden?"))
+    if (!confirm(tr("Sitzung [{0}] beenden?", partialToken)))
         return;
 
     var apiUrl = "api/admin/sessions/delete?partialToken=" + encodeURIComponent(partialToken);
@@ -1254,7 +1261,7 @@ function deleteUserSession(objMenuItem) {
     var btn = $("#btnUserDetailsActiveSessionRowOption" + id);
     var originalBtnHtml = btn.html();
     btn.prop("disabled", true);
-    btn.html("<span class='spinner spinner-sm' role='status' aria-label='Wird geladen'></span>");
+    btn.html("<span class='spinner spinner-sm' role='status' aria-label='" + tr("Wird geladen") + "'></span>");
 
     HTTPRequest({
         url: apiUrl,
@@ -1263,9 +1270,9 @@ function deleteUserSession(objMenuItem) {
             $("#trUserDetailsActiveSessions" + id).remove();
 
             var totalSessions = $('#tableUserDetailsActiveSessions >tbody >tr').length;
-            $("#tfootUserDetailsActiveSessions").html("Sitzungen gesamt: " + totalSessions);
+            $("#tfootUserDetailsActiveSessions").html(tr("Sitzungen gesamt: {0}", totalSessions));
 
-            showAlert("success", "Sitzung beendet", "Die Sitzung wurde beendet.", divUserDetailsAlert);
+            showAlert("success", tr("Sitzung beendet"), tr("Die Sitzung wurde beendet."), divUserDetailsAlert);
         },
         error: function () {
             btn.prop("disabled", false);
@@ -1333,7 +1340,7 @@ function saveUserDetails(objBtn) {
             if (id == null)
                 refreshAdminSessions();
 
-            showAlert("success", "Benutzer gespeichert", "Die Benutzerdaten wurden gespeichert.");
+            showAlert("success", tr("Benutzer gespeichert"), tr("Die Benutzerdaten wurden gespeichert."));
         },
         error: function () {
             btn.button("reset");
@@ -1353,13 +1360,13 @@ function disableUser(objMenuItem) {
     var id = mnuItem.attr("data-id");
     var username = mnuItem.attr("data-username");
 
-    if (!confirm("Benutzer [" + username + "] deaktivieren?"))
+    if (!confirm(tr("Benutzer [{0}] deaktivieren?", username)))
         return;
 
     var btn = $("#btnAdminUserRowOption" + id);
     var originalBtnHtml = btn.html();
     btn.prop("disabled", true);
-    btn.html("<span class='spinner spinner-sm' role='status' aria-label='Wird geladen'></span>");
+    btn.html("<span class='spinner spinner-sm' role='status' aria-label='" + tr("Wird geladen") + "'></span>");
 
     HTTPRequest({
         url: "api/admin/users/set?user=" + encodeURIComponent(username) + "&disabled=true",
@@ -1368,7 +1375,7 @@ function disableUser(objMenuItem) {
             var tableHtmlRow = getAdminUsersRowHtml(id, responseJSON.response);
             $("#trAdminUsers" + id).replaceWith(tableHtmlRow);
 
-            showAlert("success", "Benutzer deaktiviert", "Benutzer [" + username + "] ist deaktiviert.");
+            showAlert("success", tr("Benutzer deaktiviert"), tr("Benutzer [{0}] ist deaktiviert.", username));
         },
         error: function () {
             btn.prop("disabled", false);
@@ -1389,7 +1396,7 @@ function enableUser(objMenuItem) {
     var btn = $("#btnAdminUserRowOption" + id);
     var originalBtnHtml = btn.html();
     btn.prop("disabled", true);
-    btn.html("<span class='spinner spinner-sm' role='status' aria-label='Wird geladen'></span>");
+    btn.html("<span class='spinner spinner-sm' role='status' aria-label='" + tr("Wird geladen") + "'></span>");
 
     HTTPRequest({
         url: "api/admin/users/set?user=" + encodeURIComponent(username) + "&disabled=false",
@@ -1398,7 +1405,7 @@ function enableUser(objMenuItem) {
             var tableHtmlRow = getAdminUsersRowHtml(id, responseJSON.response);
             $("#trAdminUsers" + id).replaceWith(tableHtmlRow);
 
-            showAlert("success", "Benutzer aktiviert", "Benutzer [" + username + "] ist aktiv.");
+            showAlert("success", tr("Benutzer aktiviert"), tr("Benutzer [{0}] ist aktiv.", username));
         },
         error: function () {
             btn.prop("disabled", false);
@@ -1415,7 +1422,7 @@ function showResetUserPasswordModal(objMenuItem) {
 
     var username = mnuItem.attr("data-username");
 
-    $("#titleChangePassword").text("Passwort zurücksetzen");
+    $("#titleChangePassword").text(tr("Passwort zurücksetzen"));
 
     hideAlert($("#divChangePasswordAlert"));
     $("#txtChangePasswordUsername").val(username);
@@ -1425,7 +1432,7 @@ function showResetUserPasswordModal(objMenuItem) {
     $("#divChangePassword2FATOTP").hide();
 
     var btnChangePassword = $("#btnChangePassword");
-    btnChangePassword.text("Zurücksetzen");
+    btnChangePassword.text(tr("Zurücksetzen"));
     btnChangePassword.attr("onclick", "resetUserPassword(this); return false;");
     btnChangePassword.show();
 
@@ -1446,19 +1453,19 @@ function resetUserPassword(objBtn) {
     var confirmPassword = $("#txtChangePasswordConfirmPassword").val();
 
     if (newPassword === "") {
-        showAlert("warning", "Angabe fehlt", "Bitte das neue Passwort eingeben.", divChangePasswordAlert);
+        showAlert("warning", tr("Angabe fehlt"), tr("Bitte das neue Passwort eingeben."), divChangePasswordAlert);
         $("#txtChangePasswordNewPassword").trigger("focus");
         return;
     }
 
     if (confirmPassword === "") {
-        showAlert("warning", "Angabe fehlt", "Bitte das neue Passwort wiederholen.", divChangePasswordAlert);
+        showAlert("warning", tr("Angabe fehlt"), tr("Bitte das neue Passwort wiederholen."), divChangePasswordAlert);
         $("#txtChangePasswordConfirmPassword").trigger("focus");
         return;
     }
 
     if (newPassword !== confirmPassword) {
-        showAlert("warning", "Keine Übereinstimmung", "Die Passwörter stimmen nicht überein.", divChangePasswordAlert);
+        showAlert("warning", tr("Keine Übereinstimmung"), tr("Die Passwörter stimmen nicht überein."), divChangePasswordAlert);
         $("#txtChangePasswordNewPassword").trigger("focus");
         return;
     }
@@ -1479,7 +1486,7 @@ function resetUserPassword(objBtn) {
             $("#txtChangePassword2FATOTP").val("");
             btn.button("reset");
 
-            showAlert("success", "Passwort zurückgesetzt", "Das Passwort wurde zurückgesetzt.");
+            showAlert("success", tr("Passwort zurückgesetzt"), tr("Das Passwort wurde zurückgesetzt."));
         },
         error: function () {
             btn.button("reset");
@@ -1498,13 +1505,13 @@ function adminDisable2FA(objMenuItem) {
     var id = mnuItem.attr("data-id");
     var username = mnuItem.attr("data-username");
 
-    if (!confirm("Zwei-Faktor-Anmeldung für Benutzer [" + username + "] deaktivieren?"))
+    if (!confirm(tr("Zwei-Faktor-Anmeldung für Benutzer [{0}] deaktivieren?", username)))
         return;
 
     var btn = $("#btnAdminUserRowOption" + id);
     var originalBtnHtml = btn.html();
     btn.prop("disabled", true);
-    btn.html("<span class='spinner spinner-sm' role='status' aria-label='Wird geladen'></span>");
+    btn.html("<span class='spinner spinner-sm' role='status' aria-label='" + tr("Wird geladen") + "'></span>");
 
     HTTPRequest({
         url: "api/admin/users/set?user=" + encodeURIComponent(username) + "&totpEnabled=false",
@@ -1516,7 +1523,7 @@ function adminDisable2FA(objMenuItem) {
             var tableHtmlRow = getAdminUsersRowHtml(id, responseJSON.response);
             $("#trAdminUsers" + id).replaceWith(tableHtmlRow);
 
-            showAlert("success", "2FA deaktiviert", "Die Zwei-Faktor-Anmeldung ist deaktiviert für Benutzer [" + username + "].");
+            showAlert("success", tr("2FA deaktiviert"), tr("Die Zwei-Faktor-Anmeldung ist deaktiviert für Benutzer [{0}].", username));
         },
         error: function () {
             btn.prop("disabled", false);
@@ -1534,13 +1541,13 @@ function deleteUser(objMenuItem) {
     var id = mnuItem.attr("data-id");
     var username = mnuItem.attr("data-username");
 
-    if (!confirm("Benutzer [" + username + "] endgültig löschen?"))
+    if (!confirm(tr("Benutzer [{0}] endgültig löschen?", username)))
         return;
 
     var btn = $("#btnAdminUserRowOption" + id);
     var originalBtnHtml = btn.html();
     btn.prop("disabled", true);
-    btn.html("<span class='spinner spinner-sm' role='status' aria-label='Wird geladen'></span>");
+    btn.html("<span class='spinner spinner-sm' role='status' aria-label='" + tr("Wird geladen") + "'></span>");
 
     HTTPRequest({
         url: "api/admin/users/delete?user=" + encodeURIComponent(username),
@@ -1549,9 +1556,9 @@ function deleteUser(objMenuItem) {
             $("#trAdminUsers" + id).remove();
 
             var totalUsers = $('#tableAdminUsers >tbody >tr').length;
-            $("#tfootAdminUsers").html("Benutzer gesamt: " + totalUsers);
+            $("#tfootAdminUsers").html(tr("Benutzer gesamt: {0}", totalUsers));
 
-            showAlert("success", "Benutzer gelöscht", "Der Benutzer wurde gelöscht.");
+            showAlert("success", tr("Benutzer gelöscht"), tr("Der Benutzer wurde gelöscht."));
         },
         error: function () {
             btn.prop("disabled", false);
@@ -1581,7 +1588,7 @@ function refreshAdminGroups() {
             }
 
             $("#tbodyAdminGroups").html(tableHtmlRows);
-            $("#tfootAdminGroups").html("Gruppen gesamt: " + responseJSON.response.groups.length);
+            $("#tfootAdminGroups").html(tr("Gruppen gesamt: {0}", responseJSON.response.groups.length));
 
             divAdminGroupsLoader.hide();
             divAdminGroupsView.show();
@@ -1600,7 +1607,7 @@ function getAdminGroupsRowHtml(id, group) {
     tableHtmlRows += "</td><td align=\"right\"><div class=\"dropdown\"><a href=\"#\" id=\"btnAdminGroupRowOption" + id + "\" class=\"dropdown-toggle\" data-toggle=\"dropdown\" aria-haspopup=\"true\" aria-expanded=\"true\"><span class=\"glyphicon glyphicon-option-vertical\" aria-hidden=\"true\"></span></a><ul class=\"dropdown-menu dropdown-menu-right\">";
     tableHtmlRows += "<li><a href=\"#\" data-id=\"" + id + "\" data-group=\"" + htmlEncode(group.name) + "\" onclick=\"showGroupDetailsModal(this); return false;\">Details</a></li>";
     tableHtmlRows += "<li role=\"separator\" class=\"divider\"></li>";
-    tableHtmlRows += "<li><a href=\"#\" data-id=\"" + id + "\" data-group=\"" + htmlEncode(group.name) + "\" onclick=\"deleteGroup(this); return false;\">Gruppe löschen</a></li>";
+    tableHtmlRows += "<li><a href=\"#\" data-id=\"" + id + "\" data-group=\"" + htmlEncode(group.name) + "\" onclick=\"deleteGroup(this); return false;\">" + tr("Gruppe löschen") + "</a></li>";
     tableHtmlRows += "</ul></div></td></tr>";
 
     return tableHtmlRows;
@@ -1625,7 +1632,7 @@ function addGroup(objBtn) {
 
     var group = $("#txtAddGroupName").val();
     if (group === "") {
-        showAlert("warning", "Angabe fehlt", "Bitte einen Gruppennamen eingeben.", divAddGroupAlert);
+        showAlert("warning", tr("Angabe fehlt"), tr("Bitte einen Gruppennamen eingeben."), divAddGroupAlert);
         $("#txtAddGroupName").trigger("focus");
         return;
     }
@@ -1646,9 +1653,9 @@ function addGroup(objBtn) {
             $("#tableAdminGroups").prepend(tableHtmlRow);
 
             var totalGroups = $('#tableAdminGroups >tbody >tr').length;
-            $("#tfootAdminGroups").html("Gruppen gesamt: " + totalGroups);
+            $("#tfootAdminGroups").html(tr("Gruppen gesamt: {0}", totalGroups));
 
-            showAlert("success", "Gruppe angelegt", "Die Gruppe wurde angelegt.");
+            showAlert("success", tr("Gruppe angelegt"), tr("Die Gruppe wurde angelegt."));
         },
         error: function () {
             btn.button("reset");
@@ -1693,7 +1700,7 @@ function showGroupDetailsModal(objMenuItem) {
 
             $("#txtGroupDetailsMembers").val(members);
 
-            var userListHtml = "<option value=\"blank\" selected></option><option value=\"none\">Leeren</option>";
+            var userListHtml = "<option value=\"blank\" selected></option><option value=\"none\">" + tr("Leeren") + "</option>";
 
             for (var i = 0; i < responseJSON.response.users.length; i++) {
                 userListHtml += "<option>" + htmlEncode(responseJSON.response.users[i]) + "</option>";
@@ -1753,7 +1760,7 @@ function saveGroupDetails(objBtn) {
             btn.button("reset");
             $("#modalGroupDetails").modal("hide");
 
-            showAlert("success", "Gruppe gespeichert", "Die Gruppe wurde gespeichert.");
+            showAlert("success", tr("Gruppe gespeichert"), tr("Die Gruppe wurde gespeichert."));
         },
         error: function () {
             btn.button("reset");
@@ -1773,13 +1780,13 @@ function deleteGroup(objMenuItem) {
     var id = mnuItem.attr("data-id");
     var group = mnuItem.attr("data-group");
 
-    if (!confirm("Gruppe [" + group + "] endgültig löschen?"))
+    if (!confirm(tr("Gruppe [{0}] endgültig löschen?", group)))
         return;
 
     var btn = $("#btnAdminGroupRowOption" + id);
     var originalBtnHtml = btn.html();
     btn.prop("disabled", true);
-    btn.html("<span class='spinner spinner-sm' role='status' aria-label='Wird geladen'></span>");
+    btn.html("<span class='spinner spinner-sm' role='status' aria-label='" + tr("Wird geladen") + "'></span>");
 
     HTTPRequest({
         url: "api/admin/groups/delete?group=" + encodeURIComponent(group),
@@ -1788,9 +1795,9 @@ function deleteGroup(objMenuItem) {
             $("#trAdminGroups" + id).remove();
 
             var totalGroups = $('#tableAdminGroups >tbody >tr').length;
-            $("#tfootAdminGroups").html("Gruppen gesamt: " + totalGroups);
+            $("#tfootAdminGroups").html(tr("Gruppen gesamt: {0}", totalGroups));
 
-            showAlert("success", "Gruppe gelöscht", "Die Gruppe wurde gelöscht.");
+            showAlert("success", tr("Gruppe gelöscht"), tr("Die Gruppe wurde gelöscht."));
         },
         error: function () {
             btn.prop("disabled", false);
@@ -1820,7 +1827,7 @@ function refreshAdminPermissions() {
             }
 
             $("#tbodyAdminPermissions").html(tableHtmlRows);
-            $("#tfootAdminPermissions").html("Bereiche gesamt: " + responseJSON.response.permissions.length);
+            $("#tfootAdminPermissions").html(tr("Bereiche gesamt: {0}", responseJSON.response.permissions.length));
 
             divAdminPermissionsLoader.hide();
             divAdminPermissionsView.show();
@@ -1835,19 +1842,19 @@ function refreshAdminPermissions() {
 function getPermissionSectionLabel(section) {
     switch (section) {
         case "Dashboard":
-            return "Übersicht";
+            return tr("Übersicht");
 
         case "Zones":
-            return "Weiterleitungszonen";
+            return tr("Weiterleitungszonen");
 
         case "Cache":
             return "Cache";
 
         case "Allowed":
-            return "Erlaubte Domains";
+            return tr("Erlaubte Domains");
 
         case "Blocked":
-            return "Blockierte Domains";
+            return tr("Blockierte Domains");
 
         case "Apps":
             return "Apps";
@@ -1856,13 +1863,13 @@ function getPermissionSectionLabel(section) {
             return "DNS-Client";
 
         case "Settings":
-            return "Einstellungen";
+            return tr("Einstellungen");
 
         case "Administration":
-            return "Verwaltung";
+            return tr("Verwaltung");
 
         case "Logs":
-            return "Protokolle";
+            return tr("Protokolle");
 
         default:
             return section;
@@ -1870,7 +1877,7 @@ function getPermissionSectionLabel(section) {
 }
 
 function getAdminPermissionsRowHtml(id, permission) {
-    var userPermissionsHtml = "<table class=\"table\" style=\"background: transparent;\"><thead><tr><th>Benutzername</th><th style=\"width: 70px;\">Lesen</th><th style=\"width: 70px;\">Ändern</th><th style=\"width: 70px;\">Löschen</th></tr></thead><tbody>";
+    var userPermissionsHtml = "<table class=\"table\" style=\"background: transparent;\"><thead><tr><th>" + tr("Benutzername") + "</th><th style=\"width: 70px;\">" + tr("Lesen") + "</th><th style=\"width: 70px;\">" + tr("Ändern") + "</th><th style=\"width: 70px;\">" + tr("Löschen") + "</th></tr></thead><tbody>";
 
     for (var i = 0; i < permission.userPermissions.length; i++) {
         userPermissionsHtml += "<tr><td style=\"word-wrap: anywhere;\">" + htmlEncode(permission.userPermissions[i].username) + "</td><td>" +
@@ -1882,11 +1889,11 @@ function getAdminPermissionsRowHtml(id, permission) {
     userPermissionsHtml += "</tbody>";
 
     if (permission.userPermissions.length == 0)
-        userPermissionsHtml += "<tfoot><tr><th colspan=\"4\" style=\"text-align: center;\">Keine Benutzerberechtigungen</th></tfoot>";
+        userPermissionsHtml += "<tfoot><tr><th colspan=\"4\" style=\"text-align: center;\">" + tr("Keine Benutzerberechtigungen") + "</th></tfoot>";
 
     userPermissionsHtml += "</table>";
 
-    var groupPermissionsHtml = "<table class=\"table\" style=\"background: transparent;\"><thead><tr><th>Gruppe</th><th style=\"width: 70px;\">Lesen</th><th style=\"width: 70px;\">Ändern</th><th style=\"width: 70px;\">Löschen</th></tr></thead><tbody>";
+    var groupPermissionsHtml = "<table class=\"table\" style=\"background: transparent;\"><thead><tr><th>" + tr("Gruppe") + "</th><th style=\"width: 70px;\">" + tr("Lesen") + "</th><th style=\"width: 70px;\">" + tr("Ändern") + "</th><th style=\"width: 70px;\">" + tr("Löschen") + "</th></tr></thead><tbody>";
 
     for (var i = 0; i < permission.groupPermissions.length; i++) {
         groupPermissionsHtml += "<tr><td style=\"word-wrap: anywhere;\">" + htmlEncode(permission.groupPermissions[i].name) + "</td><td>" +
@@ -1898,7 +1905,7 @@ function getAdminPermissionsRowHtml(id, permission) {
     groupPermissionsHtml += "</tbody>";
 
     if (permission.groupPermissions.length == 0)
-        groupPermissionsHtml += "<tfoot><tr><th colspan=\"4\" style=\"text-align: center;\">Keine Gruppenberechtigungen</th></tfoot>";
+        groupPermissionsHtml += "<tfoot><tr><th colspan=\"4\" style=\"text-align: center;\">" + tr("Keine Gruppenberechtigungen") + "</th></tfoot>";
 
     groupPermissionsHtml += "</table>";
 
@@ -1907,7 +1914,7 @@ function getAdminPermissionsRowHtml(id, permission) {
         groupPermissionsHtml;
 
     tableHtmlRows += "</td><td align=\"right\"><div class=\"dropdown\"><a href=\"#\" id=\"btnAdminPermissionRowOption" + id + "\" class=\"dropdown-toggle\" data-toggle=\"dropdown\" aria-haspopup=\"true\" aria-expanded=\"true\"><span class=\"glyphicon glyphicon-option-vertical\" aria-hidden=\"true\"></span></a><ul class=\"dropdown-menu dropdown-menu-right\">";
-    tableHtmlRows += "<li><a href=\"#\" data-id=\"" + id + "\" data-section=\"" + htmlEncode(permission.section) + "\" onclick=\"showEditSectionPermissionsModal(this); return false;\">Berechtigungen bearbeiten</a></li>";
+    tableHtmlRows += "<li><a href=\"#\" data-id=\"" + id + "\" data-section=\"" + htmlEncode(permission.section) + "\" onclick=\"showEditSectionPermissionsModal(this); return false;\">" + tr("Berechtigungen bearbeiten") + "</a></li>";
     tableHtmlRows += "</ul></div></td></tr>";
 
     return tableHtmlRows;
@@ -1947,7 +1954,7 @@ function showEditSectionPermissionsModal(objMenuItem) {
                 addEditPermissionUserRow(i, responseJSON.response.userPermissions[i].username, responseJSON.response.userPermissions[i].canView, responseJSON.response.userPermissions[i].canModify, responseJSON.response.userPermissions[i].canDelete);
             }
 
-            var userListHtml = "<option value=\"blank\" selected></option><option value=\"none\">Leeren</option>";
+            var userListHtml = "<option value=\"blank\" selected></option><option value=\"none\">" + tr("Leeren") + "</option>";
 
             for (var i = 0; i < responseJSON.response.users.length; i++) {
                 userListHtml += "<option>" + htmlEncode(responseJSON.response.users[i]) + "</option>";
@@ -1959,7 +1966,7 @@ function showEditSectionPermissionsModal(objMenuItem) {
                 addEditPermissionGroupRow(i, responseJSON.response.groupPermissions[i].name, responseJSON.response.groupPermissions[i].canView, responseJSON.response.groupPermissions[i].canModify, responseJSON.response.groupPermissions[i].canDelete);
             }
 
-            var groupListHtml = "<option value=\"blank\" selected></option><option value=\"none\">Leeren</option>";
+            var groupListHtml = "<option value=\"blank\" selected></option><option value=\"none\">" + tr("Leeren") + "</option>";
 
             for (var i = 0; i < responseJSON.response.groups.length; i++) {
                 groupListHtml += "<option>" + htmlEncode(responseJSON.response.groups[i]) + "</option>";
@@ -1993,7 +2000,7 @@ function addEditPermissionUserRow(id, username, canView, canModify, canDelete) {
     tableHtmlRow += "<td><input type=\"checkbox\"" + (canView ? " checked" : "") + "></td>";
     tableHtmlRow += "<td><input type=\"checkbox\"" + (canModify ? " checked" : "") + "></td>";
     tableHtmlRow += "<td><input type=\"checkbox\"" + (canDelete ? " checked" : "") + "></td>";
-    tableHtmlRow += "<td align=\"right\"><button type=\"button\" class=\"btn btn-warning\" style=\"font-size: 12px; padding: 2px 0px; width: 60px;\" onclick=\"$('#trEditPermissionsUserRow" + id + "').remove();\">Entfernen</button></td></tr>";
+    tableHtmlRow += "<td align=\"right\"><button type=\"button\" class=\"btn btn-warning\" style=\"font-size: 12px; padding: 2px 0px; width: 60px;\" onclick=\"$('#trEditPermissionsUserRow" + id + "').remove();\">" + tr("Entfernen") + "</button></td></tr>";
 
     $("#tbodyEditPermissionsUser").append(tableHtmlRow);
 }
@@ -2006,7 +2013,7 @@ function addEditPermissionGroupRow(id, name, canView, canModify, canDelete) {
     tableHtmlRow += "<td><input type=\"checkbox\"" + (canView ? " checked" : "") + "></td>";
     tableHtmlRow += "<td><input type=\"checkbox\"" + (canModify ? " checked" : "") + "></td>";
     tableHtmlRow += "<td><input type=\"checkbox\"" + (canDelete ? " checked" : "") + "></td>";
-    tableHtmlRow += "<td align=\"right\"><button type=\"button\" class=\"btn btn-warning\" style=\"font-size: 12px; padding: 2px 0px; width: 60px;\" onclick=\"$('#trEditPermissionsGroupRow" + id + "').remove();\">Entfernen</button></td></tr>";
+    tableHtmlRow += "<td align=\"right\"><button type=\"button\" class=\"btn btn-warning\" style=\"font-size: 12px; padding: 2px 0px; width: 60px;\" onclick=\"$('#trEditPermissionsGroupRow" + id + "').remove();\">" + tr("Entfernen") + "</button></td></tr>";
 
     $("#tbodyEditPermissionsGroup").append(tableHtmlRow);
 }
@@ -2035,7 +2042,7 @@ function saveSectionPermissions(objBtn) {
             btn.button("reset");
             $("#modalEditPermissions").modal("hide");
 
-            showAlert("success", "Berechtigungen gespeichert", "Die Berechtigungen wurden gespeichert.");
+            showAlert("success", tr("Berechtigungen gespeichert"), tr("Die Berechtigungen wurden gespeichert."));
         },
         error: function () {
             btn.button("reset");
@@ -2116,7 +2123,7 @@ function addAdminSsoGroupMapRow(remoteGroup, localGroup) {
 
     tableHtmlRows += "</select></td>";
 
-    tableHtmlRows += "<td><button type=\"button\" class=\"btn btn-danger\" onclick=\"$('#tableAdminSsoGroupMapRow" + id + "').remove();\">Löschen</button></td></tr>";
+    tableHtmlRows += "<td><button type=\"button\" class=\"btn btn-danger\" onclick=\"$('#tableAdminSsoGroupMapRow" + id + "').remove();\">" + tr("Löschen") + "</button></td></tr>";
 
     $("#tableAdminSsoGroupMap").append(tableHtmlRows);
 }
@@ -2126,7 +2133,7 @@ function addAdminSsoScopesRow(scope) {
 
     var tableHtmlRows = "<tr id=\"tableAdminSsoScopesRow" + id + "\"><td><input type=\"text\" class=\"form-control\" value=\"" + htmlEncode(scope) + "\"></td>";
 
-    tableHtmlRows += "<td><button type=\"button\" class=\"btn btn-danger\" onclick=\"$('#tableAdminSsoScopesRow" + id + "').remove();\">Löschen</button></td></tr>";
+    tableHtmlRows += "<td><button type=\"button\" class=\"btn btn-danger\" onclick=\"$('#tableAdminSsoScopesRow" + id + "').remove();\">" + tr("Löschen") + "</button></td></tr>";
 
     $("#tableAdminSsoScopes").append(tableHtmlRows);
 }
@@ -2138,21 +2145,21 @@ function saveAdminSsoConfig(objBtn) {
 
     var ssoAuthority = $("#txtAdminSsoAuthority").val();
     if (ssoEnabled && (ssoAuthority === "")) {
-        showAlert("warning", "Angabe fehlt", "Bitte die Authority-URL eingeben.");
+        showAlert("warning", tr("Angabe fehlt"), tr("Bitte die Authority-URL eingeben."));
         $("#txtAdminSsoAuthority").trigger("focus");
         return;
     }
 
     var ssoClientId = $("#txtAdminSsoClientId").val();
     if (ssoEnabled && (ssoClientId === "")) {
-        showAlert("warning", "Angabe fehlt", "Bitte die Client-ID eingeben.");
+        showAlert("warning", tr("Angabe fehlt"), tr("Bitte die Client-ID eingeben."));
         $("#txtAdminSsoClientId").trigger("focus");
         return;
     }
 
     var ssoClientSecret = $("#txtAdminSsoClientSecret").val();
     if (ssoEnabled && ssoClientSecret === "") {
-        showAlert("warning", "Angabe fehlt", "Bitte das Client-Secret eingeben.");
+        showAlert("warning", tr("Angabe fehlt"), tr("Bitte das Client-Secret eingeben."));
         $("#txtAdminSsoClientSecret").trigger("focus");
         return;
     }
@@ -2177,14 +2184,14 @@ function saveAdminSsoConfig(objBtn) {
         ssoGroupMap = false;
 
     if (ssoAuthority.startsWith("http:")) {
-        if (!confirm("ACHTUNG: Im Produktivbetrieb muss die SSO-Authority 'https' verwenden.\n\nTrotzdem mit 'http' fortfahren?")) {
+        if (!confirm(tr("ACHTUNG: Im Produktivbetrieb muss die SSO-Authority 'https' verwenden.\n\nTrotzdem mit 'http' fortfahren?"))) {
             $("#txtAdminSsoAuthority").trigger("focus");
             return;
         }
     }
 
     if (ssoMetadataAddress.startsWith("http:")) {
-        if (!confirm("ACHTUNG: Im Produktivbetrieb muss die Metadaten-Adresse 'https' verwenden.\n\nTrotzdem mit 'http' fortfahren?")) {
+        if (!confirm(tr("ACHTUNG: Im Produktivbetrieb muss die Metadaten-Adresse 'https' verwenden.\n\nTrotzdem mit 'http' fortfahren?"))) {
             $("#txtAdminSsoMetadataAddress").trigger("focus");
             return;
         }
@@ -2201,7 +2208,7 @@ function saveAdminSsoConfig(objBtn) {
             loadAdminSsoConfig(responseJSON);
             btn.button("reset");
 
-            showAlert("success", "SSO gespeichert", "Die SSO-Konfiguration wurde gespeichert.");
+            showAlert("success", tr("SSO gespeichert"), tr("Die SSO-Konfiguration wurde gespeichert."));
         },
         error: function () {
             btn.button("reset");
@@ -2289,7 +2296,7 @@ function addAdminLdapGroupMapRow(remoteGroup, localGroup) {
 
     tableHtmlRows += "</select></td>";
 
-    tableHtmlRows += "<td><button type=\"button\" class=\"btn btn-danger\" onclick=\"$('#tableAdminLdapGroupMapRow" + id + "').remove();\">Löschen</button></td></tr>";
+    tableHtmlRows += "<td><button type=\"button\" class=\"btn btn-danger\" onclick=\"$('#tableAdminLdapGroupMapRow" + id + "').remove();\">" + tr("Löschen") + "</button></td></tr>";
 
     $("#tableAdminLdapGroupMap").append(tableHtmlRows);
 }
@@ -2301,14 +2308,14 @@ function saveAdminLdapConfig(objBtn) {
 
     var ldapServer = $("#txtAdminLdapServer").val();
     if (ldapEnabled && (ldapServer === "")) {
-        showAlert("warning", "Angabe fehlt", "Bitte die Adresse des LDAP-Servers eingeben.");
+        showAlert("warning", tr("Angabe fehlt"), tr("Bitte die Adresse des LDAP-Servers eingeben."));
         $("#txtAdminLdapServer").trigger("focus");
         return;
     }
 
     var ldapPort = $("#txtAdminLdapPort").val();
     if (ldapEnabled && (ldapPort === "")) {
-        showAlert("warning", "Angabe fehlt", "Bitte den LDAP-Port eingeben.");
+        showAlert("warning", tr("Angabe fehlt"), tr("Bitte den LDAP-Port eingeben."));
         $("#txtAdminLdapPort").trigger("focus");
         return;
     }
@@ -2331,7 +2338,7 @@ function saveAdminLdapConfig(objBtn) {
         ldapGroupMap = false;
 
     if (ldapIgnoreSslErrors && (ldapSslOption != "None")) {
-        if (!confirm("ACHTUNG: Im Produktivbetrieb dürfen Zertifikatsfehler nicht ignoriert werden.\n\nTrotzdem fortfahren?")) {
+        if (!confirm(tr("ACHTUNG: Im Produktivbetrieb dürfen Zertifikatsfehler nicht ignoriert werden.\n\nTrotzdem fortfahren?"))) {
             $("#chkAdminLdapIgnoreSslErrors").trigger("focus");
             return;
         }
@@ -2348,7 +2355,7 @@ function saveAdminLdapConfig(objBtn) {
             loadAdminLdapConfig(responseJSON);
             btn.button("reset");
 
-            showAlert("success", "LDAP gespeichert", "Die LDAP-Konfiguration wurde gespeichert.");
+            showAlert("success", tr("LDAP gespeichert"), tr("Die LDAP-Konfiguration wurde gespeichert."));
         },
         error: function () {
             btn.button("reset");
@@ -2365,14 +2372,14 @@ function testAdminLdapConnection(objBtn) {
 
     var ldapServer = $("#txtAdminLdapServer").val();
     if (ldapServer === "") {
-        showAlert("warning", "Angabe fehlt", "Bitte die Adresse des LDAP-Servers eingeben.");
+        showAlert("warning", tr("Angabe fehlt"), tr("Bitte die Adresse des LDAP-Servers eingeben."));
         $("#txtAdminLdapServer").trigger("focus");
         return;
     }
 
     var ldapPort = $("#txtAdminLdapPort").val();
     if (ldapPort === "") {
-        showAlert("warning", "Angabe fehlt", "Bitte den LDAP-Port eingeben.");
+        showAlert("warning", tr("Angabe fehlt"), tr("Bitte den LDAP-Port eingeben."));
         $("#txtAdminLdapPort").trigger("focus");
         return;
     }
@@ -2394,7 +2401,7 @@ function testAdminLdapConnection(objBtn) {
         data: "ldapServer=" + encodeURIComponent(ldapServer) + "&ldapPort=" + ldapPort + "&ldapSslOption=" + ldapSslOption + "&ldapIgnoreSslErrors=" + ldapIgnoreSslErrors + "&ldapBindUsername=" + encodeURIComponent(ldapBindUsername) + "&ldapBindPassword=" + encodeURIComponent(ldapBindPassword) + "&ldapSearchBase=" + encodeURIComponent(ldapSearchBase) + "&ldapUserSearchFilter=" + encodeURIComponent(ldapUserSearchFilter) + "&ldapGroupAttribute=" + encodeURIComponent(ldapGroupAttribute),
         success: function (responseJSON) {
             btn.button("reset");
-            showAlert("success", "Test erfolgreich", "Die Verbindung zum LDAP-Server funktioniert.");
+            showAlert("success", tr("Test erfolgreich"), tr("Die Verbindung zum LDAP-Server funktioniert."));
         },
         error: function () {
             btn.button("reset");

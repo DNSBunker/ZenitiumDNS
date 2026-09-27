@@ -365,10 +365,10 @@ namespace QueryLogsPostgreSql
                 _connectionString = jsonConfig.GetPropertyValue("connectionString", null);
 
                 if (_connectionString is null)
-                    throw new Exception("Bitte eine gültige Verbindungszeichenfolge in 'connectionString' angeben.");
+                    throw new Exception(Lang.T("Bitte eine gültige Verbindungszeichenfolge in 'connectionString' angeben.", "Please specify a valid connection string in 'connectionString'."));
 
                 if (_connectionString.Replace(" ", "").Contains("Database=", StringComparison.OrdinalIgnoreCase))
-                    throw new Exception("Die Verbindungszeichenfolge darf kein 'Database' enthalten. Den Datenbanknamen stattdessen in 'databaseName' eintragen.");
+                    throw new Exception(Lang.T("Die Verbindungszeichenfolge darf kein 'Database' enthalten. Den Datenbanknamen stattdessen in 'databaseName' eintragen.", "The connection string must not contain 'Database'. Enter the database name in 'databaseName' instead."));
 
                 if (!_connectionString.TrimEnd().EndsWith(';'))
                     _connectionString += ";";
@@ -889,7 +889,7 @@ LIMIT @limit OFFSET @offset";
         #region properties
 
         public string Description
-        { get { return "Schreibt alle eingehenden DNS-Anfragen und ihre Antworten in eine PostgreSQL-Datenbank, die sich in der Weboberfläche durchsuchen lässt."; } }
+        { get { return Lang.T("Schreibt alle eingehenden DNS-Anfragen und ihre Antworten in eine PostgreSQL-Datenbank, die sich in der Weboberfläche durchsuchen lässt.", "Writes all incoming DNS queries and their responses to a PostgreSQL database that can be searched in the web interface."); } }
 
         #endregion
 

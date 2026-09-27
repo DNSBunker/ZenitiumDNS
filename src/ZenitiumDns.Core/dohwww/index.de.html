@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="de" xmlns="http://www.w3.org/1999/xhtml">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <title>ZenitiumDNS</title>
+
+    <link href="/css/main.css" rel="stylesheet" />
+    <link href="/css/bootstrap.min.css" rel="stylesheet" />
+
+    <script src="/js/jquery.min.js"></script>
+    <script src="/js/main.js"></script>
+</head>
+<body>
+    <div id="content">
+        <div class="container">
+            <div class="features" style="text-align: center; margin-top: 60px;">
+                <a href="/">
+                    <img src="/img/logo.png" alt="ZenitiumDNS-Logo" />
+                </a>
+                <h1>ZenitiumDNS</h1>
+                <p style="max-width: 800px; margin-right: auto; margin-left: auto;">Dieser Server unterstützt verschlüsseltes DNS (DNS-over-HTTPS), das sich zum Beispiel im Webbrowser Mozilla Firefox nutzen lässt.</p>
+
+                <h3 style="margin-top: 40px;">Adresse des verschlüsselten DNS-Dienstes</h3>
+                <p>
+                    Mit der folgenden Adresse lassen sich Clients für den DNS-over-HTTPS-Dienst einrichten.
+                </p>
+                <p style="font-size: 16px; font-weight: bold;">
+                    <a id="lnkDoH" href=""></a>
+                </p>
+
+                <h3 style="margin-top: 40px;">Einrichtung in Mozilla Firefox</h3>
+                <p style="max-width: 800px; margin-right: auto; margin-left: auto;">
+                    In Firefox <b>Einstellungen &gt; Datenschutz &amp; Sicherheit</b> öffnen und nach unten zum Abschnitt <b>DNS über HTTPS</b> scrollen. Die Option <b>Maximaler Schutz</b> wählen, im Auswahlfeld <b>Anbieter auswählen</b> den Eintrag <b>Benutzerdefiniert</b> einstellen und die oben angegebene Adresse eintragen.
+                </p>
+                <img class="auto-resize-img shadow-screenshot" style="margin-top: 20px; margin-bottom: 20px;" src="img/firefox-doh.png" alt="Benutzerdefiniertes DNS-over-HTTPS in Mozilla Firefox" />
+                <p style="max-width: 800px; margin-right: auto; margin-left: auto;">
+                    Hinweis: Das gilt nur für Firefox. Alle anderen Programme auf dem Rechner nutzen weiter den DNS-Server aus den Netzwerkeinstellungen.
+                </p>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

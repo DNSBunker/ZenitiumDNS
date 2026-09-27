@@ -103,13 +103,13 @@ function refreshLogFilesList(selectedFileName) {
         success: function (responseJSON) {
             var logFiles = responseJSON.response.logFiles;
 
-            var list = "<div class=\"log log-action\"><a href=\"#\" class=\"text-danger\" onclick=\"deleteAllStats(); return false;\"><span class=\"fa fa-bar-chart fa-fw\" aria-hidden=\"true\"></span>Gesamte Statistik löschen</a></div>";
+            var list = "<div class=\"log log-action\"><a href=\"#\" class=\"text-danger\" onclick=\"deleteAllStats(); return false;\"><span class=\"fa fa-bar-chart fa-fw\" aria-hidden=\"true\"></span>" + tr("Gesamte Statistik löschen") + "</a></div>";
 
             if (logFiles.length == 0) {
-                list += "<div class=\"log log-empty\">Keine Protokolldateien vorhanden</div>";
+                list += "<div class=\"log log-empty\">" + tr("Keine Protokolldateien vorhanden") + "</div>";
             }
             else {
-                list += "<div class=\"log log-action\"><a href=\"#\" class=\"text-danger\" onclick=\"deleteAllLogs(); return false;\"><span class=\"fa fa-trash-o fa-fw\" aria-hidden=\"true\"></span>Alle Protokolle löschen</a></div>";
+                list += "<div class=\"log log-action\"><a href=\"#\" class=\"text-danger\" onclick=\"deleteAllLogs(); return false;\"><span class=\"fa fa-trash-o fa-fw\" aria-hidden=\"true\"></span>" + tr("Alle Protokolle löschen") + "</a></div>";
 
                 for (var i = 0; i < logFiles.length; i++) {
                     var logFile = logFiles[i];
@@ -193,7 +193,7 @@ function downloadLog(objBtn) {
 function deleteLog() {
     var logFile = $("#txtLogViewerTitle").text();
 
-    if (!confirm("Protokolldatei '" + logFile + "' endgültig löschen?"))
+    if (!confirm(tr("Protokolldatei '{0}' endgültig löschen?", logFile)))
         return;
 
     var btn = $("#btnDeleteLog");
@@ -208,7 +208,7 @@ function deleteLog() {
             $("#divLogViewer").hide();
             btn.button("reset");
 
-            showAlert("success", "Protokoll gelöscht", "Die Protokolldatei wurde gelöscht.");
+            showAlert("success", tr("Protokoll gelöscht"), tr("Die Protokolldatei wurde gelöscht."));
         },
         error: function () {
             btn.button("reset");
@@ -221,7 +221,7 @@ function deleteLog() {
 }
 
 function deleteAllLogs() {
-    if (!confirm("Alle Protokolldateien endgültig löschen?"))
+    if (!confirm(tr("Alle Protokolldateien endgültig löschen?")))
         return;
 
     HTTPRequest({
@@ -232,7 +232,7 @@ function deleteAllLogs() {
 
             $("#divLogViewer").hide();
 
-            showAlert("success", "Protokolle gelöscht", "Alle Protokolldateien wurden gelöscht.");
+            showAlert("success", tr("Protokolle gelöscht"), tr("Alle Protokolldateien wurden gelöscht."));
         },
         invalidToken: function () {
             showPageLogin();
@@ -241,14 +241,14 @@ function deleteAllLogs() {
 }
 
 function deleteAllStats() {
-    if (!confirm("Die gesamte Statistik endgültig löschen?"))
+    if (!confirm(tr("Die gesamte Statistik endgültig löschen?")))
         return;
 
     HTTPRequest({
         url: "api/dashboard/stats/deleteAll",
         token: sessionData.token,
         success: function (responseJSON) {
-            showAlert("success", "Statistik gelöscht", "Die Statistik wurde gelöscht.");
+            showAlert("success", tr("Statistik gelöscht"), tr("Die Statistik wurde gelöscht."));
         },
         invalidToken: function () {
             showPageLogin();
@@ -364,14 +364,14 @@ function queryLogs(pageNumber, liveUpdate) {
 
     var name = $("#optQueryLogsAppName").val();
     if (name == null) {
-        showAlert("warning", "Angabe fehlt", "Für das Abfrageprotokoll wird eine Query-Logs-App benötigt, z. B. 'Query Logs (Sqlite)' aus dem Bereich Apps.");
+        showAlert("warning", tr("Angabe fehlt"), tr("Für das Abfrageprotokoll wird eine Query-Logs-App benötigt, z. B. 'Query Logs (Sqlite)' aus dem Bereich Apps."));
         $("#optQueryLogsAppName").trigger("focus");
         return false;
     }
 
     var classPath = $("#optQueryLogsClassPath").val();
     if (classPath == null) {
-        showAlert("warning", "Angabe fehlt", "Bitte einen Klassenpfad auswählen.");
+        showAlert("warning", tr("Angabe fehlt"), tr("Bitte einen Klassenpfad auswählen."));
         $("#optQueryLogsClassPath").trigger("focus");
         return false;
     }
@@ -386,7 +386,7 @@ function queryLogs(pageNumber, liveUpdate) {
     var descendingOrder = $("#optQueryLogsDescendingOrder").val();
 
     if (document.getElementById("txtQueryLogStart").validity.badInput) {
-        showAlert("warning", "Angabe fehlt", "Bitte ein gültiges Datum für 'Von' eingeben.");
+        showAlert("warning", tr("Angabe fehlt"), tr("Bitte ein gültiges Datum für 'Von' eingeben."));
         $("#txtQueryLogStart").trigger("focus");
         return false;
     }
@@ -396,7 +396,7 @@ function queryLogs(pageNumber, liveUpdate) {
         start = moment(start).toISOString();
 
     if (document.getElementById("txtQueryLogEnd").validity.badInput) {
-        showAlert("warning", "Angabe fehlt", "Bitte ein gültiges Datum für 'Bis' eingeben.");
+        showAlert("warning", tr("Angabe fehlt"), tr("Bitte ein gültiges Datum für 'Bis' eingeben."));
         $("#txtQueryLogEnd").trigger("focus");
         return false;
     }
@@ -484,7 +484,7 @@ function queryLogs(pageNumber, liveUpdate) {
                 }
 
                 tableHtml += "<tr" + (trbgcolor == null ? "" : " style=\"background-color: " + trbgcolor + ";\"") + "><td>" + responseJSON.response.entries[i].rowNumber + "</td><td>" +
-                    moment(responseJSON.response.entries[i].timestamp).local().format("DD.MM.YYYY HH:mm:ss") + "</td><td style=\"word-break: break-all; min-width: 125px;\">" +
+                    moment(responseJSON.response.entries[i].timestamp).local().format(tr("DD.MM.YYYY HH:mm:ss")) + "</td><td style=\"word-break: break-all; min-width: 125px;\">" +
                     responseJSON.response.entries[i].clientIpAddress + "</td><td>" +
                     responseJSON.response.entries[i].protocol + "</td><td>" +
                     responseJSON.response.entries[i].responseType + (responseJSON.response.entries[i].responseRtt == null ? "" : "<div style=\"font-size: 12px;\">(" + responseJSON.response.entries[i].responseRtt.toFixed(2) + " ms)</div>") + "</td><td>" +
@@ -495,17 +495,17 @@ function queryLogs(pageNumber, liveUpdate) {
                     htmlEncode(responseJSON.response.entries[i].answer) +
                     "</td><td align=\"right\"><div class=\"dropdown\"><a href=\"#\" id=\"btnQueryLogsRowOption" + i + "\" class=\"dropdown-toggle\" data-toggle=\"dropdown\" aria-haspopup=\"true\" aria-expanded=\"true\"><span class=\"glyphicon glyphicon-option-vertical\" aria-hidden=\"true\"></span></a><ul class=\"dropdown-menu dropdown-menu-right\">";
 
-                tableHtml += "<li><a href=\"#\" data-id=\"" + i + "\" data-domain=\"" + htmlEncode(responseJSON.response.entries[i].qname) + "\" onclick=\"queryDnsServer($(this).attr('data-domain'), " + jsArg(responseJSON.response.entries[i].qtype) + "); return false;\">Mit DNS-Client abfragen</a></li>";
+                tableHtml += "<li><a href=\"#\" data-id=\"" + i + "\" data-domain=\"" + htmlEncode(responseJSON.response.entries[i].qname) + "\" onclick=\"queryDnsServer($(this).attr('data-domain'), " + jsArg(responseJSON.response.entries[i].qtype) + "); return false;\">" + tr("Mit DNS-Client abfragen") + "</a></li>";
 
                 switch (responseJSON.response.entries[i].responseType.toLowerCase()) {
                     case "blocked":
                     case "upstreamblocked":
                     case "upstreamblockedcached":
-                        tableHtml += "<li><a href=\"#\" data-id=\"" + i + "\" data-domain=\"" + htmlEncode(responseJSON.response.entries[i].qname) + "\" onclick=\"allowDomain(this, 'btnQueryLogsRowOption'); return false;\">Domain erlauben</a></li>";
+                        tableHtml += "<li><a href=\"#\" data-id=\"" + i + "\" data-domain=\"" + htmlEncode(responseJSON.response.entries[i].qname) + "\" onclick=\"allowDomain(this, 'btnQueryLogsRowOption'); return false;\">" + tr("Domain erlauben") + "</a></li>";
                         break;
 
                     default:
-                        tableHtml += "<li><a href=\"#\" data-id=\"" + i + "\" data-domain=\"" + htmlEncode(responseJSON.response.entries[i].qname) + "\" onclick=\"blockDomain(this, 'btnQueryLogsRowOption'); return false;\">Domain blockieren</a></li>";
+                        tableHtml += "<li><a href=\"#\" data-id=\"" + i + "\" data-domain=\"" + htmlEncode(responseJSON.response.entries[i].qname) + "\" onclick=\"blockDomain(this, 'btnQueryLogsRowOption'); return false;\">" + tr("Domain blockieren") + "</a></li>";
                         break;
                 }
 
@@ -516,7 +516,7 @@ function queryLogs(pageNumber, liveUpdate) {
 
             if (responseJSON.response.pageNumber > 1) {
                 paginationHtml += "<li><a href=\"#\" aria-label=\"First\" onClick=\"queryLogs(1); return false;\"><span aria-hidden=\"true\">&laquo;</span></a></li>";
-                paginationHtml += "<li><a href=\"#\" aria-label=\"Zurück\" onClick=\"queryLogs(" + (responseJSON.response.pageNumber - 1) + "); return false;\"><span aria-hidden=\"true\">&lsaquo;</span></a></li>";
+                paginationHtml += "<li><a href=\"#\" aria-label=\"" + tr("Zurück") + "\" onClick=\"queryLogs(" + (responseJSON.response.pageNumber - 1) + "); return false;\"><span aria-hidden=\"true\">&lsaquo;</span></a></li>";
             }
 
             var pageStart = responseJSON.response.pageNumber - 5;
@@ -541,7 +541,7 @@ function queryLogs(pageNumber, liveUpdate) {
             }
 
             if (responseJSON.response.pageNumber < responseJSON.response.totalPages) {
-                paginationHtml += "<li><a href=\"#\" aria-label=\"Weiter\" onClick=\"queryLogs(" + (responseJSON.response.pageNumber + 1) + "); return false;\"><span aria-hidden=\"true\">&rsaquo;</span></a></li>";
+                paginationHtml += "<li><a href=\"#\" aria-label=\"" + tr("Weiter") + "\" onClick=\"queryLogs(" + (responseJSON.response.pageNumber + 1) + "); return false;\"><span aria-hidden=\"true\">&rsaquo;</span></a></li>";
                 paginationHtml += "<li><a href=\"#\" aria-label=\"Last\" onClick=\"queryLogs(-1); return false;\"><span aria-hidden=\"true\">&raquo;</span></a></li>";
             }
 
@@ -550,9 +550,9 @@ function queryLogs(pageNumber, liveUpdate) {
             var statusHtml;
 
             if (responseJSON.response.entries.length > 0)
-                statusHtml = responseJSON.response.entries[0].rowNumber + "-" + responseJSON.response.entries[responseJSON.response.entries.length - 1].rowNumber + " von " + responseJSON.response.totalEntries + " Einträgen (Seite " + responseJSON.response.pageNumber + " von " + responseJSON.response.totalPages + ")";
+                statusHtml = tr("{0}-{1} von {2} Einträgen (Seite {3} von {4})", responseJSON.response.entries[0].rowNumber, responseJSON.response.entries[responseJSON.response.entries.length - 1].rowNumber, responseJSON.response.totalEntries, responseJSON.response.pageNumber, responseJSON.response.totalPages);
             else
-                statusHtml = "0 Einträge";
+                statusHtml = tr("0 Einträge");
 
             $("#tableQueryLogsTopStatus").html(statusHtml);
             $("#tableQueryLogsTopPagination").html(paginationHtml);
@@ -620,14 +620,14 @@ function showQueryLogs(domain, clientIp) {
 function exportQueryLogsCsv(objBtn) {
     var name = $("#optQueryLogsAppName").val();
     if (name == null) {
-        showAlert("warning", "Angabe fehlt", "Für das Abfrageprotokoll wird eine Query-Logs-App benötigt, z. B. 'Query Logs (Sqlite)'.");
+        showAlert("warning", tr("Angabe fehlt"), tr("Für das Abfrageprotokoll wird eine Query-Logs-App benötigt, z. B. 'Query Logs (Sqlite)'."));
         $("#optQueryLogsAppName").trigger("focus");
         return false;
     }
 
     var classPath = $("#optQueryLogsClassPath").val();
     if (classPath == null) {
-        showAlert("warning", "Angabe fehlt", "Bitte einen Klassenpfad auswählen.");
+        showAlert("warning", tr("Angabe fehlt"), tr("Bitte einen Klassenpfad auswählen."));
         $("#optQueryLogsClassPath").trigger("focus");
         return false;
     }

@@ -12,6 +12,12 @@
 	</PropertyGroup>
 
 	<ItemGroup>
+		<AssemblyMetadata Include="DescriptionEn">
+			<Value>Writes all incoming DNS queries and their responses to a Microsoft SQL Server database that can be searched under Logs in the web interface.\n\nNote: Create a database user and give it the server role "dbcreator" so that the app can create and set up the database. Then enter the database name and connection string in the app configuration and enable logging. When saving, the app creates the database schema itself and starts logging.</Value>
+		</AssemblyMetadata>
+	</ItemGroup>
+
+	<ItemGroup>
 		<PackageReference Include="Microsoft.Data.SqlClient" Version="7.1.0" />
 	</ItemGroup>
 

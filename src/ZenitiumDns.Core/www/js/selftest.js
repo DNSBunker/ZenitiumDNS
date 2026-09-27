@@ -38,16 +38,16 @@ function getSelfTestStatusIcon(status) {
 function getSelfTestStatusLabel(status) {
     switch (status) {
         case "ok":
-            return "In Ordnung";
+            return tr("In Ordnung");
 
         case "info":
-            return "Hinweis";
+            return tr("Hinweis");
 
         case "warning":
-            return "Warnung";
+            return tr("Warnung");
 
         default:
-            return "Fehler";
+            return tr("Fehler");
     }
 }
 
@@ -91,14 +91,14 @@ function renderSelfTest(response) {
     var summary;
 
     if (response.errors > 0)
-        summary = "<span class=\"status-chip status-danger\"><span class=\"fa fa-times-circle\" aria-hidden=\"true\"></span>" + response.errors + " Fehler</span>";
+        summary = "<span class=\"status-chip status-danger\"><span class=\"fa fa-times-circle\" aria-hidden=\"true\"></span>" + tr("{0} Fehler", response.errors) + "</span>";
     else
-        summary = "<span class=\"status-chip status-success\"><span class=\"fa fa-check-circle\" aria-hidden=\"true\"></span>Keine Fehler</span>";
+        summary = "<span class=\"status-chip status-success\"><span class=\"fa fa-check-circle\" aria-hidden=\"true\"></span>" + tr("Keine Fehler") + "</span>";
 
     if (response.warnings > 0)
-        summary += " <span class=\"status-chip status-warning\"><span class=\"fa fa-exclamation-triangle\" aria-hidden=\"true\"></span>" + response.warnings + (response.warnings === 1 ? " Warnung" : " Warnungen") + "</span>";
+        summary += " <span class=\"status-chip status-warning\"><span class=\"fa fa-exclamation-triangle\" aria-hidden=\"true\"></span>" + (response.warnings === 1 ? tr("1 Warnung") : tr("{0} Warnungen", response.warnings)) + "</span>";
 
-    summary += " <span class=\"selftest-time\">Stand " + moment(response.runOn).local().format("DD.MM.YYYY HH:mm:ss") + "</span>";
+    summary += " <span class=\"selftest-time\">" + tr("Stand {0}", moment(response.runOn).local().format(tr("DD.MM.YYYY HH:mm:ss"))) + "</span>";
 
     $("#divSelfTestSummary").html(summary);
 }
@@ -118,12 +118,12 @@ function updateDashboardHealth(response) {
         return;
     }
 
-    var html = "<span class=\"fa fa-times-circle dashboard-health-icon\" aria-hidden=\"true\"></span><div class=\"dashboard-health-body\"><div class=\"dashboard-health-title\">" + (errors.length === 1 ? "Ein schweres Problem gefunden" : errors.length + " schwere Probleme gefunden") + "</div><ul>";
+    var html = "<span class=\"fa fa-times-circle dashboard-health-icon\" aria-hidden=\"true\"></span><div class=\"dashboard-health-body\"><div class=\"dashboard-health-title\">" + (errors.length === 1 ? tr("Ein schweres Problem gefunden") : tr("{0} schwere Probleme gefunden", errors.length)) + "</div><ul>";
 
     for (var i = 0; i < errors.length; i++)
         html += "<li><b>" + htmlEncode(errors[i].title) + ":</b> " + htmlEncode(errors[i].message) + "</li>";
 
-    html += "</ul><a href=\"#\" onclick=\"showSelfTest(); return false;\">Alle Ergebnisse im Selbsttest</a></div>";
+    html += "</ul><a href=\"#\" onclick=\"showSelfTest(); return false;\">" + tr("Alle Ergebnisse im Selbsttest") + "</a></div>";
 
     divDashboardHealth.html(html);
     divDashboardHealth.show();
