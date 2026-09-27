@@ -44,7 +44,7 @@ var dashboardResponseTimeData = null;
 
 var dashboardSeries = {
     "Total": { label: "Gesamt", token: "--c1" },
-    "No Error": { label: "Kein Fehler", token: "--c1" },
+    "No Error": { label: "NOERROR", token: "--c1" },
     "NX Domain": { label: "NXDOMAIN", token: "--c4" },
     "Refused": { label: "REFUSED", token: "--c6" },
     "Server Failure": { label: "SERVFAIL", token: "--c7" },
@@ -241,6 +241,15 @@ function getDashboardStatsQuery(showAlerts) {
 
 function getDashboardPeriodSeconds() {
     switch ($("input[name=rdStatType]:checked").val()) {
+        case "lastMinute":
+            return 60;
+
+        case "last5Minutes":
+            return 300;
+
+        case "last30Minutes":
+            return 1800;
+
         case "lastHour":
             return 3600;
 
@@ -981,6 +990,36 @@ function showTopStats(statsType, limit) {
     });
 }
 
+var dashboardShortRefreshHandle = null;
+
+function updateDashboardAutoRefresh() {
+    if (dashboardShortRefreshHandle != null) {
+        clearInterval(dashboardShortRefreshHandle);
+        dashboardShortRefreshHandle = null;
+    }
+
+    var type = $("input[name=rdStatType]:checked").val();
+    var interval;
+
+    switch (type) {
+        case "lastMinute":
+            interval = 5000;
+            break;
+
+        case "last5Minutes":
+            interval = 10000;
+            break;
+
+        default:
+            return;
+    }
+
+    dashboardShortRefreshHandle = setInterval(function () {
+        if ($("input[name=rdStatType]:checked").val() === type)
+            refreshDashboard(true);
+    }, interval);
+}
+
 $(function () {
     $("input[type=radio][name=rdStatType]").on("change", function () {
         var type = $("input[name=rdStatType]:checked").val();
@@ -1001,6 +1040,7 @@ $(function () {
             $("#divCustomDayWise").hide();
         }
 
+        updateDashboardAutoRefresh();
         refreshDashboard();
     });
 
@@ -1019,3 +1059,162 @@ $(function () {
     if (document.fonts != null)
         document.fonts.ready.then(updateDashboardChartTheme);
 });
+
+var liveSystem = { seq: 0, samples: [], capacity: 300, charts: {}, busy: false, enabled: null };
+
+var liveSystemCharts = {
+    Cpu: { series: [{ key: "cpu", label: "CPU", token: "--c1" }], format: function (v) { return formatNumber(v, 1) + " %"; }, max: 100 },
+    Memory: { series: [{ key: "workingSet", label: "Prozess", token: "--c1", scale: 1048576 }, { key: "gcHeap", label: "GC-Heap", token: "--c2", scale: 1048576 }], format: function (v) { return formatNumber(v, 0) + " MB"; } },
+    Qps: { series: [{ key: "qps", label: "Anfragen/s", token: "--c1" }], format: function (v) { return formatNumber(v, 0); }, integer: true },
+    Queues: { series: [{ key: "queryQueue", label: "Anfragen", token: "--c1" }, { key: "resolverQueue", label: "Resolver", token: "--c2" }, { key: "statsQueue", label: "Statistik", token: "--c3" }], format: function (v) { return formatNumber(v, 0); }, integer: true },
+    Resolutions: { series: [{ key: "pendingResolutions", label: "Laufend", token: "--c1" }], format: function (v) { return formatNumber(v, 0); }, integer: true },
+    Gc: { series: [{ key: "gen0", label: "Gen 0", token: "--c1" }, { key: "gen1", label: "Gen 1", token: "--c2" }, { key: "gen2", label: "Gen 2", token: "--c3" }], format: function (v) { return formatNumber(v, 1) + "/s"; } },
+    Threads: { series: [{ key: "threads", label: "Threads", token: "--c1" }, { key: "threadPoolQueue", label: "Wartend", token: "--c2" }], format: function (v) { return formatNumber(v, 0); }, integer: true },
+    Locks: { series: [{ key: "lockContentions", label: "Konflikte/s", token: "--c1" }], format: function (v) { return formatNumber(v, 1); } }
+};
+
+function getLiveSeriesValue(sample, series) {
+    var value = sample[series.key];
+    if (series.scale != null)
+        value = value / series.scale;
+
+    return value;
+}
+
+function renderLiveSystemCharts() {
+    var samples = liveSystem.samples;
+    var labels = samples.map(function (sample) { return moment(sample.time).local().format("HH:mm:ss"); });
+    var theme = getDashboardChartTheme();
+
+    for (var name in liveSystemCharts) {
+        var info = liveSystemCharts[name];
+        var datasets = [];
+
+        for (var i = 0; i < info.series.length; i++) {
+            var series = info.series[i];
+            var color = getThemeValue(series.token);
+
+            datasets.push({
+                label: series.label,
+                data: samples.map(function (sample) { return getLiveSeriesValue(sample, series); }),
+                borderColor: color,
+                backgroundColor: withAlpha(color, i === 0 ? 0.08 : 0),
+                borderWidth: 2,
+                pointRadius: 0,
+                pointHoverRadius: 3,
+                pointHitRadius: 6,
+                lineTension: 0.2,
+                fill: i === 0 ? "origin" : false
+            });
+        }
+
+        var chart = liveSystem.charts[name];
+
+        if (chart == null) {
+            var options = getLineChartOptions(false, info.format, false, 4);
+            options.legend.display = info.series.length > 1;
+            options.legend.labels.padding = 10;
+            options.scales.xAxes[0].ticks.display = false;
+
+            if (info.integer)
+                options.scales.yAxes[0].ticks.precision = 0;
+
+            if (info.max != null)
+                options.scales.yAxes[0].ticks.suggestedMax = info.max;
+
+            chart = new Chart(document.getElementById("canvasLive" + name).getContext("2d"), {
+                type: "line",
+                data: { labels: labels, datasets: datasets },
+                options: options
+            });
+
+            liveSystem.charts[name] = chart;
+            applyDashboardChartTheme(chart);
+        }
+        else {
+            chart.data.labels = labels;
+            chart.data.datasets = datasets;
+        }
+
+        chart.update(0);
+
+        var latest = samples.length > 0 ? samples[samples.length - 1] : null;
+        var text = "";
+
+        if (latest != null) {
+            text = info.format(getLiveSeriesValue(latest, info.series[0]));
+
+            if (name === "Gc")
+                text = "Pause " + formatNumber(latest.gcPause, 2) + " %";
+            else if (name === "Memory")
+                text = formatNumber(latest.workingSet / 1048576, 0) + " MB";
+        }
+
+        $("#lblLive" + name).text(text);
+    }
+}
+
+function pollLiveSystem() {
+    if (liveSystem.busy || (sessionData == null) || document.hidden || !$("#mainPanelTabPaneDashboard").hasClass("active"))
+        return;
+
+    if (liveSystem.enabled === false)
+        return;
+
+    liveSystem.busy = true;
+
+    $.ajax({
+        type: "GET",
+        url: "api/dashboard/system/live?since=" + liveSystem.seq,
+        headers: { "Authorization": "Bearer " + sessionData.token },
+        dataType: "json",
+        cache: false,
+        success: function (responseJSON) {
+            if (responseJSON.status !== "ok")
+                return;
+
+            var response = responseJSON.response;
+            liveSystem.enabled = response.enabled;
+            liveSystem.capacity = response.capacity;
+
+            if (!response.enabled) {
+                $("#divLiveSystem").hide();
+                liveSystem.samples = [];
+                liveSystem.seq = 0;
+                return;
+            }
+
+            for (var i = 0; i < response.samples.length; i++) {
+                liveSystem.samples.push(response.samples[i]);
+                liveSystem.seq = response.samples[i].seq;
+            }
+
+            if (response.samples.length === 0 && liveSystem.samples.length > 0 && liveSystem.samples[liveSystem.samples.length - 1].seq > liveSystem.seq)
+                liveSystem.samples = [];
+
+            if (liveSystem.samples.length > liveSystem.capacity)
+                liveSystem.samples.splice(0, liveSystem.samples.length - liveSystem.capacity);
+
+            $("#divLiveSystem").show();
+            renderLiveSystemCharts();
+        },
+        complete: function () {
+            liveSystem.busy = false;
+        }
+    });
+}
+
+function resetLiveSystem() {
+    liveSystem.enabled = null;
+    liveSystem.samples = [];
+    liveSystem.seq = 0;
+}
+
+$(function () {
+    setInterval(pollLiveSystem, 2000);
+
+    $("#mainPanelTabListDashboard a").on("shown.bs.tab", function () {
+        pollLiveSystem();
+    });
+});
+

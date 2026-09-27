@@ -47,6 +47,7 @@ using System.Net.Http;
 using System.Net.Security;
 using System.Net.Sockets;
 using System.Reflection;
+using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
@@ -69,8 +70,11 @@ namespace ZenitiumDns.Core
 
         readonly static char[] commaSeparator = new char[] { ',' };
         static readonly IPEndPoint IPENDPOINT_ANY_0 = new IPEndPoint(IPAddress.Any, 0);
+        const string DEFAULT_UPDATE_CHECK_URL = "https://api.github.com/repos/DNSBunker/ZenitiumDNS-DE/releases/latest";
 
         readonly Version _currentVersion;
+        readonly string _packageVersion;
+        readonly string _technitiumVersion;
         readonly DateTime _uptimestamp = DateTime.UtcNow;
         readonly string _appFolder;
         readonly string _configFolder;
@@ -155,6 +159,15 @@ namespace ZenitiumDns.Core
             Assembly assembly = Assembly.GetExecutingAssembly();
 
             _currentVersion = assembly.GetName().Version;
+            _packageVersion = assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? GetCleanVersion(_currentVersion);
+            _technitiumVersion = null;
+
+            foreach (AssemblyMetadataAttribute metadata in assembly.GetCustomAttributes<AssemblyMetadataAttribute>())
+            {
+                if (metadata.Key == "TechnitiumVersion")
+                    _technitiumVersion = metadata.Value;
+            }
+
             _appFolder = Path.GetDirectoryName(assembly.Location);
 
             if (configFolder is null)
@@ -169,7 +182,8 @@ namespace ZenitiumDns.Core
             _log = new LogManager(isPortableApp, _configFolder);
             _authManager = new AuthManager(this, _configFolder, _log);
 
-            Uri.TryCreate(Environment.GetEnvironmentVariable("DNS_SERVER_UPDATE_CHECK_URL"), UriKind.Absolute, out Uri updateCheckUri);
+            string updateCheckUrl = Environment.GetEnvironmentVariable("DNS_SERVER_UPDATE_CHECK_URL") ?? DEFAULT_UPDATE_CHECK_URL;
+            Uri.TryCreate(updateCheckUrl, UriKind.Absolute, out Uri updateCheckUri);
 
             _api = new WebServiceApi(this, updateCheckUri);
             _dashboardApi = new WebServiceDashboardApi(this);
@@ -1219,7 +1233,15 @@ namespace ZenitiumDns.Core
 
         private string GetServerVersion()
         {
-            return GetCleanVersion(_currentVersion);
+            return _packageVersion;
+        }
+
+        private void WriteVersionInfo(Utf8JsonWriter jsonWriter)
+        {
+            jsonWriter.WriteString("technitiumVersion", _technitiumVersion);
+            jsonWriter.WriteString("runtimeVersion", RuntimeInformation.FrameworkDescription);
+            jsonWriter.WriteString("osDescription", RuntimeInformation.OSDescription);
+            jsonWriter.WriteString("osArchitecture", RuntimeInformation.OSArchitecture.ToString().ToLowerInvariant());
         }
 
         private static string GetCleanVersion(Version version)
@@ -1669,7 +1691,6 @@ namespace ZenitiumDns.Core
             _webService.MapGetAndPost("/api/sso/status", _authApi.StatusAsync);
 
             _webService.MapGetAndPost("/api/user/login", delegate (HttpContext context) { return _authApi.LoginAsync(context, UserSessionType.Standard); });
-            _webService.MapGetAndPost("/api/user/createToken", _authApi.CreateToken);
             _webService.MapGetAndPost("/api/user/logout", _authApi.Logout);
 
             _webService.MapGetAndPost("/api/user/createSingleUseToken", _authApi.CreateSingleUseToken);
@@ -1684,11 +1705,11 @@ namespace ZenitiumDns.Core
             _webService.MapGetAndPost("/api/user/checkForUpdate", _api.CheckForUpdateAsync);
 
             _webService.MapGetAndPost("/api/dashboard/metrics/json", _dashboardApi.GetMetricsJson);
-            _webService.MapGetAndPost("/api/dashboard/metrics/text", _dashboardApi.GetMetricsText);
             _webService.MapGetAndPost("/api/dashboard/stats/get", _dashboardApi.GetStatsAsync);
             _webService.MapGetAndPost("/api/dashboard/stats/getTop", _dashboardApi.GetTopStatsAsync);
             _webService.MapGetAndPost("/api/dashboard/stats/deleteAll", _logsApi.DeleteAllStats);
             _webService.MapGetAndPost("/api/dashboard/ipv6/probe", _dashboardApi.ProbeIPv6UpstreamAsync);
+            _webService.MapGetAndPost("/api/dashboard/system/live", _dashboardApi.GetLiveSystemStats);
 
             _webService.MapGetAndPost("/api/zones/list", _zonesApi.ListZones);
             _webService.MapGetAndPost("/api/zones/create", _zonesApi.CreateZoneAsync);
@@ -1727,13 +1748,7 @@ namespace ZenitiumDns.Core
 
             _webService.MapGetAndPost("/api/selftest/run", _selfTestApi.RunAsync);
 
-            _webService.MapGetAndPost("/api/apps/list", _appsApi.ListInstalledAppsAsync);
-            _webService.MapGetAndPost("/api/apps/listStoreApps", _appsApi.ListStoreApps);
-            _webService.MapGetAndPost("/api/apps/downloadAndInstall", _appsApi.DownloadAndInstallAppAsync);
-            _webService.MapGetAndPost("/api/apps/downloadAndUpdate", _appsApi.DownloadAndUpdateAppAsync);
-            _webService.MapPost("/api/apps/install", _appsApi.InstallAppAsync);
-            _webService.MapPost("/api/apps/update", _appsApi.UpdateAppAsync);
-            _webService.MapGetAndPost("/api/apps/uninstall", _appsApi.UninstallAppAsync);
+            _webService.MapGetAndPost("/api/apps/list", _appsApi.ListInstalledApps);
             _webService.MapGetAndPost("/api/apps/enable", delegate (HttpContext context) { return _appsApi.SetAppEnabledAsync(context, true); });
             _webService.MapGetAndPost("/api/apps/disable", delegate (HttpContext context) { return _appsApi.SetAppEnabledAsync(context, false); });
             _webService.MapGetAndPost("/api/apps/config/get", _appsApi.GetAppConfigAsync);
@@ -1746,12 +1761,14 @@ namespace ZenitiumDns.Core
             _webService.MapGetAndPost("/api/settings/set", _settingsApi.SetDnsSettingsAsync);
             _webService.MapGetAndPost("/api/settings/forceUpdateBlockLists", _settingsApi.ForceUpdateBlockLists);
             _webService.MapGetAndPost("/api/settings/forceUpdateClientBlockLists", _settingsApi.ForceUpdateClientBlockLists);
+            _webService.MapGetAndPost("/api/settings/iana/update", _settingsApi.UpdateIanaDataAsync);
+            _webService.MapGetAndPost("/api/settings/iana/get", _settingsApi.GetIanaDataAsync);
+            _webService.MapPost("/api/settings/iana/set", _settingsApi.SetIanaDataAsync);
             _webService.MapGetAndPost("/api/settings/temporaryDisableBlocking", _settingsApi.TemporaryDisableBlocking);
             _webService.MapGetAndPost("/api/settings/backup", _settingsApi.BackupSettingsAsync);
             _webService.MapPost("/api/settings/restore", _settingsApi.RestoreSettingsAsync);
 
             _webService.MapGetAndPost("/api/admin/sessions/list", _authApi.ListSessions);
-            _webService.MapGetAndPost("/api/admin/sessions/createToken", _authApi.CreateApiToken);
             _webService.MapGetAndPost("/api/admin/sessions/delete", delegate (HttpContext context) { _authApi.DeleteSession(context, true); });
             _webService.MapGetAndPost("/api/admin/users/list", _authApi.ListUsers);
             _webService.MapGetAndPost("/api/admin/users/create", _authApi.CreateUser);
@@ -1805,7 +1822,6 @@ namespace ZenitiumDns.Core
                 case "/api/status":
                 case "/api/sso/status":
                 case "/api/user/login":
-                case "/api/user/createToken":
                 case "/api/user/logout":
                     needsJsonResponseObject = false;
                     break;
@@ -1819,7 +1835,6 @@ namespace ZenitiumDns.Core
                     }
                     break;
 
-                case "/api/dashboard/metrics/text":
                 case "/api/zones/export":
                 case "/api/allowed/export":
                 case "/api/blocked/export":

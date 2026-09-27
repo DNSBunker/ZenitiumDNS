@@ -12,6 +12,7 @@ Das Paket enthält die .NET-Laufzeit, eine separate .NET-Installation ist nicht 
 | ---- | ------ |
 | `/opt/zenitiumdns` | Programmdateien |
 | `/etc/zenitiumdns` | Konfigurationsordner (Zonen, Einstellungen, Cache, Statistiken) |
+| `/etc/zenitiumdns/iana` | Geprüfte Kopien von Root-Zone, arpa-Zone und Root-Vertrauensankern von IANA sowie eigene Versionen |
 | `/var/log/zenitiumdns` | Logdateien |
 | `/usr/share/zenitiumdns/apps` | Mitgelieferte DNS-Apps als ZIP-Dateien, werden beim Start deaktiviert installiert und bei Paket-Updates aktualisiert |
 | `/usr/lib/systemd/system/zenitiumdns.service` | systemd-Dienst |
@@ -71,21 +72,13 @@ Anschließend unter Einstellungen > Verschlüsselte Protokolle als TLS-Zertifika
 
 Damit Windows 11, iOS und macOS per DDR automatisch auf DoH, DoT oder DoQ wechseln, sollte das Zertifikat zusätzlich die IP-Adressen des Servers enthalten. Let's Encrypt stellt solche Zertifikate nicht aus. Der Selbsttest zeigt an, ob das Zertifikat IP-Adressen enthält.
 
+## Root-Zone und Vertrauensanker
+
+Der Dienst lädt Root-Zone und arpa-Zone von `www.internic.net` sowie die Root-Vertrauensanker von `data.iana.org` über HTTPS und nutzt sie erst nach vollständiger Prüfung (ZONEMD-Prüfsumme, DNSSEC-Signaturen, ICANN-Signatur der Anker). Der Server braucht dafür ausgehenden HTTPS-Zugang. Ohne diesen Zugang oder bei gescheiterter Prüfung fragt der Resolver wie gewohnt die Root-Server. Einstellungen und Status stehen unter Einstellungen > Resolver.
+
 ## Überwachung
 
-Die Übersicht der Weboberfläche zeigt Anfragen pro Sekunde, Antwortzeiten, Cache-Treffer-, Fehler- und Blockierquote sowie den Zustand der IPv6-Anbindung. Für externe Überwachung liefert `http://<IP-Adresse-des-Servers>:5380/api/dashboard/metrics/text` dieselben Werte im Prometheus-Format, `…/metrics/json` als JSON.
-
-Lege dafür unter Verwaltung > Benutzer einen eigenen Benutzer an, gib ihm über eine Gruppe nur das Leserecht für den Bereich Übersicht und erzeuge unter Verwaltung > Sitzungen ein API-Token für ihn. Beispiel für Prometheus:
-
-```
-scrape_configs:
-  - job_name: zenitiumdns
-    metrics_path: /api/dashboard/metrics/text
-    authorization:
-      credentials: <API-Token>
-    static_configs:
-      - targets: ['dns.example.org:5380']
-```
+Die Übersicht der Weboberfläche zeigt Anfragen pro Sekunde, Antwortzeiten, Cache-Treffer-, Fehler- und Blockierquote, den Zustand der IPv6-Anbindung und Zeiträume von einer Minute bis zwölf Monaten. Darunter zeigen Echtzeitgraphen CPU, Arbeitsspeicher, Garbage Collection, Threadpool, Warteschlangen und laufende Auflösungen der letzten fünf Minuten; abschaltbar unter Einstellungen > Allgemein. Der Wächter greift bei Engpässen selbst ein und meldet das im Selbsttest und im Protokoll.
 
 ## Dienst verwalten
 

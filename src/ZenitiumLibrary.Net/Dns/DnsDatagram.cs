@@ -785,6 +785,58 @@ namespace ZenitiumLibrary.Net.Dns
             return Clone(null, null, newAdditional);
         }
 
+        public bool HasEDnsPadding()
+        {
+            if (_edns is null)
+                return false;
+
+            foreach (EDnsOption option in _edns.Options)
+            {
+                if (option.Code == EDnsOptionCode.PADDING)
+                    return true;
+            }
+
+            return false;
+        }
+
+        public DnsDatagram CloneWithPadding(int blockSize)
+        {
+            if ((_edns is null) || (_nextDatagram is not null) || (blockSize < 2))
+                return this;
+
+            List<EDnsOption> options = new List<EDnsOption>(_edns.Options.Count + 1);
+
+            foreach (EDnsOption option in _edns.Options)
+            {
+                if (option.Code != EDnsOptionCode.PADDING)
+                    options.Add(option);
+            }
+
+            foreach (DnsResourceRecord record in _additional)
+            {
+                if (record.Type == DnsResourceRecordType.TSIG)
+                    return this;
+            }
+
+            DnsDatagram unpadded = options.Count == _edns.Options.Count ? this : CloneWithEDnsOptions(options);
+
+            long length;
+
+            using (MemoryStream mS = new MemoryStream(512))
+            {
+                unpadded.WriteTo(mS);
+                length = mS.Length;
+            }
+
+            long paddedLength = ((length + 4 + blockSize - 1) / blockSize) * blockSize;
+            if (paddedLength > ushort.MaxValue)
+                return unpadded;
+
+            options.Add(new EDnsOption(EDnsOptionCode.PADDING, new EDnsPaddingOptionData((int)(paddedLength - length - 4))));
+
+            return CloneWithEDnsOptions(options);
+        }
+
         public DnsDatagram CloneWithoutEDns()
         {
             if (_edns is null)

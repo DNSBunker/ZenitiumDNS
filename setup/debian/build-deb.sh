@@ -81,7 +81,7 @@ appsDir="$pkgDir/usr/share/zenitiumdns/apps"
 mkdir -p "$installDir" "$controlDir" "$docDir"
 
 echo "Veröffentliche ZenitiumDNS $version für $rid ..."
-"$dotnet" publish "$rootDir/src/ZenitiumDns/ZenitiumDns.csproj" -c Release -r "$rid" --self-contained true -p:PublishReadyToRun="$readyToRun" -p:DebugType=embedded -o "$installDir" --nologo -v quiet -clp:ErrorsOnly
+"$dotnet" publish "$rootDir/src/ZenitiumDns/ZenitiumDns.csproj" -c Release -r "$rid" --self-contained true -p:PublishReadyToRun="$readyToRun" -p:DebugType=embedded -p:ZenitiumDnsRevision="$revision" -o "$installDir" --nologo -v quiet -clp:ErrorsOnly
 
 [ -x "$installDir/ZenitiumDns" ] || fail "Die Veröffentlichung hat keine ausführbare Datei 'ZenitiumDns' erzeugt"
 
@@ -138,12 +138,13 @@ Description: Rekursiver DNS-Resolver mit Weboberfläche
   - rekursive Auflösung über die Root-Server oder Forwarding über
     DNS-over-TLS, DNS-over-HTTPS und DNS-over-QUIC,
   - DNSSEC-Validierung mit NSEC und NSEC3,
+  - lokale, geprüfte Kopie der Root-Zone nach RFC 8806,
   - eigene DoT-, DoH- und DoQ-Dienste sowie das PROXY-Protokoll,
   - Werbe- und Malware-Blockierung über Blocklisten,
   - Weiterleitungszonen (Conditional Forwarder) mit lokalen Einträgen,
   - Cache mit Serve Stale, Prefetch und Speicherung auf der Festplatte,
   - automatischen IPv6-Rückfall bei gestörter IPv6-Anbindung,
-  - Statistik mit Antwortzeiten und Prometheus-Metriken,
+  - Statistik mit Antwortzeiten und Echtzeitgraphen,
   - Ratenbegrenzung, SSO, LDAP und Zwei-Faktor-Anmeldung,
   - DNS-Apps für erweiterte Filter, DNS64 und Protokollexport.
  .

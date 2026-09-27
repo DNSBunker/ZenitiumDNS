@@ -18,15 +18,19 @@ ZenitiumDNS ist ein Fork von [Technitium DNS Server](https://github.com/Techniti
 # Was ZenitiumDNS gegenüber dem Original bietet
 - Auf öffentliche Resolver zugeschnitten: Autoritative Zonen (Primary, Secondary, Stub, Catalog), DNSSEC-Signierung, Zonentransfers, NOTIFY, dynamische Updates, TSIG, DHCP-Server, Clustering, Windows-Dienst, Systemtray und Windows-Installer sind entfernt. Das verkleinert Angriffsfläche und Weboberfläche.
 - Anfragefilter nach dem Vorbild von dnsdist, standardmäßig aktiv: Anfragen, die auf einem öffentlichen Resolver nichts verloren haben (ANY, AXFR/IXFR, fremde Opcodes und Klassen, ohne RD-Flag, übergroß oder fehlerhaft), werden über UDP verworfen und über TCP, DoT, DoH und DoQ abgewiesen.
-- Ratenbegrenzung in Anfragen pro Sekunde mit Token-Bucket je Client-Subnetz und Client-Sperrlisten wie IPsum oder Spamhaus DROP, deren Adressen schon vor dem Auswerten der Anfrage verworfen werden.
+- Ratenbegrenzung in Anfragen pro Sekunde mit Token-Bucket je Client-Subnetz, CGNAT-taugliche Standardwerte und Client-Sperrlisten wie IPsum oder Spamhaus DROP, deren Adressen schon vor dem Auswerten der Anfrage verworfen werden.
+- Lokale, vollständig geprüfte Kopie der Root-Zone und der arpa-Zone nach RFC 8806 mit ZONEMD-Prüfung: Delegationen kommen aus dem Speicher, nicht existierende Top-Level-Domains beantwortet der Resolver selbst. Die Root-Vertrauensanker werden signaturgeprüft von IANA übernommen. Alles lässt sich abschalten oder durch eigene, in der Weboberfläche bearbeitete Versionen ersetzen.
+- Do53 wahlweise voll, nur für DDR (andere Anfragen verworfen oder abgelehnt) oder ganz abgeschaltet.
+- Wächter, der bei vollem Datenträger, Speichermangel, überlaufenden Warteschlangen oder ausgefallenen Diensten selbst eingreift, dazu Echtzeitgraphen interner Prozesse.
 - Selbsttest, der Dienste, Auflösung, DNSSEC, Zertifikate, Sicherheitseinstellungen, Listen und Systemgrenzen prüft und schwere Probleme auf der Übersicht meldet.
-- PEM-Zertifikate wie `fullchain.pem` und `privkey.pem` ohne Umwandlung, automatische Ankündigung der verschlüsselten Dienste per DDR (RFC 9462).
+- PEM-Zertifikate wie `fullchain.pem` und `privkey.pem` ohne Umwandlung, automatische Ankündigung der verschlüsselten Dienste per DDR (RFC 9462). Der eigene Servername und die Namen im Zertifikat werden nie blockiert.
+- Firefox-Canary und Chromes Preflight-Prüfung lassen sich per Schalter beantworten, damit Browser beim Resolver bleiben.
 - DNSSEC-Validierung für den Post-Quantum-Algorithmus ML-DSA-44 mit Schutz vor Downgrades auf klassische Algorithmen.
-- Eigenständiges Debian-13-Paket mit eingebauter .NET-Laufzeit, gehärtetem systemd-Dienst, zufälligem Admin-Passwort bei der Erstinstallation und vorinstallierten, standardmäßig deaktivierten Resolver-Apps.
+- Eigenständiges Debian-13-Paket mit eingebauter .NET-Laufzeit, gehärtetem systemd-Dienst, zufälligem Admin-Passwort bei der Erstinstallation und vorinstallierten, standardmäßig deaktivierten Resolver-Apps, die sich über ein Formular oder direkt als JSON konfigurieren lassen.
 - Deutschsprachige Weboberfläche mit eigenem Design: Seitenleiste, Messwertleiste mit Verläufen, Einstellungen in thematischen Bereichen, Hell-, Dunkel- und Bernstein-Modus, auch auf dem Smartphone bedienbar.
-- Antwortzeit-Statistik: Median, 95./99. Perzentil und Durchschnitt getrennt nach Cache und rekursiver Auflösung, als Live-Kennzahl, Minutenverlauf und Prometheus-Metrik.
+- Antwortzeit-Statistik: Median, 95./99. Perzentil und Durchschnitt getrennt nach Cache und rekursiver Auflösung, als Live-Kennzahl und Verlauf.
 - Automatischer IPv6-Rückfall: Ist IPv6 gestört, pausiert der Resolver ausgehende IPv6-Anfragen und nutzt IPv4, bis IPv6 wieder funktioniert.
-- Keine Verbindungen zu Servern des Originalprojekts. Update-Prüfung und App-Store sind standardmäßig aus und lassen sich auf eigene Server umstellen.
+- Keine Verbindungen zu Servern des Originalprojekts. Die Update-Prüfung fragt nur die Releases dieses Repositorys auf GitHub ab und zeigt Änderungen und Installationsbefehl an. Alle Apps werden mit dem Paket ausgeliefert, einen App-Store gibt es nicht.
 - Robusterer rekursiver Resolver:
   - löst lange CNAME-Ketten und Nameserver ohne Glue-Einträge vollständig auf,
   - fällt bei Problemen mit dem Root-Priming auf die Root-Hints zurück,
@@ -74,16 +78,16 @@ ZenitiumDNS ist ein Fork von [Technitium DNS Server](https://github.com/Techniti
 - Eigene Dienste für [DNS-over-TLS](https://www.rfc-editor.org/rfc/rfc7858.html), [DNS-over-HTTPS](https://www.rfc-editor.org/rfc/rfc8484.html) (HTTP/1.1, HTTP/2 und HTTP/3) und [DNS-over-QUIC](https://www.ietf.org/rfc/rfc9250.html).
 - DNS über das [PROXY-Protokoll](https://www.haproxy.org/download/1.8/doc/proxy-protocol.txt) in Version 1 und 2 für UDP und TCP, z. B. hinter einem Load Balancer.
 - Bearbeitung von Anfragen außer der Reihe für DNS-over-TCP und DNS-over-TLS ([RFC 7766](https://www.rfc-editor.org/rfc/rfc7766#section-7)) mit einstellbarer Obergrenze pro Verbindung.
+- EDNS-Padding ([RFC 7830](https://www.rfc-editor.org/rfc/rfc7830), [RFC 8467](https://www.rfc-editor.org/rfc/rfc8467)) für DoT, DoH und DoQ, damit die Paketgröße nicht verrät, welche Domain abgefragt wurde.
 - HTTP- und SOCKS5-Proxys für ausgehende Anfragen, etwa über das [Tor-Netzwerk](https://www.torproject.org/).
 
 ## Betrieb und Überwachung
 - Übersicht mit Anfragen pro Sekunde, Antwortzeiten (Median, 95./99. Perzentil), Cache-Trefferquote, Fehler- und Blockierquote, Verlauf und Top-Listen.
-- Prometheus-Metriken und JSON-Metriken über die HTTP-API.
-- Eingebaute System- und Anfrageprotokollierung sowie Export der Anfrageprotokolle in SQLite, MySQL, PostgreSQL oder SQL Server über Apps.
+- Statistik von einer Minute bis zwölf Monaten und Echtzeitgraphen interner Prozesse.
+- Eingebaute System- und Anfrageprotokollierung, auf Wunsch ohne Client-Adressen, sowie Export der Anfrageprotokolle in SQLite, MySQL, PostgreSQL oder SQL Server über Apps.
 - Hohe Performance: dedizierte UDP-Empfangs-Threads beantworten Cache-Treffer ohne Thread-Wechsel. In Tests auf einem Rechner mit 20 Kernen wurden über 700.000 Anfragen pro Sekunde beantwortet.
 - Weboberfläche zur Konfiguration im Browser, mit Dunkelmodus.
-- Eingebaute HTTP-API, über die andere Programme den DNS-Server steuern und konfigurieren.
-- Mehrbenutzerbetrieb mit Rollen und nicht ablaufenden API-Tokens, Zwei-Faktor-Authentifizierung (2FA) per TOTP, Single Sign-On mit OpenID Connect und Anmeldung über LDAP.
+- Mehrbenutzerbetrieb mit Rollen, Zwei-Faktor-Authentifizierung (2FA) per TOTP, Single Sign-On mit OpenID Connect und Anmeldung über LDAP.
 - Eingebauter DNS-Client zum Testen von Auflösungen.
 - Läuft unter Linux (Debian-Paket) und überall, wo .NET 10 verfügbar ist.
 - Quelloffene, plattformübergreifende Umsetzung mit .NET 10.
@@ -126,7 +130,6 @@ Anschließend im Browser `http://<IP-Adresse-des-Servers>:5380/` öffnen, um die
 - [Quellcode und Releases](https://github.com/DNSBunker/ZenitiumDNS-DE)
 - [Build-Anleitung](docs/BUILD.md)
 - [Debian-Paket](setup/debian/README.Debian.md)
-- [HTTP-API-Dokumentation (Englisch)](docs/APIDOCS.md)
 - [Umgebungsvariablen](docs/EnvironmentVariables.md)
 - [Unterstützte RFCs](docs/SupportedRFCs.md)
 - [Änderungsprotokoll](CHANGELOG.md)

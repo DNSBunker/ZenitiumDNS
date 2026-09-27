@@ -138,6 +138,9 @@ namespace ZenitiumLibrary
         public override int MaximumConcurrencyLevel
         { get { return _maximumConcurrencyLevel; } }
 
+        public int QueuedTasks
+        { get { return _disposed ? 0 : _tasks.Count; } }
+
         #endregion
     }
 }

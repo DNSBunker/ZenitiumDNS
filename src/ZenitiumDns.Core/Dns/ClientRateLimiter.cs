@@ -191,7 +191,7 @@ namespace ZenitiumDns.Core.Dns
             return false;
         }
 
-        public void Maintain(Action<string> log)
+        public void Maintain(Action<string> log, bool hideAddresses = false)
         {
             long now = Stopwatch.GetTimestamp();
             HashSet<BucketKey> limited = new HashSet<BucketKey>();
@@ -215,13 +215,13 @@ namespace ZenitiumDns.Core.Dns
             foreach (BucketKey key in limited)
             {
                 if (!previous.Contains(key))
-                    log("Client subnet '" + key.ToNetworkAddress() + "' exceeded the " + (key.IsTcp ? "TCP" : "UDP") + " rate limit of " + GetLimit(key) + " queries per second and is being rate limited.");
+                    log((hideAddresses ? "A client subnet (/" + key.PrefixLength + ")" : "Client subnet '" + key.ToNetworkAddress() + "'") + " exceeded the " + (key.IsTcp ? "TCP" : "UDP") + " rate limit of " + GetLimit(key) + " queries per second and is being rate limited.");
             }
 
             foreach (BucketKey key in previous)
             {
                 if (!limited.Contains(key))
-                    log("Client subnet '" + key.ToNetworkAddress() + "' is no longer being rate limited for " + (key.IsTcp ? "TCP" : "UDP") + " services.");
+                    log((hideAddresses ? "A client subnet (/" + key.PrefixLength + ")" : "Client subnet '" + key.ToNetworkAddress() + "'") + " is no longer being rate limited for " + (key.IsTcp ? "TCP" : "UDP") + " services.");
             }
         }
 

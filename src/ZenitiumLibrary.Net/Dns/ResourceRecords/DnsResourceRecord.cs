@@ -200,6 +200,9 @@ namespace ZenitiumLibrary.Net.Dns.ResourceRecords
             _class = (DnsClass)DnsDatagram.ReadUInt16NetworkOrder(s);
             _ttl = DnsDatagram.ReadUInt32NetworkOrder(s);
             _rData = ReadRecordDataFrom(s, _type);
+
+            if ((_rData.RDLENGTH == 0) && (_class == DnsClass.IN) && (_rData is not DnsUnknownRecordData) && (_rData is not DnsAPLRecordData) && (_type != DnsResourceRecordType.OPT))
+                throw new DnsClientException("Error while reading resource record: record data of type " + _type.ToString() + " cannot be empty.");
         }
 
         #endregion
@@ -434,7 +437,7 @@ namespace ZenitiumLibrary.Net.Dns.ResourceRecords
             _rData.NormalizeName();
         }
 
-        internal void SetDnssecStatus(DnssecStatus dnssecStatus, bool force = false)
+        public void SetDnssecStatus(DnssecStatus dnssecStatus, bool force = false)
         {
             if ((_dnssecStatus == DnssecStatus.Unknown) || force)
                 _dnssecStatus = dnssecStatus;

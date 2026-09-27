@@ -27,7 +27,10 @@ namespace ZenitiumDns.Core.Dns
         LastWeek = 3,
         LastMonth = 4,
         LastYear = 5,
-        Custom = 6
+        Custom = 6,
+        LastMinute = 7,
+        Last5Minutes = 8,
+        Last30Minutes = 9
     }
 
     public enum DashboardTopStatsType

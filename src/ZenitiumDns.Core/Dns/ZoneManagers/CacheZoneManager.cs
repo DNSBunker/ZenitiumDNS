@@ -41,7 +41,8 @@ namespace ZenitiumDns.Core.Dns.ZoneManagers
         public const uint FAILURE_RECORD_TTL = 10u;
         public const uint NEGATIVE_RECORD_TTL = 300u;
         public const uint MINIMUM_RECORD_TTL = 10u;
-        public const uint MAXIMUM_RECORD_TTL = 7 * 24 * 60 * 60;
+        public const uint MAXIMUM_RECORD_TTL = 24 * 60 * 60;
+        public const uint MAXIMUM_NEGATIVE_RECORD_TTL = 60 * 60;
         public const uint SERVE_STALE_TTL = 3 * 24 * 60 * 60;
         public const uint SERVE_STALE_ANSWER_TTL = 30;
         public const uint SERVE_STALE_RESET_TTL = 30;
@@ -71,6 +72,8 @@ namespace ZenitiumDns.Core.Dns.ZoneManagers
             : base(FAILURE_RECORD_TTL, NEGATIVE_RECORD_TTL, MINIMUM_RECORD_TTL, MAXIMUM_RECORD_TTL, SERVE_STALE_TTL, SERVE_STALE_ANSWER_TTL)
         {
             _dnsServer = dnsServer;
+
+            MaximumNegativeRecordTtl = MAXIMUM_NEGATIVE_RECORD_TTL;
 
             _cacheMaintenanceTimer = new Timer(CacheMaintenanceTimerCallback, null, CACHE_MAINTENANCE_TIMER_INITIAL_INTEVAL, Timeout.Infinite);
         }
@@ -718,6 +721,25 @@ namespace ZenitiumDns.Core.Dns.ZoneManagers
 
                 if (minimumEntriesToRemove < 1)
                     break;
+            }
+
+            return totalRemovedEntries;
+        }
+
+        public int TrimEntries(long entriesToRemove)
+        {
+            if (entriesToRemove < 1)
+                return 0;
+
+            int totalRemovedEntries = RemoveExpiredRecordsInternal(false, entriesToRemove);
+            entriesToRemove -= totalRemovedEntries;
+
+            for (int seconds = 86400; (seconds > 0) && (entriesToRemove > 0); seconds /= 2)
+            {
+                int removedEntries = RemoveLeastUsedRecordsInternal(DateTime.UtcNow.AddSeconds(-seconds), entriesToRemove);
+
+                totalRemovedEntries += removedEntries;
+                entriesToRemove -= removedEntries;
             }
 
             return totalRemovedEntries;

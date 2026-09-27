@@ -3153,3 +3153,290 @@ tr.rate-limited .top-name {
     margin-top: 2px;
     overflow-wrap: anywhere;
 }
+
+.modal-app-config {
+    width: auto;
+    max-width: 880px;
+    margin: 30px auto;
+}
+
+@media (max-width: 767px) {
+    .modal-app-config {
+        margin: 10px;
+    }
+}
+
+.app-config-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 16px;
+    margin-bottom: 16px;
+}
+
+.app-config-toolbar-hint,
+.app-config-hint {
+    color: var(--ink-3);
+    font-size: 13px;
+}
+
+.app-config-form {
+    max-height: 62vh;
+    overflow-y: auto;
+    padding-right: 4px;
+}
+
+.app-config-field {
+    margin-bottom: 14px;
+}
+
+.app-config-label {
+    display: block;
+    font-weight: 600;
+    margin-bottom: 4px;
+    color: var(--ink);
+}
+
+.app-config-key {
+    margin-left: 8px;
+    font-weight: 400;
+    font-size: 12px;
+    color: var(--ink-3);
+}
+
+.app-config-check label {
+    font-weight: 400;
+    cursor: pointer;
+}
+
+.app-config-check input[type=checkbox] {
+    margin-right: 4px;
+}
+
+.app-config-group {
+    border-left: 2px solid var(--line-2);
+    padding-left: 12px;
+}
+
+.app-config-group > .app-config-label {
+    font-family: var(--font-display);
+    font-size: 15px;
+}
+
+.app-config-item {
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: var(--surface-2);
+    padding: 10px 12px 2px 12px;
+    margin-bottom: 10px;
+}
+
+.app-config-item-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+}
+
+.app-config-item-title {
+    font-weight: 600;
+}
+
+.app-config-map {
+    margin-bottom: 6px;
+    background: transparent;
+}
+
+.app-config-map td {
+    vertical-align: middle !important;
+}
+
+.app-config-map .app-config-field {
+    margin-bottom: 0;
+}
+
+.app-config-field.has-error .form-control {
+    border-color: var(--bad);
+}
+
+.app-config-json {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    line-height: 1.5;
+    tab-size: 2;
+}
+
+.app-config-empty {
+    color: var(--ink-3);
+}
+
+.modal-update {
+    width: auto;
+    max-width: 720px;
+    margin: 30px auto;
+}
+
+@media (max-width: 767px) {
+    .modal-update {
+        margin: 10px;
+    }
+}
+
+.update-versions {
+    font-size: 15px;
+}
+
+.update-section {
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: 15px;
+    margin: 18px 0 8px 0;
+}
+
+.release-notes {
+    max-height: 40vh;
+    overflow-y: auto;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: var(--surface-2);
+    padding: 12px 16px;
+}
+
+.release-notes h5 {
+    font-weight: 600;
+    margin: 14px 0 6px 0;
+}
+
+.release-notes h5:first-child {
+    margin-top: 0;
+}
+
+.release-notes ul {
+    padding-left: 20px;
+    margin-bottom: 8px;
+}
+
+.release-notes pre,
+.update-command {
+    font-family: var(--font-mono);
+    font-size: 12.5px;
+    white-space: pre-wrap;
+    word-break: break-all;
+}
+
+.update-hint {
+    color: var(--ink-3);
+    font-size: 13px;
+}
+
+.about-version {
+    font-size: 17px;
+    font-weight: 600;
+}
+
+.about-update {
+    margin: 24px auto 32px auto;
+    max-width: 640px;
+}
+
+.live-system {
+    margin-top: 28px;
+}
+
+.live-system-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 4px 14px;
+    margin-bottom: 12px;
+}
+
+.live-system-title {
+    font-family: var(--font-display);
+    font-size: 18px;
+    font-weight: 600;
+    margin: 0;
+}
+
+.live-system-note {
+    color: var(--ink-3);
+    font-size: 13px;
+}
+
+.live-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 16px;
+}
+
+.live-grid > .panel {
+    margin-bottom: 0;
+    min-width: 0;
+}
+
+.live-heading {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 8px;
+}
+
+.live-value {
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    color: var(--ink);
+    white-space: nowrap;
+}
+
+.chart-live {
+    height: 150px;
+}
+
+@media (max-width: 1199px) {
+    .live-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 767px) {
+    .live-grid {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}
+
+.iana-status {
+    margin: 6px 0 8px 0;
+    font-size: 13px;
+    color: var(--ink-2);
+}
+
+.iana-state {
+    display: inline-block;
+    font-weight: 600;
+    padding: 0 6px;
+    border-radius: 4px;
+    background: var(--surface-3);
+    color: var(--ink);
+    margin-right: 4px;
+}
+
+.iana-state-ok {
+    background: var(--ok-soft);
+    color: var(--ok);
+}
+
+.iana-state-warning {
+    background: var(--warn-soft);
+    color: var(--warn);
+}
+
+.iana-state-error {
+    background: var(--bad-soft);
+    color: var(--bad);
+}
+
+.iana-checked {
+    color: var(--ink-3);
+}
+

@@ -487,7 +487,7 @@ function queryLogs(pageNumber, liveUpdate) {
                     responseJSON.response.entries[i].clientIpAddress + "</td><td>" +
                     responseJSON.response.entries[i].protocol + "</td><td>" +
                     responseJSON.response.entries[i].responseType + (responseJSON.response.entries[i].responseRtt == null ? "" : "<div style=\"font-size: 12px;\">(" + responseJSON.response.entries[i].responseRtt.toFixed(2) + " ms)</div>") + "</td><td>" +
-                    responseJSON.response.entries[i].rcode + "</td><td style=\"word-break: break-all;\">" +
+                    formatRcode(responseJSON.response.entries[i].rcode) + "</td><td style=\"word-break: break-all;\">" +
                     htmlEncode(responseJSON.response.entries[i].qname == "" ? "." : responseJSON.response.entries[i].qname) + "</td><td>" +
                     (responseJSON.response.entries[i].qtype == null ? "" : responseJSON.response.entries[i].qtype) + "</td><td>" +
                     (responseJSON.response.entries[i].qclass == null ? "" : responseJSON.response.entries[i].qclass) + "</td><td style=\"word-break: break-all;\">" +
@@ -669,3 +669,29 @@ function exportQueryLogsCsv(objBtn) {
         }
     });
 }
+
+function formatRcode(rcode) {
+    switch (String(rcode)) {
+        case "NoError":
+            return "NOERROR";
+
+        case "FormatError":
+            return "FORMERR";
+
+        case "ServerFailure":
+            return "SERVFAIL";
+
+        case "NxDomain":
+            return "NXDOMAIN";
+
+        case "NotImplemented":
+            return "NOTIMP";
+
+        case "Refused":
+            return "REFUSED";
+
+        default:
+            return htmlEncode(String(rcode).toUpperCase());
+    }
+}
+

@@ -1,5 +1,65 @@
 # ZenitiumDNS Änderungsprotokoll
 
+## ZenitiumDNS 15.5.1 (Paket 15.5.1-3)
+Veröffentlicht: 27. September 2026
+
+### Lokale Root-Zone und Vertrauensanker (RFC 8806)
+- Der Resolver lädt die Root-Zone und die arpa-Zone von IANA, prüft sie vollständig und nutzt sie lokal. Die Root-Zone wird über ihre ZONEMD-Prüfsumme (RFC 8976) und die DNSSEC-Signaturen geprüft, die arpa-Zone über die Signaturen aller Einträge und den DS-Eintrag aus der Root-Zone. Delegationen zu Top-Level-Domains und Reverse-Zonen kommen aus dem Speicher, Anfragen nach nicht existierenden Top-Level-Domains beantwortet der Resolver selbst mit NXDOMAIN und signiertem NSEC-Beweis. Im Test gingen bei zufälligen Fantasie-TLDs und neuen Domains keine Anfragen mehr an die Root-Server.
+- Die Zonen werden stündlich per If-Modified-Since aktualisiert. Eine Zone, deren Prüfung scheitert, deren Signaturen ablaufen oder die älter als ihr SOA-Expire-Wert ist, wird nicht verwendet; der Resolver fragt dann wie bisher die Root-Server.
+- Die Vertrauensanker (Root-KSK) werden täglich aus `root-anchors.xml` von IANA übernommen, aber nur, wenn die Signatur der Datei auf die ICANN Root CA zurückführt. Beide ICANN-Wurzelzertifikate werden mitgeliefert.
+- Für alle drei lässt sich unter Einstellungen > Resolver wählen: automatisch von IANA, eine eigene, in der Weboberfläche bearbeitete Version oder aus (Root-Server fragen bzw. mitgelieferte Anker). Der Selbsttest zeigt Seriennummer, Prüfergebnis und Fehler.
+
+### Unverschlüsseltes DNS (Do53)
+- Neuer Do53-Modus: aktiviert, nur DDR beantworten und andere Anfragen verwerfen, nur DDR beantworten und andere Anfragen mit `REFUSED` ablehnen, oder deaktiviert (Port 53 wird nicht geöffnet). Anfragen von Loopback-Adressen werden immer beantwortet. Der Selbsttest warnt, wenn Do53 nur DDR beantwortet, es aber keine DDR-Einträge gibt.
+- Anfragen von Adressen auf Client-Sperrlisten werden über UDP jetzt vor dem Parsen verworfen.
+
+### Standardwerte für öffentliche Resolver
+- Ratenbegrenzung: je IPv4-Adresse 1000 Anfragen/s über UDP und 5000 über TCP, DoT, DoH und DoQ, ohne Sammellimit für `/24`, das CGNAT-Pools ausbremst; IPv6 `/64` 1000 und 5000, `/48` 10.000 und 50.000. Alle gebremsten UDP-Anfragen erhalten eine TC-Antwort, damit echte Clients sofort auf TCP ausweichen. Die bisherigen Standardwerte werden beim Update ersetzt, eigene Werte bleiben erhalten. Die Oberfläche prüft Bereiche und bietet „Empfohlene Werte eintragen“, der Selbsttest warnt vor Limits, die Clients hinter NAT treffen.
+- Maximale TTL im Cache 1 Tag statt 7 Tage, neue Obergrenze für negative Antworten von 1 Stunde (RFC 2308), auch für die an Clients ausgelieferte SOA-TTL.
+- Auflösungsfehler werden nicht mehr protokolliert und, falls eingeschaltet, einzeilig ohne Stacktrace. Beim Update wird dieses Protokoll abgeschaltet.
+- Protokolldateien werden 7 Tage aufbewahrt.
+
+### Blockierung
+- Firefox-Canary-Domain `use-application-dns.net` und Chromes Preflight-Prüfung `dns-tunnel-check.googlezip.net` lassen sich mit NXDOMAIN beantworten. Firefox bleibt dann beim Resolver des Netzes, Chrome fragt vor dem Öffnen vorab geladener Seiten nach.
+- Der Serverdomainname und alle Namen im TLS-Zertifikat stehen samt Subdomains automatisch auf der Allowlist, damit Listen wie HaGeZis DoH-Bypass den eigenen DoH- oder DoT-Hostnamen nicht sperren.
+
+### Apps
+- Der App-Store und das Installieren, Aktualisieren und Deinstallieren von Apps entfallen. Alle Apps kommen mit dem Paket; fehlende mitgelieferte Apps werden beim Start wieder bereitgestellt, vorhandene bei Paket-Updates aktualisiert.
+- Neue Konfigurationsoberfläche: ein Formular mit deutschen Bezeichnungen für jede App, abgeleitet aus ihrer `dnsApp.config`, mit Listen, Gruppen und Zuordnungstabellen. Im Expertenmodus lässt sich das JSON direkt bearbeiten; ungültiges JSON wird nicht gespeichert.
+
+### Übersicht und Überwachung
+- Zeiträume von 1, 5 und 30 Minuten mit sekundengenauer Auflösung; Standard bleibt die letzte Stunde.
+- Echtzeitgraphen interner Prozesse: CPU, Arbeitsspeicher, Garbage Collection, Threadpool, Warteschlangen, laufende Auflösungen, Anfragen pro Sekunde und Lock-Konflikte der letzten 5 Minuten, abschaltbar.
+- Neuer Wächter: Er prüft alle 10 Sekunden und greift bei schweren Problemen ein. Bei knappem Speicherplatz oder einer Protokolldatei über 512 MB pausiert er das Datei-Protokoll bis Mitternacht und löscht bei Platzmangel ältere Protokolldateien, bei Speichermangel kürzt er den Cache, eine überlaufende Statistik-Warteschlange leert er, einem ausgehungerten Threadpool gibt er mehr Threads, und fehlen DNS-Dienste, startet er sie bis zu dreimal neu. Eingriffe stehen im Protokoll und im Selbsttest.
+
+### Updates und Version
+- Die Update-Prüfung fragt höchstens einmal pro Stunde das neueste Release dieses Projekts auf GitHub ab und zeigt Änderungen, Download-Link für die passende Architektur, SHA256SUMS und den Installationsbefehl. Protokolliert wird nur ein tatsächlich gefundenes Update. Installiert wird nichts automatisch, weil der Dienst ohne Root-Rechte läuft.
+- Die Info zeigt die Paketversion, die Technitium-Basisversion, .NET-Laufzeit, Betriebssystem und Architektur.
+
+### Entfernt
+- Prometheus-Metriken, API-Tokens (auch `DNS_SERVER_AUTH_STATIC_SESSIONS`) und die API-Dokumentation. Die Weboberfläche nutzt ihre interne API weiter.
+
+### Verschlüsselung und Datenschutz
+- EDNS-Padding (RFC 7830, RFC 8467), standardmäßig aktiv: Antworten über DoT, DoH und DoQ werden auf ein Vielfaches von 468 Byte aufgefüllt, wenn die Anfrage selbst Padding enthält, wie bei Browsern und Android. Wahlweise immer oder aus, unter Einstellungen > Protokolle. Anfragen an verschlüsselte Forwarder werden auf 128 Byte aufgefüllt. Antworten über Port 53 werden nie aufgefüllt. Der Selbsttest warnt, wenn Padding ausgeschaltet ist.
+- Neue Protokolloption „Keine Client-Adressen protokollieren“: Einträge enthalten dann weder IP-Adressen noch Ports der Clients, auch nicht in den Meldungen der Ratenbegrenzung.
+- DDR antwortet zusätzlich auf `_dns.<Servername>` und den Namen im Zertifikat, damit Clients, die den Resolver-Namen schon kennen, die verschlüsselten Dienste direkt abfragen können.
+
+### Sicherheit
+- Behoben: Ein Nameserver konnte Einträge mit leeren Daten liefern, etwa einen A-Eintrag ohne Adresse. Jede Anfrage nach solchen Namen schrieb eine Ausnahme samt Stacktrace ins Protokoll, rund 1 KB pro Anfrage, womit sich die Platte füllen ließ; außerdem brach die Cache-Ansicht ab. Solche Einträge werden beim Einlesen abgelehnt.
+- Behoben: Eine abgelehnte Einstellungsänderung konnte einzelne Werte trotzdem übernehmen, etwa DDR ausschalten, während Do53 nur DDR beantwortet.
+
+### Behoben
+- Die automatische IPv6-Erkennung setzte funktionierende IPv6-Verbindungen aus. Schon 8 aufeinanderfolgende Fehler irgendeines IPv6-Nameservers reichten, und als Fehler zählten auch Anfragen, die nur abgebrochen wurden, weil ein IPv4-Server schneller geantwortet hatte, sowie Antworten wie REFUSED oder SERVFAIL. Auf einem öffentlichen Resolver passierte das ständig; danach waren Zonen, die nur IPv6-Nameserver haben, nicht mehr auflösbar. Jetzt zählen nur echte Transportfehler (Zeitüberschreitung, Netz oder Host nicht erreichbar) und Anfragen, die mindestens eine Sekunde unbeantwortet blieben. Ausgesetzt wird erst, wenn innerhalb von 30 Sekunden keine einzige IPv6-Antwort kam, mindestens 16 Fehler von mindestens 2 Adressen auftraten und eine Prüfung der IPv6-Root-Server ebenfalls scheitert. Jede Antwort über IPv6 hebt die Sperre sofort auf, beide Wechsel stehen im Log. Die Prüfung der IPv6-Root-Server wertet IPv6 erst als gestört, wenn zwei Runden im Abstand von 5 Sekunden mit je 4 zufälligen Root-Servern und 3 Sekunden Timeout scheitern; die Log-Meldung nennt die betroffenen Server und den Fehler. Beim Start läuft die erste Prüfung nach 15 Sekunden, wenn Cache und Blocklisten geladen sind, weil eine einzelne Prüfung unter Startlast IPv6 fälschlich für bis zu 10 Minuten aussetzen konnte. Bis zum Ergebnis (höchstens 120 Sekunden) nutzt der Server IPv6-Adressen nur nachrangig, auch bei Root-Hints und bei Nameservern ohne Glue, deren IPv4-Adresse dann zuerst aufgelöst wird. Auf einem Testserver ohne globales IPv6 scheiterten vorher die ersten Anfragen nach jedem Start mit SERVFAIL, jetzt werden sie in 110 bis 250 ms beantwortet, genauso schnell wie mit abgeschaltetem IPv6; danach läuft die Prüfung nur noch minütlich, solange IPv6 ausgesetzt ist. Im Test mit toten IPv6-Nameservern bei funktionierendem IPv6: vorher gesperrt und 0 von 20 Anfragen an eine reine IPv6-Zone beantwortet, jetzt nicht gesperrt und 20 von 20.
+- Beim Nachladen der lokalen Root- und arpa-Zone in den Cache (alle 15 Minuten und nach dem Leeren des Caches) brach der Vorgang mit „Operation is not valid due to the current state of the object“ ab, weil Nameserver-Einträge wiederverwendet wurden. Jetzt werden sie neu angelegt; schlägt eine einzelne Delegation fehl, wird der Rest trotzdem geladen und eine einzeilige Meldung protokolliert.
+- Clients, die eine DoH-, DoT- oder DoQ-Verbindung während der Antwort schließen oder zu langsam lesen, erzeugten Fehlermeldungen mit Stacktrace im Log. Diese Fälle werden jetzt still behandelt, die Anfrage wird trotzdem in Statistik und Anfrageprotokoll gezählt. Dasselbe gilt für DoH-Anfragen, deren Body nicht innerhalb des Empfangs-Timeouts ankommt, und für QUIC-Verbindungen, die mit „No route to host“ enden.
+- Clients, die für DNS-over-TLS nur TLS 1.0 oder 1.1 anbieten, erzeugten bei jedem Versuch die irreführende Meldung „The server mode SSL must use a certificate with the associated private key“ samt Stacktrace. Der Handshake wird jetzt still abgewiesen; TLS 1.2 und 1.3 sind unverändert.
+- Ein ungültiger Servername (SNI) im TLS- oder QUIC-Handshake, etwa mit Steuer- oder Leerzeichen, ließ die Verbindung mit einer Exception scheitern. Der Name wird jetzt ignoriert und die Verbindung normal bedient.
+- Das Anfrageprotokoll zeigt Antwortcodes wie `NOERROR` und `NXDOMAIN` statt deutscher Umschreibungen.
+
+### Weitere Änderungen
+- Konfigurationsformat Version 11 für die DNS-Einstellungen. Ältere Versionen von ZenitiumDNS können es nicht lesen.
+- Die Einträge im Technitium-Repository seit 15.5.1 wurden geprüft: Die gemeldeten Resolver-Probleme sind in der Basis bereits behoben oder betreffen Funktionen, die ZenitiumDNS nicht enthält (Block-Page-App, Syslog-Doppelformatierung).
+
 ## ZenitiumDNS 15.5.1 (Paket 15.5.1-2)
 Veröffentlicht: 26. September 2026
 

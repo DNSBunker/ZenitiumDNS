@@ -24,7 +24,6 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Net;
-using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
 using ZenitiumLibrary.Net.Dns;
@@ -200,15 +199,6 @@ namespace ZenitiumDns.Core
                 return (_dnsWebService._dnsServer.IPv6Mode != IPv6Mode.Disabled) && !IPv6Reachability.IsUnavailable;
             }
 
-            private static void AppendMetric(StringBuilder sb, string name, string type, object value, string help = null)
-            {
-                if (help is not null)
-                    sb.Append("# HELP ").Append(name).Append(' ').Append(help).Append('\n');
-
-                sb.Append("# TYPE ").Append(name).Append(' ').Append(type).Append('\n');
-                sb.Append(name).Append(' ').Append(value).Append('\n');
-            }
-
             private void WriteServerStatus(Utf8JsonWriter jsonWriter)
             {
                 DnsServer dnsServer = _dnsWebService._dnsServer;
@@ -282,6 +272,56 @@ namespace ZenitiumDns.Core
 
             #region public
 
+            public void GetLiveSystemStats(HttpContext context)
+            {
+                User sessionUser = _dnsWebService.GetSessionUser(context);
+
+                if (!_dnsWebService._authManager.IsPermitted(PermissionSection.Dashboard, sessionUser, PermissionFlag.View))
+                    throw new DnsWebServiceException("Access was denied.");
+
+                SystemMonitor systemMonitor = _dnsWebService._dnsServer.SystemMonitor;
+                Utf8JsonWriter jsonWriter = context.GetCurrentJsonWriter();
+
+                jsonWriter.WriteBoolean("enabled", systemMonitor.Enabled);
+                jsonWriter.WriteNumber("capacity", SystemMonitor.CAPACITY);
+                jsonWriter.WriteNumber("processorCount", Environment.ProcessorCount);
+
+                jsonWriter.WriteStartArray("samples");
+
+                if (systemMonitor.Enabled)
+                {
+                    long since = context.Request.GetQueryOrForm("since", long.Parse, 0);
+
+                    foreach (SystemMonitor.Sample sample in systemMonitor.GetSamples(since))
+                    {
+                        jsonWriter.WriteStartObject();
+                        jsonWriter.WriteNumber("seq", sample.Sequence);
+                        jsonWriter.WriteString("time", sample.Time);
+                        jsonWriter.WriteNumber("cpu", Math.Round(sample.CpuPercent, 1));
+                        jsonWriter.WriteNumber("workingSet", sample.WorkingSet);
+                        jsonWriter.WriteNumber("gcHeap", sample.GcHeap);
+                        jsonWriter.WriteNumber("gen0", Math.Round(sample.Gen0PerSecond, 2));
+                        jsonWriter.WriteNumber("gen1", Math.Round(sample.Gen1PerSecond, 2));
+                        jsonWriter.WriteNumber("gen2", Math.Round(sample.Gen2PerSecond, 2));
+                        jsonWriter.WriteNumber("gcPause", Math.Round(sample.GcPausePercent, 2));
+                        jsonWriter.WriteNumber("threads", sample.ThreadPoolThreads);
+                        jsonWriter.WriteNumber("threadPoolQueue", sample.ThreadPoolQueue);
+                        jsonWriter.WriteNumber("workItems", Math.Round(sample.WorkItemsPerSecond));
+                        jsonWriter.WriteNumber("lockContentions", Math.Round(sample.LockContentionsPerSecond, 1));
+                        jsonWriter.WriteNumber("queryQueue", sample.QueryQueue);
+                        jsonWriter.WriteNumber("resolverQueue", sample.ResolverQueue);
+                        jsonWriter.WriteNumber("statsQueue", sample.StatsQueue);
+                        jsonWriter.WriteNumber("pendingResolutions", sample.PendingResolutions);
+                        jsonWriter.WriteNumber("cacheEntries", sample.CacheEntries);
+                        jsonWriter.WriteNumber("qps", Math.Round(sample.QueriesPerSecond, 1));
+                        jsonWriter.WriteNumber("rateLimiterClients", sample.RateLimiterClients);
+                        jsonWriter.WriteEndObject();
+                    }
+                }
+
+                jsonWriter.WriteEndArray();
+            }
+
             public Task GetMetricsJson(HttpContext context)
             {
                 User sessionUser = _dnsWebService.GetSessionUser(context);
@@ -335,76 +375,6 @@ namespace ZenitiumDns.Core
                 return Task.CompletedTask;
             }
 
-            public ValueTask GetMetricsText(HttpContext context)
-            {
-                User sessionUser = _dnsWebService.GetSessionUser(context);
-
-                if (!_dnsWebService._authManager.IsPermitted(PermissionSection.Dashboard, sessionUser, PermissionFlag.View))
-                    throw new DnsWebServiceException("Access was denied.");
-
-                StatsManager statsManager = _dnsWebService._dnsServer.StatsManager;
-                StringBuilder sb = new StringBuilder(2048);
-
-                AppendMetric(sb, "uptime_seconds", "gauge", GetUptimeSeconds(), "Uptime of the DNS Server in seconds");
-                AppendMetric(sb, "start_time", "gauge", Convert.ToUInt64((_dnsWebService._uptimestamp - DateTime.UnixEpoch).TotalMilliseconds), "Start time of the DNS Server since epoch (milliseconds)");
-
-                AppendMetric(sb, "queries_total", "counter", statsManager.TotalQueries);
-                AppendMetric(sb, "no_error_total", "counter", statsManager.TotalNoError);
-                AppendMetric(sb, "server_failure_total", "counter", statsManager.TotalServerFailure);
-                AppendMetric(sb, "nx_domain_total", "counter", statsManager.TotalNxDomain);
-                AppendMetric(sb, "refused_total", "counter", statsManager.TotalRefused);
-                AppendMetric(sb, "authoritative_total", "counter", statsManager.TotalAuthoritative);
-                AppendMetric(sb, "recursive_total", "counter", statsManager.TotalRecursive);
-                AppendMetric(sb, "cached_total", "counter", statsManager.TotalCached);
-                AppendMetric(sb, "blocked_total", "counter", statsManager.TotalBlocked);
-                AppendMetric(sb, "dropped_total", "counter", statsManager.TotalDropped);
-                AppendMetric(sb, "clients_total", "gauge", statsManager.TotalClients, "Estimated number of unique client addresses since start");
-
-                sb.Append("# HELP request_filter_matches_total Requests dropped or refused by the request filter\n");
-                sb.Append("# TYPE request_filter_matches_total counter\n");
-
-                foreach (RequestFilterRule rule in Enum.GetValues<RequestFilterRule>())
-                    sb.Append("request_filter_matches_total{rule=\"").Append(rule.GetApiName()).Append("\"} ").Append(_dnsWebService._dnsServer.GetRequestFilterMatches(rule).ToString(CultureInfo.InvariantCulture)).Append('\n');
-
-                AppendMetric(sb, "client_blocklist_drops_total", "counter", _dnsWebService._dnsServer.ClientBlockListManager.Drops, "Queries and connections dropped because the client address is on a client block list");
-                AppendMetric(sb, "client_blocklist_ranges", "gauge", _dnsWebService._dnsServer.ClientBlockListManager.AddressRanges, "Address ranges loaded from client block lists");
-                AppendMetric(sb, "cache_entries", "gauge", _dnsWebService._dnsServer.CacheZoneManager.TotalEntries, "Number of records in the DNS cache");
-                AppendMetric(sb, "ipv6_upstream_available", "gauge", IsIPv6UpstreamAvailable() ? 1 : 0, "Whether outbound IPv6 queries to name servers are currently used (1) or suspended (0)");
-
-                sb.Append("# HELP queries_per_second Answered queries per second over the window\n");
-                sb.Append("# TYPE queries_per_second gauge\n");
-                sb.Append("# HELP response_time_milliseconds Response time of answered queries over the window\n");
-                sb.Append("# TYPE response_time_milliseconds gauge\n");
-
-                DateTime utcNow = DateTime.UtcNow;
-
-                foreach (int minutes in new int[] { 1, 5, 60 })
-                {
-                    ResponseTimeStats.Summary summary = statsManager.ResponseTimeStats.GetSummary(utcNow, minutes);
-                    string window = minutes + "m";
-
-                    sb.Append(CultureInfo.InvariantCulture, $"queries_per_second{{window=\"{window}\"}} {summary.QueriesPerSecond:0.###}\n");
-
-                    (string, double)[] stats = [("avg", summary.Average), ("p50", summary.Median), ("p95", summary.P95), ("p99", summary.P99), ("cached_avg", summary.CachedAverage), ("recursive_avg", summary.RecursiveAverage)];
-
-                    foreach ((string stat, double value) in stats)
-                        sb.Append(CultureInfo.InvariantCulture, $"response_time_milliseconds{{window=\"{window}\",stat=\"{stat}\"}} {value:0.###}\n");
-                }
-
-                byte[] data = Encoding.UTF8.GetBytes(sb.ToString());
-
-                HttpResponse response = context.Response;
-
-                response.StatusCode = StatusCodes.Status200OK;
-                response.Headers.CacheControl = "no-cache, no-store, must-revalidate";
-                response.Headers.Pragma = "no-cache";
-                response.Headers.Expires = "0";
-                response.ContentType = "text/plain; version=0.0.4";
-                response.ContentLength = data.Length;
-
-                return response.Body.WriteAsync(data);
-            }
-
             public async Task ProbeIPv6UpstreamAsync(HttpContext context)
             {
                 User sessionUser = _dnsWebService.GetSessionUser(context);
@@ -446,6 +416,21 @@ namespace ZenitiumDns.Core
 
                 switch (type)
                 {
+                    case DashboardStatsType.LastMinute:
+                        dashboardStats = _dnsWebService._dnsServer.StatsManager.GetShortTermStats(60, utcFormat);
+                        labelFormat = "HH:mm:ss";
+                        break;
+
+                    case DashboardStatsType.Last5Minutes:
+                        dashboardStats = _dnsWebService._dnsServer.StatsManager.GetShortTermStats(300, utcFormat);
+                        labelFormat = "HH:mm:ss";
+                        break;
+
+                    case DashboardStatsType.Last30Minutes:
+                        dashboardStats = _dnsWebService._dnsServer.StatsManager.GetShortTermStats(1800, utcFormat);
+                        labelFormat = "HH:mm:ss";
+                        break;
+
                     case DashboardStatsType.LastHour:
                         dashboardStats = _dnsWebService._dnsServer.StatsManager.GetLastHourMinuteWiseStats(utcFormat);
                         labelFormat = "HH:mm";
@@ -598,6 +583,18 @@ namespace ZenitiumDns.Core
 
                 switch (type)
                 {
+                    case DashboardStatsType.LastMinute:
+                        topStatsData = _dnsWebService._dnsServer.StatsManager.GetShortTermTopStats(60, statsType, limit);
+                        break;
+
+                    case DashboardStatsType.Last5Minutes:
+                        topStatsData = _dnsWebService._dnsServer.StatsManager.GetShortTermTopStats(300, statsType, limit);
+                        break;
+
+                    case DashboardStatsType.Last30Minutes:
+                        topStatsData = _dnsWebService._dnsServer.StatsManager.GetShortTermTopStats(1800, statsType, limit);
+                        break;
+
                     case DashboardStatsType.LastHour:
                         topStatsData = _dnsWebService._dnsServer.StatsManager.GetLastHourTopStats(statsType, limit);
                         break;

@@ -22,8 +22,10 @@ using ZenitiumDns.Core.Dns;
 using Microsoft.AspNetCore.Http;
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Net;
 using System.Net.Http;
+using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
@@ -47,9 +49,13 @@ namespace ZenitiumDns.Core
             readonly DnsWebService _dnsWebService;
             readonly Uri _updateCheckUri;
 
-            string _checkForUpdateJsonData;
-            DateTime _checkForUpdateJsonDataUpdatedOn;
-            const int CHECK_FOR_UPDATE_JSON_DATA_CACHE_TIME_SECONDS = 3600;
+            ReleaseInfo _latestRelease;
+            DateTime _latestReleaseCheckedOn;
+            string _loggedUpdateVersion;
+            readonly SemaphoreSlim _updateCheckLock = new SemaphoreSlim(1, 1);
+            const int UPDATE_CHECK_CACHE_SECONDS = 3600;
+            const int UPDATE_CHECK_FAILURE_CACHE_SECONDS = 600;
+            const int MAX_RELEASE_NOTES_LENGTH = 20000;
 
             #endregion
 
@@ -65,23 +71,92 @@ namespace ZenitiumDns.Core
 
             #region private
 
-            private async Task<string> GetCheckForUpdateJsonData()
+            private static bool TryParsePackageVersion(string value, out Version version, out int revision)
             {
-                if ((_checkForUpdateJsonData is null) || (DateTime.UtcNow > _checkForUpdateJsonDataUpdatedOn.AddSeconds(CHECK_FOR_UPDATE_JSON_DATA_CACHE_TIME_SECONDS)))
+                version = null;
+                revision = 0;
+
+                if (string.IsNullOrEmpty(value))
+                    return false;
+
+                value = value.Trim();
+
+                if (value.StartsWith('v') || value.StartsWith('V'))
+                    value = value.Substring(1);
+
+                int dash = value.IndexOf('-');
+                string versionPart = dash < 0 ? value : value.Substring(0, dash);
+
+                if (!Version.TryParse(versionPart, out version))
+                    return false;
+
+                if ((dash >= 0) && !int.TryParse(value.AsSpan(dash + 1), out revision))
+                    return false;
+
+                return true;
+            }
+
+            private static int ComparePackageVersions(string x, string y)
+            {
+                if (!TryParsePackageVersion(x, out Version xVersion, out int xRevision) || !TryParsePackageVersion(y, out Version yVersion, out int yRevision))
+                    return 0;
+
+                int result = xVersion.CompareTo(yVersion);
+                if (result != 0)
+                    return result;
+
+                return xRevision.CompareTo(yRevision);
+            }
+
+            private async Task<ReleaseInfo> GetLatestReleaseAsync(bool force)
+            {
+                await _updateCheckLock.WaitAsync();
+                try
                 {
-                    HttpClientNetworkHandler handler = new HttpClientNetworkHandler();
-                    handler.Proxy = _dnsWebService._dnsServer.Proxy;
-                    handler.NetworkType = HttpClientNetworkHandler.GetNetworkType(_dnsWebService._dnsServer.IPv6Mode);
-                    handler.DnsClient = _dnsWebService._dnsServer;
+                    ReleaseInfo cached = _latestRelease;
+                    int cacheSeconds = (cached is null) || (cached.Error is not null) ? UPDATE_CHECK_FAILURE_CACHE_SECONDS : UPDATE_CHECK_CACHE_SECONDS;
 
-                    using (HttpClient http = new HttpClient(handler))
+                    if ((cached is not null) && (DateTime.UtcNow < _latestReleaseCheckedOn.AddSeconds(force ? 60 : cacheSeconds)))
+                        return cached;
+
+                    ReleaseInfo release;
+
+                    try
                     {
-                        _checkForUpdateJsonData = await http.GetStringAsync(_updateCheckUri);
-                        _checkForUpdateJsonDataUpdatedOn = DateTime.UtcNow;
-                    }
-                }
+                        HttpClientNetworkHandler handler = new HttpClientNetworkHandler();
+                        handler.Proxy = _dnsWebService._dnsServer.Proxy;
+                        handler.NetworkType = HttpClientNetworkHandler.GetNetworkType(_dnsWebService._dnsServer.IPv6Mode);
+                        handler.DnsClient = _dnsWebService._dnsServer;
 
-                return _checkForUpdateJsonData;
+                        using (HttpClient http = new HttpClient(handler))
+                        {
+                            http.Timeout = TimeSpan.FromSeconds(20);
+                            http.DefaultRequestHeaders.UserAgent.ParseAdd("ZenitiumDNS/" + _dnsWebService.GetServerVersion());
+                            http.DefaultRequestHeaders.Accept.ParseAdd("application/vnd.github+json");
+
+                            string jsonData = await http.GetStringAsync(_updateCheckUri);
+
+                            using JsonDocument jsonDocument = JsonDocument.Parse(jsonData);
+                            release = ReleaseInfo.Parse(jsonDocument.RootElement);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        release = new ReleaseInfo() { Error = ex.Message };
+
+                        if ((cached is null) || (cached.Error is null))
+                            _dnsWebService._log.Write("DNS Server failed to check for updates: " + _updateCheckUri.AbsoluteUri, ex);
+                    }
+
+                    _latestRelease = release;
+                    _latestReleaseCheckedOn = DateTime.UtcNow;
+
+                    return release;
+                }
+                finally
+                {
+                    _updateCheckLock.Release();
+                }
             }
 
             private static string GetHttpUrlOrNull(string url)
@@ -99,53 +174,73 @@ namespace ZenitiumDns.Core
             public async Task CheckForUpdateAsync(HttpContext context)
             {
                 Utf8JsonWriter jsonWriter = context.GetCurrentJsonWriter();
+                string currentVersion = _dnsWebService.GetServerVersion();
+
+                jsonWriter.WriteString("currentVersion", currentVersion);
 
                 if (!_dnsWebService._dnsServer.EnableCheckForUpdate || (_updateCheckUri is null))
                 {
                     jsonWriter.WriteBoolean("dnsServerEnableCheckForUpdate", false);
                     jsonWriter.WriteBoolean("updateAvailable", false);
-
-                    _dnsWebService._log.Write(_dnsWebService.GetRemoteEndPoint(context), "Check for update was done {dnsServerEnableCheckForUpdate: False; updateAvailable: False;}");
                     return;
                 }
 
-                try
+                ReleaseInfo release = await GetLatestReleaseAsync(context.Request.GetQueryOrForm("force", bool.Parse, false));
+
+                jsonWriter.WriteBoolean("dnsServerEnableCheckForUpdate", true);
+
+                if (release.Error is not null)
                 {
-                    string jsonData = await GetCheckForUpdateJsonData();
-                    using JsonDocument jsonDocument = JsonDocument.Parse(jsonData);
-                    JsonElement jsonResponse = jsonDocument.RootElement;
+                    jsonWriter.WriteBoolean("updateAvailable", false);
+                    jsonWriter.WriteString("updateCheckError", release.Error);
+                    return;
+                }
 
-                    string updateVersion = jsonResponse.GetProperty("updateVersion").GetString();
-                    string updateTitle = jsonResponse.GetPropertyValue("updateTitle", null);
-                    string updateMessage = jsonResponse.GetPropertyValue("updateMessage", null);
-                    string downloadLink = GetHttpUrlOrNull(jsonResponse.GetPropertyValue("downloadLink", null));
-                    string instructionsLink = GetHttpUrlOrNull(jsonResponse.GetPropertyValue("instructionsLink", null));
-                    string changeLogLink = GetHttpUrlOrNull(jsonResponse.GetPropertyValue("changeLogLink", null));
+                bool updateAvailable = ComparePackageVersions(release.Version, currentVersion) > 0;
 
-                    bool updateAvailable = new Version(updateVersion) > _dnsWebService._currentVersion;
+                jsonWriter.WriteBoolean("updateAvailable", updateAvailable);
+                jsonWriter.WriteString("updateVersion", release.Version);
+                jsonWriter.WriteString("updateTitle", release.Title);
+                jsonWriter.WriteString("releaseUrl", release.HtmlUrl);
+                jsonWriter.WriteString("publishedAt", release.PublishedAt);
 
-                    jsonWriter.WriteBoolean("dnsServerEnableCheckForUpdate", true);
-                    jsonWriter.WriteBoolean("updateAvailable", updateAvailable);
-                    jsonWriter.WriteString("updateVersion", updateVersion);
-                    jsonWriter.WriteString("currentVersion", _dnsWebService.GetServerVersion());
-
-                    if (updateAvailable)
+                if (updateAvailable)
+                {
+                    string architecture = RuntimeInformation.OSArchitecture switch
                     {
-                        jsonWriter.WriteString("updateTitle", updateTitle);
-                        jsonWriter.WriteString("updateMessage", updateMessage);
-                        jsonWriter.WriteString("downloadLink", downloadLink);
-                        jsonWriter.WriteString("instructionsLink", instructionsLink);
-                        jsonWriter.WriteString("changeLogLink", changeLogLink);
+                        Architecture.X64 => "amd64",
+                        Architecture.Arm64 => "arm64",
+                        _ => RuntimeInformation.OSArchitecture.ToString().ToLowerInvariant()
+                    };
+
+                    ReleaseAsset debAsset = null;
+                    ReleaseAsset checksumsAsset = null;
+
+                    foreach (ReleaseAsset asset in release.Assets)
+                    {
+                        if (asset.Name.EndsWith("_" + architecture + ".deb", StringComparison.OrdinalIgnoreCase))
+                            debAsset = asset;
+                        else if (asset.Name.Equals("SHA256SUMS", StringComparison.OrdinalIgnoreCase))
+                            checksumsAsset = asset;
                     }
 
-                    _dnsWebService._log.Write(_dnsWebService.GetRemoteEndPoint(context), "Check for update was done {dnsServerEnableCheckForUpdate: True; updateAvailable: " + updateAvailable + "; updateVersion: " + updateVersion + ";}");
-                }
-                catch (Exception ex)
-                {
-                    _dnsWebService._log.Write(_dnsWebService.GetRemoteEndPoint(context), "Check for update was done {dnsServerEnableCheckForUpdate: True; updateAvailable: False;}", ex);
+                    jsonWriter.WriteString("releaseNotes", release.Body);
 
-                    jsonWriter.WriteBoolean("dnsServerEnableCheckForUpdate", true);
-                    jsonWriter.WriteBoolean("updateAvailable", false);
+                    if (debAsset is not null)
+                    {
+                        jsonWriter.WriteString("downloadName", debAsset.Name);
+                        jsonWriter.WriteString("downloadLink", debAsset.Url);
+                        jsonWriter.WriteNumber("downloadSize", debAsset.Size);
+                    }
+
+                    if (checksumsAsset is not null)
+                        jsonWriter.WriteString("checksumsLink", checksumsAsset.Url);
+
+                    if (!release.Version.Equals(_loggedUpdateVersion, StringComparison.Ordinal))
+                    {
+                        _loggedUpdateVersion = release.Version;
+                        _dnsWebService._log.Write("ZenitiumDNS " + release.Version + " is available (installed: " + currentVersion + "): " + release.HtmlUrl);
+                    }
                 }
             }
 
@@ -364,6 +459,59 @@ namespace ZenitiumDns.Core
             }
 
             #endregion
+
+            sealed class ReleaseAsset
+            {
+                public string Name;
+                public string Url;
+                public long Size;
+            }
+
+            sealed class ReleaseInfo
+            {
+                public string Version;
+                public string Title;
+                public string Body;
+                public string HtmlUrl;
+                public string PublishedAt;
+                public List<ReleaseAsset> Assets = new List<ReleaseAsset>();
+                public string Error;
+
+                public static ReleaseInfo Parse(JsonElement jsonRelease)
+                {
+                    ReleaseInfo release = new ReleaseInfo();
+
+                    string tagName = jsonRelease.GetProperty("tag_name").GetString();
+
+                    if (!TryParsePackageVersion(tagName, out _, out _))
+                        throw new InvalidDataException("The latest release has an invalid version tag: " + tagName);
+
+                    release.Version = tagName.TrimStart('v', 'V');
+                    release.Title = jsonRelease.GetPropertyValue("name", null) ?? ("ZenitiumDNS " + release.Version);
+                    release.Body = jsonRelease.GetPropertyValue("body", null);
+                    release.HtmlUrl = GetHttpUrlOrNull(jsonRelease.GetPropertyValue("html_url", null));
+                    release.PublishedAt = jsonRelease.GetPropertyValue("published_at", null);
+
+                    if ((release.Body is not null) && (release.Body.Length > MAX_RELEASE_NOTES_LENGTH))
+                        release.Body = release.Body.Substring(0, MAX_RELEASE_NOTES_LENGTH);
+
+                    if (jsonRelease.TryGetProperty("assets", out JsonElement jsonAssets) && (jsonAssets.ValueKind == JsonValueKind.Array))
+                    {
+                        foreach (JsonElement jsonAsset in jsonAssets.EnumerateArray())
+                        {
+                            string name = jsonAsset.GetPropertyValue("name", null);
+                            string url = GetHttpUrlOrNull(jsonAsset.GetPropertyValue("browser_download_url", null));
+
+                            if ((name is null) || (url is null) || !url.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+                                continue;
+
+                            release.Assets.Add(new ReleaseAsset() { Name = name, Url = url, Size = jsonAsset.TryGetProperty("size", out JsonElement jsonSize) && jsonSize.TryGetInt64(out long size) ? size : 0 });
+                        }
+                    }
+
+                    return release;
+                }
+            }
         }
     }
 }

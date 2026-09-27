@@ -63,7 +63,7 @@ using ZenitiumLibrary.Net.ProxyProtocol;
 
 namespace ZenitiumDns.Core.Dns
 {
-#pragma warning disable CA1416 // Validate platform compatibility
+#pragma warning disable CA1416
 
     public enum DnsServerRecursion : byte
     {
@@ -78,6 +78,21 @@ namespace ZenitiumDns.Core.Dns
         AnyAddress = 0,
         NxDomain = 1,
         CustomAddress = 2
+    }
+
+    public enum DnsServerDo53Mode : byte
+    {
+        Enabled = 0,
+        DdrOnlyDrop = 1,
+        DdrOnlyRefused = 2,
+        Disabled = 3
+    }
+
+    public enum DnsServerEDnsPaddingMode : byte
+    {
+        Disabled = 0,
+        WhenRequested = 1,
+        Always = 2
     }
 
     public sealed class DnsServer : IAsyncDisposable, IDisposable, IDnsClient
@@ -165,11 +180,16 @@ namespace ZenitiumDns.Core.Dns
         IReadOnlyDictionary<int, (int, int)> _qpsPrefixLimitsIPv4 = GetDefaultQpsPrefixLimitsIPv4();
         IReadOnlyDictionary<int, (int, int)> _qpsPrefixLimitsIPv6 = GetDefaultQpsPrefixLimitsIPv6();
         int _rateLimitBurstSeconds = DEFAULT_RATE_LIMIT_BURST_SECONDS;
-        int _rateLimitUdpTruncationPercentage = 50;
+        int _rateLimitUdpTruncationPercentage = DEFAULT_RATE_LIMIT_UDP_TRUNCATION_PERCENTAGE;
         IReadOnlyCollection<NetworkAddress> _rateLimitBypassList;
         readonly ClientRateLimiter _rateLimiter = new ClientRateLimiter();
         readonly ClientBlockListManager _clientBlockListManager;
+        readonly SystemMonitor _systemMonitor;
+        readonly Watchdog _watchdog;
+        readonly IanaDataManager _ianaDataManager;
         const int DEFAULT_RATE_LIMIT_BURST_SECONDS = 5;
+        const int DEFAULT_RATE_LIMIT_UDP_TRUNCATION_PERCENTAGE = 100;
+        public const int MAX_RATE_LIMIT_QPS = 1000000;
         const string DDR_DOMAIN = "_dns.resolver.arpa";
         const uint DDR_RECORD_TTL = 3600;
 
@@ -207,6 +227,14 @@ namespace ZenitiumDns.Core.Dns
         string _dnsTlsCertificateKeyPath;
         bool _enableDdr = true;
         bool _ddrOnlyUnencrypted = true;
+        DnsServerDo53Mode _do53Mode = DnsServerDo53Mode.Enabled;
+        bool _blockFirefoxCanaryDomain;
+        bool _forceChromePreflight;
+        DnsServerEDnsPaddingMode _eDnsPaddingMode = DnsServerEDnsPaddingMode.WhenRequested;
+        const int EDNS_RESPONSE_PADDING_BLOCK_SIZE = 468;
+        volatile string[] _autoAllowedNames = [];
+        const string FIREFOX_CANARY_DOMAIN = "use-application-dns.net";
+        const string CHROME_PREFLIGHT_DOMAIN = "dns-tunnel-check.googlezip.net";
         X509Certificate2 _dnsTlsCertificate;
         string _dnsOverHttpRealIpHeader = "X-Real-IP";
 
@@ -276,7 +304,8 @@ namespace ZenitiumDns.Core.Dns
 
         Timer _ipv6ProbeTimer;
         readonly Lock _ipv6ProbeTimerLock = new Lock();
-        const int IPV6_PROBE_TIMER_INTERVAL = 120000;
+        const int IPV6_PROBE_TIMER_INTERVAL = 60000;
+        const int IPV6_STARTUP_PROBE_DELAY = 15000;
         readonly Lock _rateLimitMaintenanceTimerLock = new Lock();
         const int RATE_LIMIT_MAINTENANCE_TIMER_INTERVAL = 10000;
 
@@ -347,6 +376,11 @@ namespace ZenitiumDns.Core.Dns
 
             _statsManager = new StatsManager(this);
             _clientBlockListManager = new ClientBlockListManager(this);
+            _systemMonitor = new SystemMonitor(this);
+            _watchdog = new Watchdog(this);
+            _ianaDataManager = new IanaDataManager(this);
+
+            IPv6Reachability.AvailabilityChanged += IPv6Reachability_AvailabilityChanged;
 
             ApplyRateLimits();
 
@@ -400,6 +434,8 @@ namespace ZenitiumDns.Core.Dns
 
             await StopAsync();
 
+            IPv6Reachability.AvailabilityChanged -= IPv6Reachability_AvailabilityChanged;
+
             StopTlsCertificateUpdateTimer();
 
             _authZoneManager?.Dispose();
@@ -413,6 +449,9 @@ namespace ZenitiumDns.Core.Dns
 
             _statsManager?.Dispose();
             _clientBlockListManager?.Dispose();
+            _systemMonitor?.Dispose();
+            _watchdog?.Dispose();
+            _ianaDataManager?.Dispose();
 
             _resolverTaskPool?.Dispose();
 
@@ -481,7 +520,6 @@ namespace ZenitiumDns.Core.Dns
             catch (FileNotFoundException)
             {
                 EnableCheckForUpdate = true;
-                _dnsApplicationManager.EnableAutomaticUpdate = true;
 
                 IPv6Mode = IPv6Mode.Enabled;
                 DnssecValidation = true;
@@ -501,8 +539,10 @@ namespace ZenitiumDns.Core.Dns
 
                 BlockingAnswerTtl = 300;
 
-                ResolverLogManager = _log;
+                ResolverLogManager = null;
                 _statsManager.MaxStatFileDays = 30;
+                _systemMonitor.Enabled = true;
+                _watchdog.Enabled = true;
 
                 lock (_saveLock)
                 {
@@ -586,7 +626,7 @@ namespace ZenitiumDns.Core.Dns
             BinaryReader bR = new BinaryReader(s);
 
             int version = bR.ReadByte();
-            if ((version < 1) || (version > 9))
+            if ((version < 1) || (version > 11))
                 throw new InvalidDataException("DNS Server config version not supported.");
 
             string serverDomain = s.ReadShortString();
@@ -660,7 +700,7 @@ namespace ZenitiumDns.Core.Dns
             else
                 _enableCheckForUpdate = true;
 
-            _dnsApplicationManager.EnableAutomaticUpdate = bR.ReadBoolean();
+            bR.ReadBoolean();
 
             if (version >= 3)
             {
@@ -708,10 +748,16 @@ namespace ZenitiumDns.Core.Dns
                 Dictionary<int, (int, int)> prefixLimitsIPv6 = ReadPrefixLimits(bR);
                 int burstSeconds = bR.ReadInt32();
 
-                if (version >= 9)
+                if (version >= 10)
                 {
                     _qpsPrefixLimitsIPv4 = prefixLimitsIPv4;
                     _qpsPrefixLimitsIPv6 = prefixLimitsIPv6;
+                    _rateLimitBurstSeconds = burstSeconds;
+                }
+                else if (version == 9)
+                {
+                    _qpsPrefixLimitsIPv4 = HasSameEntries(prefixLimitsIPv4, new Dictionary<int, (int, int)>() { { 32, (100, 400) }, { 24, (1000, 4000) } }) ? GetDefaultQpsPrefixLimitsIPv4() : prefixLimitsIPv4;
+                    _qpsPrefixLimitsIPv6 = HasSameEntries(prefixLimitsIPv6, new Dictionary<int, (int, int)>() { { 64, (100, 400) }, { 56, (1000, 4000) } }) ? GetDefaultQpsPrefixLimitsIPv6() : prefixLimitsIPv6;
                     _rateLimitBurstSeconds = burstSeconds;
                 }
                 else
@@ -725,6 +771,9 @@ namespace ZenitiumDns.Core.Dns
             }
 
             _rateLimitUdpTruncationPercentage = bR.ReadInt32();
+
+            if ((version < 10) && (_rateLimitUdpTruncationPercentage == 50))
+                _rateLimitUdpTruncationPercentage = DEFAULT_RATE_LIMIT_UDP_TRUNCATION_PERCENTAGE;
 
             _rateLimitBypassList = AuthZoneInfo.ReadNetworkAddressesFrom(bR);
 
@@ -1025,7 +1074,7 @@ namespace ZenitiumDns.Core.Dns
             _forwarderConcurrency = bR.ReadInt32();
 
             bool ignoreResolverLogs = bR.ReadBoolean();
-            if (ignoreResolverLogs)
+            if (ignoreResolverLogs || (version < 10))
                 _resolverLog = null;
             else
                 _resolverLog = _log;
@@ -1111,6 +1160,31 @@ namespace ZenitiumDns.Core.Dns
                 _ddrOnlyUnencrypted = true;
             }
 
+            if (version >= 10)
+            {
+                _do53Mode = (DnsServerDo53Mode)bR.ReadByte();
+                _cacheZoneManager.MaximumNegativeRecordTtl = bR.ReadUInt32();
+                _blockFirefoxCanaryDomain = bR.ReadBoolean();
+                _forceChromePreflight = bR.ReadBoolean();
+                _systemMonitor.Enabled = bR.ReadBoolean();
+                _watchdog.Enabled = bR.ReadBoolean();
+                _ianaDataManager.LoadModes((IanaDataMode)bR.ReadByte(), (IanaDataMode)bR.ReadByte(), (IanaDataMode)bR.ReadByte());
+            }
+            else
+            {
+                _systemMonitor.Enabled = true;
+                _watchdog.Enabled = true;
+                _do53Mode = DnsServerDo53Mode.Enabled;
+                _cacheZoneManager.MaximumNegativeRecordTtl = CacheZoneManager.MAXIMUM_NEGATIVE_RECORD_TTL;
+                _blockFirefoxCanaryDomain = false;
+                _forceChromePreflight = false;
+            }
+
+            if (version >= 11)
+                _eDnsPaddingMode = (DnsServerEDnsPaddingMode)bR.ReadByte();
+            else
+                _eDnsPaddingMode = DnsServerEDnsPaddingMode.WhenRequested;
+
             if (_dnsTlsCertificatePath is null)
             {
                 StopTlsCertificateUpdateTimer();
@@ -1133,6 +1207,8 @@ namespace ZenitiumDns.Core.Dns
 
             _blockedZoneManager.UpdateServerDomain();
             _blockListZoneManager.UpdateServerDomain();
+
+            UpdateAutoAllowedNames();
         }
 
         private void WriteConfigTo(Stream s)
@@ -1140,7 +1216,7 @@ namespace ZenitiumDns.Core.Dns
             BinaryWriter bW = new BinaryWriter(s);
 
             bW.Write(Encoding.ASCII.GetBytes("DC"));
-            bW.Write((byte)9);
+            bW.Write((byte)11);
 
             s.WriteShortString(_serverDomain);
 
@@ -1165,7 +1241,7 @@ namespace ZenitiumDns.Core.Dns
 
 
             bW.Write(_enableCheckForUpdate);
-            bW.Write(_dnsApplicationManager.EnableAutomaticUpdate);
+            bW.Write(false);
 
             bW.Write((byte)_ipv6Mode);
             bW.Write(_enableUdpSocketPool);
@@ -1392,6 +1468,17 @@ namespace ZenitiumDns.Core.Dns
                 s.WriteShortString(listUrl.AbsoluteUri);
 
             bW.Write(_clientBlockListManager.UpdateIntervalHours);
+
+            bW.Write((byte)_do53Mode);
+            bW.Write(_cacheZoneManager.MaximumNegativeRecordTtl);
+            bW.Write(_blockFirefoxCanaryDomain);
+            bW.Write(_forceChromePreflight);
+            bW.Write(_systemMonitor.Enabled);
+            bW.Write(_watchdog.Enabled);
+            bW.Write((byte)_ianaDataManager.RootZoneMode);
+            bW.Write((byte)_ianaDataManager.ArpaZoneMode);
+            bW.Write((byte)_ianaDataManager.TrustAnchorMode);
+            bW.Write((byte)_eDnsPaddingMode);
         }
 
         #endregion
@@ -1469,6 +1556,8 @@ namespace ZenitiumDns.Core.Dns
             _dnsTlsCertificate = serverCertificate;
             _dnsTlsCertificateLastModifiedOn = TlsCertificateFile.GetLastWriteTimeUtc(tlsCertificatePath, tlsCertificateKeyPath);
 
+            UpdateAutoAllowedNames();
+
             _log.Write("DNS Server TLS certificate was loaded: " + tlsCertificatePath);
         }
 
@@ -1482,6 +1571,8 @@ namespace ZenitiumDns.Core.Dns
             _dnsTlsCertificatePath = null;
             _dnsTlsCertificatePassword = null;
             _dnsTlsCertificateKeyPath = null;
+
+            UpdateAutoAllowedNames();
 
             StopTlsCertificateUpdateTimer();
         }
@@ -1740,6 +1831,9 @@ namespace ZenitiumDns.Core.Dns
                         if (remoteEndPoint is not IPEndPoint remoteEP)
                             continue;
 
+                        if ((protocol == DnsTransportProtocol.Udp) && IsClientBlocked(remoteEP.Address))
+                            continue;
+
                         try
                         {
                             recvBufferStream.SetLength(receivedBytes);
@@ -1800,7 +1894,7 @@ namespace ZenitiumDns.Core.Dns
                                 }
                             }
 
-                            if (IsClientBlocked(remoteEP.Address))
+                            if (((protocol != DnsTransportProtocol.Udp) || !ReferenceEquals(remoteEP, returnEP)) && IsClientBlocked(remoteEP.Address))
                                 continue;
 
                             if (IsRateLimited(remoteEP.Address, DnsTransportProtocol.Udp))
@@ -2079,18 +2173,25 @@ namespace ZenitiumDns.Core.Dns
                         SslStream tlsStream = new SslStream(new NetworkStream(socket));
                         string serverName = null;
 
-                        await ZenitiumLibrary.TaskExtensions.TimeoutAsync(delegate (CancellationToken cancellationToken1)
+                        try
                         {
-                            return tlsStream.AuthenticateAsServerAsync(delegate (SslStream stream, SslClientHelloInfo clientHelloInfo, object state, CancellationToken cancellationToken)
+                            await ZenitiumLibrary.TaskExtensions.TimeoutAsync(delegate (CancellationToken cancellationToken1)
                             {
-                                serverName = clientHelloInfo.ServerName;
-                                return ValueTask.FromResult(_dotSslServerAuthenticationOptions);
-                            }, null, cancellationToken1);
-                        }, _tcpReceiveTimeout);
+                                return tlsStream.AuthenticateAsServerAsync(delegate (SslStream stream, SslClientHelloInfo clientHelloInfo, object state, CancellationToken cancellationToken)
+                                {
+                                    serverName = clientHelloInfo.ServerName;
+                                    return ValueTask.FromResult(_dotSslServerAuthenticationOptions);
+                                }, null, cancellationToken1);
+                            }, _tcpReceiveTimeout);
+                        }
+                        catch (NotSupportedException)
+                        {
+                            return;
+                        }
 
                         NameServerAddress dnsEP;
 
-                        if (string.IsNullOrEmpty(serverName))
+                        if (string.IsNullOrEmpty(serverName) || !DnsClient.IsDomainNameValid(serverName))
                             dnsEP = new NameServerAddress(socket.LocalEndPoint, DnsTransportProtocol.Tls);
                         else
                             dnsEP = new NameServerAddress(serverName, socket.LocalEndPoint as IPEndPoint, DnsTransportProtocol.Tls);
@@ -2238,6 +2339,9 @@ namespace ZenitiumDns.Core.Dns
                     return;
                 }
 
+                if (protocol == DnsTransportProtocol.Tls)
+                    response = ApplyEDnsPadding(request, response);
+
                 await ZenitiumLibrary.TaskExtensions.TimeoutAsync(async delegate (CancellationToken cancellationToken1)
                 {
                     await writeSemaphore.WaitAsync(cancellationToken1);
@@ -2259,6 +2363,12 @@ namespace ZenitiumDns.Core.Dns
             {
             }
             catch (IOException)
+            {
+            }
+            catch (TimeoutException)
+            {
+            }
+            catch (OperationCanceledException)
             {
             }
             catch (Exception ex)
@@ -2318,7 +2428,7 @@ namespace ZenitiumDns.Core.Dns
             {
                 NameServerAddress dnsEP;
 
-                if (string.IsNullOrEmpty(quicConnection.TargetHostName))
+                if (string.IsNullOrEmpty(quicConnection.TargetHostName) || !DnsClient.IsDomainNameValid(quicConnection.TargetHostName))
                     dnsEP = new NameServerAddress(quicConnection.LocalEndPoint, DnsTransportProtocol.Quic);
                 else
                     dnsEP = new NameServerAddress(quicConnection.TargetHostName, quicConnection.LocalEndPoint, DnsTransportProtocol.Quic);
@@ -2339,19 +2449,11 @@ namespace ZenitiumDns.Core.Dns
                     _ = ProcessQuicStreamRequestAsync(quicStream, quicConnection.RemoteEndPoint, dnsEP);
                 }
             }
-            catch (QuicException ex)
+            catch (QuicException)
             {
-                switch (ex.QuicError)
-                {
-                    case QuicError.ConnectionIdle:
-                    case QuicError.ConnectionAborted:
-                    case QuicError.ConnectionTimeout:
-                        break;
-
-                    default:
-                        _log.Write(quicConnection.RemoteEndPoint, DnsTransportProtocol.Quic, ex);
-                        break;
-                }
+            }
+            catch (SocketException)
+            {
             }
             catch (OperationCanceledException)
             {
@@ -2397,6 +2499,8 @@ namespace ZenitiumDns.Core.Dns
                     _statsManager.QueueUpdate(null, remoteEP, DnsTransportProtocol.Quic, null, false);
                     return;
                 }
+
+                response = ApplyEDnsPadding(request, response);
 
                 await response.WriteToTcpAsync(quicStream, sharedBuffer);
 
@@ -2581,6 +2685,11 @@ namespace ZenitiumDns.Core.Dns
                             {
                                 return;
                             }
+                            catch (TimeoutException)
+                            {
+                                context.Abort();
+                                return;
+                            }
                             catch (InvalidDataException)
                             {
                                 response.StatusCode = 413;
@@ -2610,6 +2719,11 @@ namespace ZenitiumDns.Core.Dns
                     return;
                 }
 
+                dnsResponse = ApplyEDnsPadding(dnsRequest, dnsResponse);
+
+                _queryLog?.Write(remoteEP, DnsTransportProtocol.Https, dnsRequest, dnsResponse);
+                _statsManager.QueueUpdate(dnsRequest, remoteEP, DnsTransportProtocol.Https, dnsResponse, false, Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds);
+
                 using (MemoryStream mS = new MemoryStream(512))
                 {
                     dnsResponse.WriteTo(mS);
@@ -2618,19 +2732,26 @@ namespace ZenitiumDns.Core.Dns
                     response.ContentType = "application/dns-message";
                     response.ContentLength = mS.Length;
 
-                    await ZenitiumLibrary.TaskExtensions.TimeoutAsync(async delegate (CancellationToken cancellationToken1)
+                    try
                     {
-                        await using (Stream s = response.Body)
+                        await ZenitiumLibrary.TaskExtensions.TimeoutAsync(async delegate (CancellationToken cancellationToken1)
                         {
-                            await mS.CopyToAsync(s, 512, cancellationToken1);
-                        }
-                    }, _tcpSendTimeout, cancellationToken);
+                            await using (Stream s = response.Body)
+                            {
+                                await mS.CopyToAsync(s, 512, cancellationToken1);
+                            }
+                        }, _tcpSendTimeout, cancellationToken);
+                    }
+                    catch (Exception ex) when ((ex is OperationCanceledException) || (ex is TimeoutException))
+                    {
+                        context.Abort();
+                    }
                 }
-
-                _queryLog?.Write(remoteEP, DnsTransportProtocol.Https, dnsRequest, dnsResponse);
-                _statsManager.QueueUpdate(dnsRequest, remoteEP, DnsTransportProtocol.Https, dnsResponse, false, Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds);
             }
             catch (IOException)
+            {
+            }
+            catch (OperationCanceledException)
             {
             }
             catch (Exception ex)
@@ -2640,6 +2761,29 @@ namespace ZenitiumDns.Core.Dns
 
                 _log.Write(remoteEP, DnsTransportProtocol.Https, ex);
             }
+        }
+
+        private DnsDatagram ApplyEDnsPadding(DnsDatagram request, DnsDatagram response)
+        {
+            switch (_eDnsPaddingMode)
+            {
+                case DnsServerEDnsPaddingMode.WhenRequested:
+                    if (!request.HasEDnsPadding())
+                        return response;
+
+                    break;
+
+                case DnsServerEDnsPaddingMode.Always:
+                    if (request.EDNS is null)
+                        return response;
+
+                    break;
+
+                default:
+                    return response;
+            }
+
+            return response.CloneWithPadding(EDNS_RESPONSE_PADDING_BLOCK_SIZE);
         }
 
         private static async Task CopyDnsMessageAsync(Stream source, MemoryStream destination, CancellationToken cancellationToken)
@@ -2745,6 +2889,14 @@ namespace ZenitiumDns.Core.Dns
 
         private async ValueTask<DnsDatagram> ProcessRequestAsync(DnsDatagram request, IPEndPoint remoteEP, DnsTransportProtocol protocol, bool isRecursionAllowed)
         {
+            if (IsDo53Restricted(request, remoteEP, protocol))
+            {
+                if (_do53Mode == DnsServerDo53Mode.DdrOnlyRefused)
+                    return new DnsDatagram(request.Identifier, true, request.OPCODE, false, false, request.RecursionDesired, isRecursionAllowed, false, request.CheckingDisabled, DnsResponseCode.Refused, request.Question, null, null, null, request.EDNS is null ? ushort.MinValue : _udpPayloadSize, EDnsHeaderFlags.None, [new EDnsOption(EDnsOptionCode.EXTENDED_DNS_ERROR, new EDnsExtendedDnsErrorOptionData(EDnsExtendedDnsErrorCode.Prohibited, null))]) { Tag = ResponseTypeTags.Authoritative };
+
+                return null;
+            }
+
             if (IsRequestFiltered(request, remoteEP))
                 return GetFilteredRequestResponse(request, protocol, isRecursionAllowed);
 
@@ -2887,6 +3039,9 @@ namespace ZenitiumDns.Core.Dns
                                 return new DnsDatagram(request.Identifier, true, DnsOpcode.StandardQuery, false, false, request.RecursionDesired, isRecursionAllowed, false, request.CheckingDisabled, DnsResponseCode.FormatError, request.Question, null, null, null, request.EDNS is null ? ushort.MinValue : _udpPayloadSize, _dnssecValidation && request.DnssecOk ? EDnsHeaderFlags.DNSSEC_OK : EDnsHeaderFlags.None, [new EDnsOption(EDnsOptionCode.EXTENDED_DNS_ERROR, new EDnsExtendedDnsErrorOptionData(EDnsExtendedDnsErrorCode.InvalidQueryType, null))]) { Tag = ResponseTypeTags.Authoritative };
                         }
 
+                        if (isRecursionAllowed && request.RecursionDesired && TryGetSignalDomain(question.Name, out string signalDomain))
+                            return GetSignalDomainResponse(request, signalDomain);
+
                         DnsDatagram response = await ProcessAuthoritativeQueryAsync(request, remoteEP, protocol, isRecursionAllowed, skipDnsAppAuthoritativeRequestHandlers);
                         if (response is not null)
                         {
@@ -3009,7 +3164,7 @@ namespace ZenitiumDns.Core.Dns
 
         internal async ValueTask<DnsDatagram> AuthoritativeQueryAsync(DnsDatagram request, DnsTransportProtocol protocol, bool isRecursionAllowed, bool skipDnsAppAuthoritativeRequestHandlers, IPEndPoint remoteEP = null)
         {
-            if (_enableDdr && isRecursionAllowed && (request.Question.Count > 0) && request.Question[0].Name.Equals(DDR_DOMAIN, StringComparison.OrdinalIgnoreCase) && (!_ddrOnlyUnencrypted || IsUnencryptedProtocol(protocol)))
+            if (_enableDdr && isRecursionAllowed && (request.Question.Count > 0) && IsDdrQueryName(request.Question[0].Name) && (!_ddrOnlyUnencrypted || IsUnencryptedProtocol(protocol)))
                 return GetDdrResponse(request);
 
             DnsDatagram authResponse;
@@ -3642,6 +3797,9 @@ namespace ZenitiumDns.Core.Dns
                 }
             }
 
+            if ((request.Question.Count > 0) && IsAutoAllowed(request.Question[0].Name))
+                return true;
+
             if (_enableBlocking)
             {
                 if (_blockingBypassList is not null)
@@ -4197,7 +4355,7 @@ namespace ZenitiumDns.Core.Dns
                         }
                     }
 
-                    _resolverLog.Write("DNS Server failed to resolve the request '" + question.ToString() + "'" + (strForwarders is null ? "" : " using forwarders: " + strForwarders) + ".", ex);
+                    _resolverLog.Write("DNS Server failed to resolve the request '" + question.ToString() + "'" + (strForwarders is null ? "" : " using forwarders: " + strForwarders) + ": " + GetExceptionSummary(ex));
                 }
 
                 DnsDatagram cacheRequest = new DnsDatagram(0, false, DnsOpcode.StandardQuery, false, false, true, false, false, dnssecValidation, DnsResponseCode.NoError, [question], null, null, null, _udpPayloadSize, dnssecValidation ? EDnsHeaderFlags.DNSSEC_OK : EDnsHeaderFlags.None, EDnsClientSubnetOptionData.GetEDnsClientSubnetOption(eDnsClientSubnet));
@@ -4344,7 +4502,7 @@ namespace ZenitiumDns.Core.Dns
                                 catch (Exception ex)
                                 {
                                     lastException = ex;
-                                    _resolverLog?.Write(ex);
+                                    _resolverLog?.Write(GetExceptionSummary(ex));
                                 }
                             }
 
@@ -4361,6 +4519,7 @@ namespace ZenitiumDns.Core.Dns
                     dnsClient.Proxy = _proxy;
                     dnsClient.IPv6Mode = _ipv6Mode;
                     dnsClient.RandomizeName = _randomizeName;
+                    dnsClient.EDnsPadding = _eDnsPaddingMode != DnsServerEDnsPaddingMode.Disabled;
                     dnsClient.Retries = _forwarderRetries;
                     dnsClient.Timeout = _forwarderTimeout;
                     dnsClient.Concurrency = _forwarderConcurrency;
@@ -4392,7 +4551,7 @@ namespace ZenitiumDns.Core.Dns
                                 catch (Exception ex)
                                 {
                                     lastException = ex;
-                                    _resolverLog?.Write(ex);
+                                    _resolverLog?.Write(GetExceptionSummary(ex));
                                     continue;
                                 }
                             }
@@ -4404,6 +4563,7 @@ namespace ZenitiumDns.Core.Dns
                         dnsClient.Proxy = _proxy;
                         dnsClient.IPv6Mode = _ipv6Mode;
                         dnsClient.RandomizeName = _randomizeName;
+                        dnsClient.EDnsPadding = _eDnsPaddingMode != DnsServerEDnsPaddingMode.Disabled;
                         dnsClient.Retries = _forwarderRetries;
                         dnsClient.Timeout = _forwarderTimeout;
                         dnsClient.Concurrency = _forwarderConcurrency;
@@ -4513,7 +4673,7 @@ namespace ZenitiumDns.Core.Dns
                 catch (Exception ex)
                 {
                     lastResolverException = ex;
-                    _resolverLog?.Write(ex);
+                    _resolverLog?.Write(GetExceptionSummary(ex));
                 }
             }
 
@@ -4720,6 +4880,7 @@ namespace ZenitiumDns.Core.Dns
                 dnsClient.Proxy = forwarder.GetProxy(_proxy);
                 dnsClient.IPv6Mode = _ipv6Mode;
                 dnsClient.RandomizeName = _randomizeName;
+                dnsClient.EDnsPadding = _eDnsPaddingMode != DnsServerEDnsPaddingMode.Disabled;
                 dnsClient.Retries = _forwarderRetries;
                 dnsClient.Timeout = _forwarderTimeout;
                 dnsClient.Concurrency = _forwarderConcurrency;
@@ -4932,22 +5093,41 @@ namespace ZenitiumDns.Core.Dns
             return null;
         }
 
-        internal async Task<bool> ProbeIPv6UpstreamAsync()
+        internal Task<bool> ProbeIPv6UpstreamAsync()
         {
-            bool wasAvailable = !IPv6Reachability.IsUnavailable;
-            bool isAvailable = await IPv6Reachability.ProbeAsync(_resolverTimeout);
+            return IPv6Reachability.ProbeAsync(Math.Max(_resolverTimeout, 3000));
+        }
 
-            if (wasAvailable != isAvailable)
-                _log.Write(isAvailable ? "DNS Server detected that IPv6 name servers are reachable again. Outbound IPv6 queries were resumed." : "DNS Server detected that IPv6 name servers are not reachable. Outbound queries will use IPv4 until IPv6 is reachable again.");
+        private async Task StartupIPv6ProbeAsync()
+        {
+            try
+            {
+                await Task.Delay(IPV6_STARTUP_PROBE_DELAY);
 
-            return isAvailable;
+                if ((_state != ServiceState.Running) || (_ipv6Mode == IPv6Mode.Disabled) || (_proxy is not null) || !IPv6Reachability.Enabled || IPv6Reachability.IsUnavailable)
+                    return;
+
+                await ProbeIPv6UpstreamAsync();
+            }
+            catch (Exception ex)
+            {
+                _log.Write(ex);
+            }
+        }
+
+        private void IPv6Reachability_AvailabilityChanged(object sender, bool available)
+        {
+            if ((_ipv6Mode == IPv6Mode.Disabled) || (_proxy is not null))
+                return;
+
+            _log?.Write(available ? "DNS Server detected that IPv6 name servers are reachable again. Outbound IPv6 queries were resumed." : "DNS Server detected that IPv6 name servers are not reachable (confirmed by probing IPv6 root servers). Outbound queries will use IPv4 until IPv6 is reachable again. " + IPv6Reachability.LastProbeError);
         }
 
         private async void Ipv6ProbeTimerCallback(object state)
         {
             try
             {
-                if ((_ipv6Mode != IPv6Mode.Disabled) && (_proxy is null) && IPv6Reachability.Enabled)
+                if ((_ipv6Mode != IPv6Mode.Disabled) && (_proxy is null) && IPv6Reachability.IsUnavailable)
                     await ProbeIPv6UpstreamAsync();
             }
             catch (Exception ex)
@@ -4976,7 +5156,7 @@ namespace ZenitiumDns.Core.Dns
             }
             catch (Exception ex)
             {
-                _resolverLog?.Write(ex);
+                _resolverLog?.Write(GetExceptionSummary(ex));
             }
         }
 
@@ -4984,8 +5164,7 @@ namespace ZenitiumDns.Core.Dns
         {
             return new Dictionary<int, (int, int)>()
             {
-                { 32, (100, 400) },
-                { 24, (1000, 4000) }
+                { 32, (1000, 5000) }
             };
         }
 
@@ -4993,8 +5172,8 @@ namespace ZenitiumDns.Core.Dns
         {
             return new Dictionary<int, (int, int)>()
             {
-                { 64, (100, 400) },
-                { 56, (1000, 4000) }
+                { 64, (1000, 5000) },
+                { 48, (10000, 50000) }
             };
         }
 
@@ -5209,8 +5388,11 @@ namespace ZenitiumDns.Core.Dns
 
             foreach (IPEndPoint localEP in _localEndPoints)
             {
-                status.Add(("UDP " + localEP, HasListener(_udpListeners, localEP)));
-                status.Add(("TCP " + localEP, HasListener(_tcpListeners, localEP)));
+                if (_do53Mode != DnsServerDo53Mode.Disabled)
+                {
+                    status.Add(("UDP " + localEP, HasListener(_udpListeners, localEP)));
+                    status.Add(("TCP " + localEP, HasListener(_tcpListeners, localEP)));
+                }
 
                 if (_enableDnsOverTls && (_dotSslServerAuthenticationOptions is not null))
                 {
@@ -5243,6 +5425,154 @@ namespace ZenitiumDns.Core.Dns
             }
         }
 
+        private void UpdateAutoAllowedNames()
+        {
+            List<string> names = new List<string>();
+
+            void Add(string name)
+            {
+                if (string.IsNullOrEmpty(name))
+                    return;
+
+                name = name.TrimEnd('.').ToLowerInvariant();
+
+                if (name.StartsWith("*.", StringComparison.Ordinal))
+                    name = name.Substring(2);
+
+                if ((name.IndexOf('.') < 1) || IPAddress.TryParse(name, out _) || !DnsClient.IsDomainNameValid(name) || names.Contains(name))
+                    return;
+
+                names.Add(name);
+            }
+
+            Add(_serverDomain);
+
+            X509Certificate2 certificate = _dnsTlsCertificate;
+            if (certificate is not null)
+            {
+                try
+                {
+                    foreach (X509Extension extension in certificate.Extensions)
+                    {
+                        if (extension.Oid?.Value != "2.5.29.17")
+                            continue;
+
+                        foreach (string dnsName in new X509SubjectAlternativeNameExtension(extension.RawData, extension.Critical).EnumerateDnsNames())
+                            Add(dnsName);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _log?.Write(ex);
+                }
+            }
+
+            _autoAllowedNames = names.ToArray();
+        }
+
+        private bool IsAutoAllowed(string name)
+        {
+            foreach (string allowedName in _autoAllowedNames)
+            {
+                if (name.Length == allowedName.Length)
+                {
+                    if (name.Equals(allowedName, StringComparison.OrdinalIgnoreCase))
+                        return true;
+                }
+                else if ((name.Length > allowedName.Length) && (name[name.Length - allowedName.Length - 1] == '.') && name.EndsWith(allowedName, StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private bool TryGetSignalDomain(string name, out string signalDomain)
+        {
+            if (_blockFirefoxCanaryDomain && (name.Equals(FIREFOX_CANARY_DOMAIN, StringComparison.OrdinalIgnoreCase) || name.EndsWith("." + FIREFOX_CANARY_DOMAIN, StringComparison.OrdinalIgnoreCase)))
+            {
+                signalDomain = FIREFOX_CANARY_DOMAIN;
+                return true;
+            }
+
+            if (_forceChromePreflight && name.Equals(CHROME_PREFLIGHT_DOMAIN, StringComparison.OrdinalIgnoreCase))
+            {
+                signalDomain = CHROME_PREFLIGHT_DOMAIN;
+                return true;
+            }
+
+            signalDomain = null;
+            return false;
+        }
+
+        private DnsDatagram GetSignalDomainResponse(DnsDatagram request, string signalDomain)
+        {
+            DnsResourceRecord[] authority = [new DnsResourceRecord(signalDomain, DnsResourceRecordType.SOA, DnsClass.IN, _blockingNegativeTtl, new DnsSOARecordData(_serverDomain, _defaultResponsiblePerson?.Address ?? _fallbackResponsiblePerson.Address, 1, 3600, 1200, 604800, _blockingNegativeTtl))];
+            EDnsOption[] options = request.EDNS is null ? null : [new EDnsOption(EDnsOptionCode.EXTENDED_DNS_ERROR, new EDnsExtendedDnsErrorOptionData(EDnsExtendedDnsErrorCode.Blocked, signalDomain.Equals(FIREFOX_CANARY_DOMAIN, StringComparison.Ordinal) ? "Firefox canary domain" : "Chrome preflight mode"))];
+
+            return new DnsDatagram(request.Identifier, true, DnsOpcode.StandardQuery, true, false, request.RecursionDesired, true, false, request.CheckingDisabled, DnsResponseCode.NxDomain, request.Question, null, authority, null, request.EDNS is null ? ushort.MinValue : _udpPayloadSize, EDnsHeaderFlags.None, options) { Tag = ResponseTypeTags.Blocked };
+        }
+
+        private static string GetExceptionSummary(Exception ex)
+        {
+            StringBuilder summary = new StringBuilder(ex.Message.Trim());
+            string lastMessage = ex.Message;
+
+            for (Exception inner = ex.InnerException; (inner is not null) && (summary.Length < 600); inner = inner.InnerException)
+            {
+                if (inner.Message.Equals(lastMessage, StringComparison.Ordinal))
+                    continue;
+
+                summary.Append(" > ").Append(inner.Message.Trim());
+                lastMessage = inner.Message;
+            }
+
+            if (summary.Length > 600)
+                summary.Length = 600;
+
+            return summary.ToString().Replace('\n', ' ').Replace('\r', ' ');
+        }
+
+        private bool IsDo53Restricted(DnsDatagram request, IPEndPoint remoteEP, DnsTransportProtocol protocol)
+        {
+            switch (_do53Mode)
+            {
+                case DnsServerDo53Mode.DdrOnlyDrop:
+                case DnsServerDo53Mode.DdrOnlyRefused:
+                    break;
+
+                default:
+                    return false;
+            }
+
+            if (!IsUnencryptedProtocol(protocol) || IPAddress.IsLoopback(remoteEP.Address))
+                return false;
+
+            if (request.Question.Count != 1)
+                return true;
+
+            string name = request.Question[0].Name;
+
+            return !name.Equals("resolver.arpa", StringComparison.OrdinalIgnoreCase) && !name.EndsWith(".resolver.arpa", StringComparison.OrdinalIgnoreCase) && !IsDdrQueryName(name);
+        }
+
+        private bool IsDdrQueryName(string name)
+        {
+            if (name.Equals(DDR_DOMAIN, StringComparison.OrdinalIgnoreCase))
+                return true;
+
+            if (!name.StartsWith("_dns.", StringComparison.OrdinalIgnoreCase))
+                return false;
+
+            string resolverName = name.Substring(5);
+
+            if (resolverName.IndexOf('.') < 1)
+                return false;
+
+            return resolverName.Equals(_serverDomain, StringComparison.OrdinalIgnoreCase) || resolverName.Equals(GetDdrTargetName(), StringComparison.OrdinalIgnoreCase);
+        }
+
         private DnsDatagram GetDdrResponse(DnsDatagram request)
         {
             DnsQuestionRecord question = request.Question[0];
@@ -5257,7 +5587,10 @@ namespace ZenitiumDns.Core.Dns
             }
 
             if (answer is null)
-                authority = [new DnsResourceRecord("resolver.arpa", DnsResourceRecordType.SOA, DnsClass.IN, DDR_RECORD_TTL, new DnsSOARecordData("resolver.arpa", _defaultResponsiblePerson?.Address ?? "nobody.invalid", 1, 3600, 1200, 604800, DDR_RECORD_TTL))];
+            {
+                string zone = question.Name.EndsWith("resolver.arpa", StringComparison.OrdinalIgnoreCase) ? "resolver.arpa" : question.Name.Substring(5);
+                authority = [new DnsResourceRecord(zone, DnsResourceRecordType.SOA, DnsClass.IN, DDR_RECORD_TTL, new DnsSOARecordData(_serverDomain, _defaultResponsiblePerson?.Address ?? _fallbackResponsiblePerson.Address, 1, 3600, 1200, 604800, DDR_RECORD_TTL))];
+            }
 
             return new DnsDatagram(request.Identifier, true, DnsOpcode.StandardQuery, true, false, request.RecursionDesired, true, false, request.CheckingDisabled, DnsResponseCode.NoError, request.Question, answer, authority, null, request.EDNS is null ? ushort.MinValue : _udpPayloadSize, EDnsHeaderFlags.None) { Tag = ResponseTypeTags.Authoritative };
         }
@@ -5316,7 +5649,7 @@ namespace ZenitiumDns.Core.Dns
         {
             try
             {
-                _rateLimiter.Maintain(delegate (string message) { _log.Write(message); });
+                _rateLimiter.Maintain(delegate (string message) { _log.Write(message); }, _log.HideClientAddresses);
             }
             catch (Exception ex)
             {
@@ -5611,6 +5944,8 @@ namespace ZenitiumDns.Core.Dns
 
         public async Task StartAsync(bool throwIfBindFails = false)
         {
+            _ianaDataManager.Start();
+
             if (_disposed)
                 ObjectDisposedException.ThrowIf(_disposed, this);
 
@@ -5621,45 +5956,48 @@ namespace ZenitiumDns.Core.Dns
 
             foreach (IPEndPoint localEP in _localEndPoints)
             {
-                Socket udpListener = null;
-
-                try
+                if (_do53Mode != DnsServerDo53Mode.Disabled)
                 {
-                    udpListener = GetUdpListenerSocket(localEP.AddressFamily);
-
-                    if (localEP is InterfaceEndPoint intEP && intEP.InterfaceName is not null)
-                        SocketBindToDevice(udpListener, intEP, DnsTransportProtocol.Udp);
+                    Socket udpListener = null;
 
                     try
                     {
-                        udpListener.Bind(localEP);
-                    }
-                    catch (SocketException ex1)
-                    {
-                        switch (ex1.ErrorCode)
+                        udpListener = GetUdpListenerSocket(localEP.AddressFamily);
+
+                        if (localEP is InterfaceEndPoint intEP && intEP.InterfaceName is not null)
+                            SocketBindToDevice(udpListener, intEP, DnsTransportProtocol.Udp);
+
+                        try
                         {
-                            case 99:
-                                await Task.Delay(10000);
-                                udpListener.Bind(localEP);
-                                break;
-
-                            default:
-                                throw;
+                            udpListener.Bind(localEP);
                         }
+                        catch (SocketException ex1)
+                        {
+                            switch (ex1.ErrorCode)
+                            {
+                                case 99:
+                                    await Task.Delay(10000);
+                                    udpListener.Bind(localEP);
+                                    break;
+
+                                default:
+                                    throw;
+                            }
+                        }
+
+                        _udpListeners.Add(udpListener);
+
+                        _log.Write(localEP, DnsTransportProtocol.Udp, "DNS Server was bound successfully.");
                     }
+                    catch (Exception ex)
+                    {
+                        _log.Write(localEP, DnsTransportProtocol.Udp, "DNS Server failed to bind.", ex);
 
-                    _udpListeners.Add(udpListener);
+                        udpListener?.Dispose();
 
-                    _log.Write(localEP, DnsTransportProtocol.Udp, "DNS Server was bound successfully.");
-                }
-                catch (Exception ex)
-                {
-                    _log.Write(localEP, DnsTransportProtocol.Udp, "DNS Server failed to bind.", ex);
-
-                    udpListener?.Dispose();
-
-                    if (throwIfBindFails)
-                        throw;
+                        if (throwIfBindFails)
+                            throw;
+                    }
                 }
 
                 if (_enableDnsOverUdpProxy)
@@ -5691,33 +6029,36 @@ namespace ZenitiumDns.Core.Dns
                     }
                 }
 
-                Socket tcpListener = null;
-
-                try
+                if (_do53Mode != DnsServerDo53Mode.Disabled)
                 {
-                    tcpListener = new Socket(localEP.AddressFamily, SocketType.Stream, ProtocolType.Tcp);
+                    Socket tcpListener = null;
 
-                    if (localEP is InterfaceEndPoint intEP && intEP.InterfaceName is not null)
-                        SocketBindToDevice(tcpListener, intEP, DnsTransportProtocol.Tcp);
+                    try
+                    {
+                        tcpListener = new Socket(localEP.AddressFamily, SocketType.Stream, ProtocolType.Tcp);
 
-                    if (Environment.OSVersion.Platform == PlatformID.Unix)
-                        tcpListener.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ReuseAddress, 1);
+                        if (localEP is InterfaceEndPoint intEP && intEP.InterfaceName is not null)
+                            SocketBindToDevice(tcpListener, intEP, DnsTransportProtocol.Tcp);
 
-                    tcpListener.Bind(localEP);
-                    tcpListener.Listen(_listenBacklog);
+                        if (Environment.OSVersion.Platform == PlatformID.Unix)
+                            tcpListener.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ReuseAddress, 1);
 
-                    _tcpListeners.Add(tcpListener);
+                        tcpListener.Bind(localEP);
+                        tcpListener.Listen(_listenBacklog);
 
-                    _log.Write(localEP, DnsTransportProtocol.Tcp, "DNS Server was bound successfully.");
-                }
-                catch (Exception ex)
-                {
-                    _log.Write(localEP, DnsTransportProtocol.Tcp, "DNS Server failed to bind.", ex);
+                        _tcpListeners.Add(tcpListener);
 
-                    tcpListener?.Dispose();
+                        _log.Write(localEP, DnsTransportProtocol.Tcp, "DNS Server was bound successfully.");
+                    }
+                    catch (Exception ex)
+                    {
+                        _log.Write(localEP, DnsTransportProtocol.Tcp, "DNS Server failed to bind.", ex);
 
-                    if (throwIfBindFails)
-                        throw;
+                        tcpListener?.Dispose();
+
+                        if (throwIfBindFails)
+                            throw;
+                    }
                 }
 
                 if (_enableDnsOverTcpProxy)
@@ -5895,8 +6236,11 @@ namespace ZenitiumDns.Core.Dns
 
             lock (_ipv6ProbeTimerLock)
             {
-                _ipv6ProbeTimer = new Timer(Ipv6ProbeTimerCallback, null, 0, Timeout.Infinite);
+                _ipv6ProbeTimer = new Timer(Ipv6ProbeTimerCallback, null, IPV6_PROBE_TIMER_INTERVAL, Timeout.Infinite);
             }
+
+            if ((_ipv6Mode != IPv6Mode.Disabled) && (_proxy is null) && IPv6Reachability.Enabled)
+                _ = Task.Run(StartupIPv6ProbeAsync);
 
             _state = ServiceState.Running;
 
@@ -6061,6 +6405,7 @@ namespace ZenitiumDns.Core.Dns
                     _blockedZoneManager.UpdateServerDomain();
                     _blockListZoneManager.UpdateServerDomain();
 
+                    UpdateAutoAllowedNames();
                     UpdateThisServer();
                 }
             }
@@ -6140,6 +6485,30 @@ namespace ZenitiumDns.Core.Dns
 
         public StatsManager StatsManager
         { get { return _statsManager; } }
+
+        internal SystemMonitor SystemMonitor
+        { get { return _systemMonitor; } }
+
+        internal Watchdog Watchdog
+        { get { return _watchdog; } }
+
+        internal IanaDataManager IanaDataManager
+        { get { return _ianaDataManager; } }
+
+        internal bool IsRunning
+        { get { return _state == ServiceState.Running; } }
+
+        internal int QueryTaskQueueLength
+        { get { return _queryTaskScheduler.QueuedTasks; } }
+
+        internal int ResolverTaskQueueLength
+        { get { return _resolverTaskScheduler.QueuedTasks; } }
+
+        internal int PendingResolutions
+        { get { return _resolverTasks.Count; } }
+
+        internal int RateLimiterTrackedClients
+        { get { return _rateLimiter.TrackedClients; } }
 
         public bool EnableCheckForUpdate
         {
@@ -6344,8 +6713,8 @@ namespace ZenitiumDns.Core.Dns
                 if ((prefixLimit.Key < 0) || (prefixLimit.Key > maxPrefix))
                     throw new ArgumentOutOfRangeException(paramName, "Rate limit prefix valid range is between 0 and " + maxPrefix + ".");
 
-                if ((prefixLimit.Value.Item1 < 0) || (prefixLimit.Value.Item2 < 0))
-                    throw new ArgumentOutOfRangeException(paramName, "Rate limit value cannot be less than 0.");
+                if ((prefixLimit.Value.Item1 < 0) || (prefixLimit.Value.Item2 < 0) || (prefixLimit.Value.Item1 > MAX_RATE_LIMIT_QPS) || (prefixLimit.Value.Item2 > MAX_RATE_LIMIT_QPS))
+                    throw new ArgumentOutOfRangeException(paramName, "Rate limit valid range is between 0 and " + MAX_RATE_LIMIT_QPS + " queries per second.");
             }
 
             return value;
@@ -6750,6 +7119,39 @@ namespace ZenitiumDns.Core.Dns
             get { return _enableDdr; }
             set { _enableDdr = value; }
         }
+
+        public DnsServerDo53Mode Do53Mode
+        {
+            get { return _do53Mode; }
+            set { _do53Mode = value; }
+        }
+
+        public DnsServerEDnsPaddingMode EDnsPaddingMode
+        {
+            get { return _eDnsPaddingMode; }
+            set
+            {
+                if (!Enum.IsDefined(value))
+                    throw new ArgumentOutOfRangeException(nameof(EDnsPaddingMode), "Invalid EDNS padding mode.");
+
+                _eDnsPaddingMode = value;
+            }
+        }
+
+        public bool BlockFirefoxCanaryDomain
+        {
+            get { return _blockFirefoxCanaryDomain; }
+            set { _blockFirefoxCanaryDomain = value; }
+        }
+
+        public bool ForceChromePreflight
+        {
+            get { return _forceChromePreflight; }
+            set { _forceChromePreflight = value; }
+        }
+
+        public IReadOnlyList<string> AutoAllowedNames
+        { get { return _autoAllowedNames; } }
 
         public bool DdrOnlyUnencrypted
         {
@@ -7236,5 +7638,5 @@ namespace ZenitiumDns.Core.Dns
         }
     }
 
-#pragma warning restore CA1416 // Validate platform compatibility
+#pragma warning restore CA1416
 }

@@ -48,6 +48,7 @@ namespace ZenitiumLibrary.Net.Dns
         uint _negativeRecordTtl;
         uint _minimumRecordTtl;
         uint _maximumRecordTtl;
+        uint _maximumNegativeRecordTtl = 3600;
         uint _serveStaleTtl;
         uint _serveStaleAnswerTtl;
 
@@ -532,7 +533,7 @@ namespace ZenitiumLibrary.Net.Dns
                     record.SetExpiry(_minimumRecordTtl, _maximumRecordTtl, _serveStaleTtl, _serveStaleAnswerTtl);
 
                 foreach (DnsResourceRecord record in response.Authority)
-                    record.SetExpiry(_minimumRecordTtl, _maximumRecordTtl, _serveStaleTtl, _serveStaleAnswerTtl);
+                    record.SetExpiry(_minimumRecordTtl, record.Type == DnsResourceRecordType.SOA ? Math.Min(_maximumRecordTtl, _maximumNegativeRecordTtl) : _maximumRecordTtl, _serveStaleTtl, _serveStaleAnswerTtl);
 
                 foreach (DnsResourceRecord record in response.Additional)
                 {
@@ -887,7 +888,7 @@ namespace ZenitiumLibrary.Net.Dns
                             foreach (DnsQuestionRecord question in response.Question)
                             {
                                 DnsResourceRecord record = new DnsResourceRecord(question.Name, question.Type, question.Class, Math.Min((firstAuthority.RDATA as DnsSOARecordData).Minimum, firstAuthority.OriginalTtlValue), new DnsSpecialCacheRecordData(DnsSpecialCacheRecordType.NegativeCache, response));
-                                record.SetExpiry(_minimumRecordTtl, _maximumRecordTtl, _serveStaleTtl, _serveStaleAnswerTtl);
+                                record.SetExpiry(_minimumRecordTtl, Math.Min(_maximumRecordTtl, _maximumNegativeRecordTtl), _serveStaleTtl, _serveStaleAnswerTtl);
 
                                 InternalCacheRecords(new DnsResourceRecord[] { record }, eDnsClientSubnet, response.Metadata);
                             }
@@ -904,7 +905,7 @@ namespace ZenitiumLibrary.Net.Dns
                                     foreach (DnsQuestionRecord question in response.Question)
                                     {
                                         DnsResourceRecord record = new DnsResourceRecord(cnameDomain, question.Type, question.Class, Math.Min((firstAuthority.RDATA as DnsSOARecordData).Minimum, firstAuthority.OriginalTtlValue), new DnsSpecialCacheRecordData(DnsSpecialCacheRecordType.NegativeCache, response));
-                                        record.SetExpiry(_minimumRecordTtl, _maximumRecordTtl, _serveStaleTtl, _serveStaleAnswerTtl);
+                                        record.SetExpiry(_minimumRecordTtl, Math.Min(_maximumRecordTtl, _maximumNegativeRecordTtl), _serveStaleTtl, _serveStaleAnswerTtl);
 
                                         InternalCacheRecords([record], eDnsClientSubnet, response.Metadata);
                                     }
@@ -931,7 +932,7 @@ namespace ZenitiumLibrary.Net.Dns
                                         if (authority.Name.Equals(zoneCut, StringComparison.OrdinalIgnoreCase))
                                         {
                                             DnsResourceRecord record = new DnsResourceRecord(question.Name, question.Type, question.Class, _negativeRecordTtl, new DnsSpecialCacheRecordData(DnsSpecialCacheRecordType.NegativeCache, response.RCODE, [question], Array.Empty<DnsResourceRecord>(), Array.Empty<DnsResourceRecord>(), Array.Empty<DnsResourceRecord>(), response.EDNS, response.DnsClientExtendedErrors));
-                                            record.SetExpiry(_minimumRecordTtl, _maximumRecordTtl, _serveStaleTtl, _serveStaleAnswerTtl);
+                                            record.SetExpiry(_minimumRecordTtl, Math.Min(_maximumRecordTtl, _maximumNegativeRecordTtl), _serveStaleTtl, _serveStaleAnswerTtl);
 
                                             InternalCacheRecords(new DnsResourceRecord[] { record }, eDnsClientSubnet, response.Metadata);
                                             isReferralResponse = false;
@@ -1095,6 +1096,12 @@ namespace ZenitiumLibrary.Net.Dns
         {
             get { return _negativeRecordTtl; }
             set { _negativeRecordTtl = value; }
+        }
+
+        public uint MaximumNegativeRecordTtl
+        {
+            get { return _maximumNegativeRecordTtl; }
+            set { _maximumNegativeRecordTtl = value; }
         }
 
         public uint MinimumRecordTtl

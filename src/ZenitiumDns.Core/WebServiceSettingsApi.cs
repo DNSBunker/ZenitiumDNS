@@ -112,6 +112,7 @@ namespace ZenitiumDns.Core
             private void WriteDnsSettings(Utf8JsonWriter jsonWriter)
             {
                 jsonWriter.WriteString("version", _dnsWebService.GetServerVersion());
+                _dnsWebService.WriteVersionInfo(jsonWriter);
                 jsonWriter.WriteString("uptimestamp", _dnsWebService._uptimestamp);
 
                 jsonWriter.WriteString("dnsServerDomain", _dnsWebService._dnsServer.ServerDomain);
@@ -127,7 +128,6 @@ namespace ZenitiumDns.Core
                 jsonWriter.WriteString("defaultResponsiblePerson", _dnsWebService._dnsServer.DefaultResponsiblePerson?.Address);
 
                 jsonWriter.WriteBoolean("dnsServerEnableCheckForUpdate", _dnsWebService._dnsServer.EnableCheckForUpdate);
-                jsonWriter.WriteBoolean("dnsAppsEnableAutomaticUpdate", _dnsWebService._dnsServer.DnsApplicationManager.EnableAutomaticUpdate);
 
                 jsonWriter.WriteString("ipv6Mode", _dnsWebService._dnsServer.IPv6Mode.ToString());
                 jsonWriter.WriteBoolean("preferIPv6", _dnsWebService._dnsServer.IPv6Mode == IPv6Mode.Preferred);
@@ -309,6 +309,8 @@ namespace ZenitiumDns.Core
 
                 jsonWriter.WriteBoolean("enableDdr", _dnsWebService._dnsServer.EnableDdr);
                 jsonWriter.WriteBoolean("ddrOnlyUnencrypted", _dnsWebService._dnsServer.DdrOnlyUnencrypted);
+                jsonWriter.WriteString("do53Mode", _dnsWebService._dnsServer.Do53Mode.ToString());
+                jsonWriter.WriteString("eDnsPaddingMode", _dnsWebService._dnsServer.EDnsPaddingMode.ToString());
                 jsonWriter.WriteStartArray("ddrRecords");
 
                 foreach (DnsResourceRecord ddrRecord in _dnsWebService._dnsServer.GetDdrRecords())
@@ -351,6 +353,7 @@ namespace ZenitiumDns.Core
                 jsonWriter.WriteNumber("cacheMinimumRecordTtl", _dnsWebService._dnsServer.CacheZoneManager.MinimumRecordTtl);
                 jsonWriter.WriteNumber("cacheMaximumRecordTtl", _dnsWebService._dnsServer.CacheZoneManager.MaximumRecordTtl);
                 jsonWriter.WriteNumber("cacheNegativeRecordTtl", _dnsWebService._dnsServer.CacheZoneManager.NegativeRecordTtl);
+                jsonWriter.WriteNumber("cacheMaximumNegativeRecordTtl", _dnsWebService._dnsServer.CacheZoneManager.MaximumNegativeRecordTtl);
                 jsonWriter.WriteNumber("cacheFailureRecordTtl", _dnsWebService._dnsServer.CacheZoneManager.FailureRecordTtl);
 
                 jsonWriter.WriteNumber("cachePrefetchEligibility", _dnsWebService._dnsServer.CachePrefetchEligibility);
@@ -377,6 +380,15 @@ namespace ZenitiumDns.Core
                 jsonWriter.WriteNumber("blockingAnswerTtl", _dnsWebService._dnsServer.BlockingAnswerTtl);
                 jsonWriter.WriteNumber("blockingNegativeTtl", _dnsWebService._dnsServer.BlockingNegativeTtl);
                 jsonWriter.WriteString("blockingReportText", _dnsWebService._dnsServer.BlockingReportText);
+                jsonWriter.WriteBoolean("blockFirefoxCanaryDomain", _dnsWebService._dnsServer.BlockFirefoxCanaryDomain);
+                jsonWriter.WriteBoolean("forceChromePreflight", _dnsWebService._dnsServer.ForceChromePreflight);
+                jsonWriter.WriteBoolean("enableLiveMonitoring", _dnsWebService._dnsServer.SystemMonitor.Enabled);
+                jsonWriter.WriteBoolean("enableWatchdog", _dnsWebService._dnsServer.Watchdog.Enabled);
+
+                jsonWriter.WriteStartObject("ianaData");
+                _dnsWebService._dnsServer.IanaDataManager.WriteStatus(jsonWriter);
+                jsonWriter.WriteEndObject();
+                jsonWriter.WriteStringArray("autoAllowedNames", _dnsWebService._dnsServer.AutoAllowedNames);
 
                 jsonWriter.WritePropertyName("customBlockingAddresses");
                 jsonWriter.WriteStartArray();
@@ -479,6 +491,7 @@ namespace ZenitiumDns.Core
                 jsonWriter.WriteBoolean("ignoreResolverLogs", _dnsWebService._dnsServer.ResolverLogManager == null);
                 jsonWriter.WriteBoolean("logQueries", _dnsWebService._dnsServer.QueryLogManager != null);
                 jsonWriter.WriteBoolean("noStackTrace", _dnsWebService._log.NoStackTrace);
+                jsonWriter.WriteBoolean("hideClientAddresses", _dnsWebService._log.HideClientAddresses);
                 jsonWriter.WriteBoolean("useLocalTime", _dnsWebService._log.UseLocalTime);
                 jsonWriter.WriteString("logFolder", _dnsWebService._log.LogFolder);
                 jsonWriter.WriteNumber("maxLogFileDays", _dnsWebService._log.MaxLogFileDays);
@@ -525,6 +538,14 @@ namespace ZenitiumDns.Core
                 {
                     jsonDocument = await JsonDocument.ParseAsync(request.Body);
                     context.Items["jsonContent"] = jsonDocument;
+                }
+
+                {
+                    bool effectiveEnableDdr = request.TryGetQueryOrForm("enableDdr", bool.Parse, out bool newEnableDdr) ? newEnableDdr : _dnsWebService._dnsServer.EnableDdr;
+                    DnsServerDo53Mode effectiveDo53Mode = request.TryGetQueryOrFormEnum("do53Mode", out DnsServerDo53Mode newDo53Mode) ? newDo53Mode : _dnsWebService._dnsServer.Do53Mode;
+
+                    if (!effectiveEnableDdr && ((effectiveDo53Mode == DnsServerDo53Mode.DdrOnlyDrop) || (effectiveDo53Mode == DnsServerDo53Mode.DdrOnlyRefused)))
+                        throw new DnsWebServiceException("Do53 can be restricted to DDR only when DDR is enabled.");
                 }
 
                 try
@@ -600,11 +621,6 @@ namespace ZenitiumDns.Core
                         if (request.TryGetQueryOrForm("dnsServerEnableCheckForUpdate", bool.Parse, out bool dnsServerEnableCheckForUpdate))
                         {
                             _dnsWebService._dnsServer.EnableCheckForUpdate = dnsServerEnableCheckForUpdate;
-                        }
-
-                        if (request.TryGetQueryOrForm("dnsAppsEnableAutomaticUpdate", bool.Parse, out bool dnsAppsEnableAutomaticUpdate))
-                        {
-                            _dnsWebService._dnsServer.DnsApplicationManager.EnableAutomaticUpdate = dnsAppsEnableAutomaticUpdate;
                         }
 
                         if (request.TryGetQueryOrFormEnum("ipv6Mode", out IPv6Mode ipv6Mode))
@@ -1181,6 +1197,17 @@ namespace ZenitiumDns.Core
                         if (request.TryGetQueryOrForm("ddrOnlyUnencrypted", bool.Parse, out bool ddrOnlyUnencrypted))
                             _dnsWebService._dnsServer.DdrOnlyUnencrypted = ddrOnlyUnencrypted;
 
+                        if (request.TryGetQueryOrFormEnum("do53Mode", out DnsServerDo53Mode do53Mode))
+                        {
+                            if ((do53Mode == DnsServerDo53Mode.Disabled) != (_dnsWebService._dnsServer.Do53Mode == DnsServerDo53Mode.Disabled))
+                                restartDnsService = true;
+
+                            _dnsWebService._dnsServer.Do53Mode = do53Mode;
+                        }
+
+                        if (request.TryGetQueryOrFormEnum("eDnsPaddingMode", out DnsServerEDnsPaddingMode eDnsPaddingMode))
+                            _dnsWebService._dnsServer.EDnsPaddingMode = eDnsPaddingMode;
+
                         string dnsTlsCertificatePath = request.QueryOrForm("dnsTlsCertificatePath");
                         if (dnsTlsCertificatePath is not null)
                         {
@@ -1298,6 +1325,9 @@ namespace ZenitiumDns.Core
                         if (request.TryGetQueryOrForm("cacheNegativeRecordTtl", ZoneFile.ParseTtl, out uint cacheNegativeRecordTtl))
                             _dnsWebService._dnsServer.CacheZoneManager.NegativeRecordTtl = cacheNegativeRecordTtl;
 
+                        if (request.TryGetQueryOrForm("cacheMaximumNegativeRecordTtl", ZoneFile.ParseTtl, out uint cacheMaximumNegativeRecordTtl))
+                            _dnsWebService._dnsServer.CacheZoneManager.MaximumNegativeRecordTtl = cacheMaximumNegativeRecordTtl;
+
                         if (request.TryGetQueryOrForm("cacheFailureRecordTtl", ZoneFile.ParseTtl, out uint cacheFailureRecordTtl))
                             _dnsWebService._dnsServer.CacheZoneManager.FailureRecordTtl = cacheFailureRecordTtl;
 
@@ -1342,6 +1372,27 @@ namespace ZenitiumDns.Core
                         string blockingReportText = request.QueryOrForm("blockingReportText");
                         if (blockingReportText is not null)
                             _dnsWebService._dnsServer.BlockingReportText = blockingReportText;
+
+                        if (request.TryGetQueryOrForm("blockFirefoxCanaryDomain", bool.Parse, out bool blockFirefoxCanaryDomain))
+                            _dnsWebService._dnsServer.BlockFirefoxCanaryDomain = blockFirefoxCanaryDomain;
+
+                        if (request.TryGetQueryOrForm("forceChromePreflight", bool.Parse, out bool forceChromePreflight))
+                            _dnsWebService._dnsServer.ForceChromePreflight = forceChromePreflight;
+
+                        if (request.TryGetQueryOrForm("enableLiveMonitoring", bool.Parse, out bool enableLiveMonitoring))
+                            _dnsWebService._dnsServer.SystemMonitor.Enabled = enableLiveMonitoring;
+
+                        if (request.TryGetQueryOrForm("enableWatchdog", bool.Parse, out bool enableWatchdog))
+                            _dnsWebService._dnsServer.Watchdog.Enabled = enableWatchdog;
+
+                        if (request.TryGetQueryOrFormEnum("rootZoneMode", out IanaDataMode rootZoneMode))
+                            await _dnsWebService._dnsServer.IanaDataManager.SetModeAsync(IanaDataItem.RootZone, rootZoneMode);
+
+                        if (request.TryGetQueryOrFormEnum("arpaZoneMode", out IanaDataMode arpaZoneMode))
+                            await _dnsWebService._dnsServer.IanaDataManager.SetModeAsync(IanaDataItem.ArpaZone, arpaZoneMode);
+
+                        if (request.TryGetQueryOrFormEnum("trustAnchorMode", out IanaDataMode trustAnchorMode))
+                            await _dnsWebService._dnsServer.IanaDataManager.SetModeAsync(IanaDataItem.TrustAnchors, trustAnchorMode);
 
                         if (request.TryQueryOrFormArray("customBlockingAddresses", out string[] customBlockingAddresses))
                         {
@@ -1509,6 +1560,9 @@ namespace ZenitiumDns.Core
 
                         if (request.TryGetQueryOrForm("noStackTrace", bool.Parse, out bool noStackTrace))
                             _dnsWebService._log.NoStackTrace = noStackTrace;
+
+                        if (request.TryGetQueryOrForm("hideClientAddresses", bool.Parse, out bool hideClientAddresses))
+                            _dnsWebService._log.HideClientAddresses = hideClientAddresses;
 
                         if (request.TryGetQueryOrForm("useLocalTime", bool.Parse, out bool useLocalTime))
                             _dnsWebService._log.UseLocalTime = useLocalTime;
@@ -1697,6 +1751,61 @@ namespace ZenitiumDns.Core
                 _dnsWebService._dnsServer.BlockListZoneManager.ForceUpdateBlockLists();
 
                 _dnsWebService._log.Write(_dnsWebService.GetRemoteEndPoint(context), "[" + sessionUser.Username + "] Block list update was triggered.");
+            }
+
+            public async Task UpdateIanaDataAsync(HttpContext context)
+            {
+                User sessionUser = _dnsWebService.GetSessionUser(context);
+
+                if (!_dnsWebService._authManager.IsPermitted(PermissionSection.Settings, sessionUser, PermissionFlag.Modify))
+                    throw new DnsWebServiceException("Access was denied.");
+
+                await _dnsWebService._dnsServer.IanaDataManager.UpdateNowAsync();
+
+                _dnsWebService._log.Write(_dnsWebService.GetRemoteEndPoint(context), "[" + sessionUser.Username + "] Root zone, arpa zone and trust anchors were updated.");
+
+                Utf8JsonWriter jsonWriter = context.GetCurrentJsonWriter();
+                jsonWriter.WriteStartObject("ianaData");
+                _dnsWebService._dnsServer.IanaDataManager.WriteStatus(jsonWriter);
+                jsonWriter.WriteEndObject();
+            }
+
+            public async Task GetIanaDataAsync(HttpContext context)
+            {
+                User sessionUser = _dnsWebService.GetSessionUser(context);
+
+                if (!_dnsWebService._authManager.IsPermitted(PermissionSection.Settings, sessionUser, PermissionFlag.View))
+                    throw new DnsWebServiceException("Access was denied.");
+
+                IanaDataItem item = context.Request.GetQueryOrFormEnum<IanaDataItem>("item");
+
+                Utf8JsonWriter jsonWriter = context.GetCurrentJsonWriter();
+                jsonWriter.WriteString("content", await _dnsWebService._dnsServer.IanaDataManager.GetContentAsync(item));
+            }
+
+            public async Task SetIanaDataAsync(HttpContext context)
+            {
+                User sessionUser = _dnsWebService.GetSessionUser(context);
+
+                if (!_dnsWebService._authManager.IsPermitted(PermissionSection.Settings, sessionUser, PermissionFlag.Modify))
+                    throw new DnsWebServiceException("Access was denied.");
+
+                HttpRequest request = context.Request;
+                IanaDataItem item = request.GetQueryOrFormEnum<IanaDataItem>("item");
+
+                string content = request.QueryOrForm("content");
+                if (string.IsNullOrWhiteSpace(content))
+                    throw new DnsWebServiceException("Parameter 'content' is missing.");
+
+                await _dnsWebService._dnsServer.IanaDataManager.SetCustomContentAsync(item, content);
+                _dnsWebService._dnsServer.SaveConfigFile();
+
+                _dnsWebService._log.Write(_dnsWebService.GetRemoteEndPoint(context), "[" + sessionUser.Username + "] A custom version of " + item.ToString() + " was saved and activated.");
+
+                Utf8JsonWriter jsonWriter = context.GetCurrentJsonWriter();
+                jsonWriter.WriteStartObject("ianaData");
+                _dnsWebService._dnsServer.IanaDataManager.WriteStatus(jsonWriter);
+                jsonWriter.WriteEndObject();
             }
 
             public void ForceUpdateClientBlockLists(HttpContext context)

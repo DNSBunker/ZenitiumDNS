@@ -220,8 +220,7 @@ function applySessionData(responseJSON) {
 
     setUserDisplayName(sessionData.displayName);
     document.title = sessionData.info.dnsServerDomain + " – ZenitiumDNS";
-    $("#lblAboutVersion").text(sessionData.info.version);
-    $("#lblAboutUptime").text(moment(sessionData.info.uptimestamp).local().format("lll") + " (" + moment(sessionData.info.uptimestamp).fromNow() + ")");
+    setAboutVersionInfo(sessionData.info);
     $("#lblDnsServerDomain").text(sessionData.info.dnsServerDomain);
 }
 
@@ -336,74 +335,6 @@ function logout() {
             sessionData = null;
             showPageLogin();
         }
-    });
-}
-
-function showCreateMyApiTokenModal() {
-    $("#divCreateApiTokenAlert").html("");
-    $("#txtCreateApiTokenUsername").val(sessionData.username);
-    $("#txtCreateApiTokenName").val("");
-
-    $("#txtCreateApiTokenUsername").show();
-    $("#optCreateApiTokenUsername").hide();
-
-    $("#divCreateApiTokenLoader").hide();
-    $("#divCreateApiTokenForm").show();
-    $("#divCreateApiTokenOutput").hide();
-
-    var btnCreateApiToken = $("#btnCreateApiToken");
-    btnCreateApiToken.attr("onclick", "createMyApiToken(this); return false;");
-    btnCreateApiToken.show();
-
-    $("#modalCreateApiToken").modal("show");
-
-    setTimeout(function () {
-        $("#txtCreateApiTokenName").trigger("focus");
-    }, 1000);
-}
-
-function createMyApiToken(objBtn) {
-    var btn = $(objBtn);
-
-    var divCreateApiTokenAlert = $("#divCreateApiTokenAlert");
-
-    var tokenName = $("#txtCreateApiTokenName").val();
-    if (tokenName === "") {
-        showAlert("warning", "Angabe fehlt", "Bitte einen Namen für das Token eingeben.", divCreateApiTokenAlert);
-        $("#txtCreateApiTokenName").trigger("focus");
-        return;
-    }
-
-    btn.button("loading");
-
-    HTTPRequest({
-        url: "api/user/createToken",
-        token: sessionData.token,
-        method: "POST",
-        data: "tokenName=" + encodeURIComponent(tokenName),
-        processData: false,
-        success: function (responseJSON) {
-            btn.button("reset");
-            btn.hide();
-
-            $("#lblCreateApiTokenOutputUsername").text(responseJSON.username);
-            $("#lblCreateApiTokenOutputTokenName").text(responseJSON.tokenName);
-            $("#lblCreateApiTokenOutputToken").text(responseJSON.token);
-
-            $("#divCreateApiTokenForm").hide();
-            $("#divCreateApiTokenOutput").show();
-
-            showAlert("success", "Token erstellt", "Das API-Token wurde erstellt.", divCreateApiTokenAlert);
-        },
-        error: function () {
-            btn.button("reset");
-        },
-        invalidToken: function () {
-            btn.button("reset");
-            $("#modalCreateApiToken").hide("");
-            showPageLogin();
-        },
-        objAlertPlaceholder: divCreateApiTokenAlert
     });
 }
 
@@ -935,8 +866,6 @@ function refreshAdminSessions() {
                 tableHtmlRows += "</ul></div></td></tr>";
             }
 
-            $("#btnAdminSessionsCreateToken").show();
-
             $("#tbodyAdminSessions").html(tableHtmlRows);
             $("#tfootAdminSessions").html("Sitzungen gesamt: " + responseJSON.response.sessions.length);
 
@@ -951,110 +880,6 @@ function refreshAdminSessions() {
             showPageLogin();
         },
         objLoaderPlaceholder: divAdminSessionsLoader
-    });
-}
-
-function showCreateApiTokenModal() {
-    var divCreateApiTokenAlert = $("#divCreateApiTokenAlert");
-    var divCreateApiTokenLoader = $("#divCreateApiTokenLoader");
-    var divCreateApiTokenForm = $("#divCreateApiTokenForm");
-    var divCreateApiTokenOutput = $("#divCreateApiTokenOutput");
-
-    divCreateApiTokenLoader.show();
-    divCreateApiTokenForm.hide();
-    divCreateApiTokenOutput.hide();
-
-    var btnCreateApiToken = $("#btnCreateApiToken");
-    btnCreateApiToken.attr("onclick", "createApiToken(this); return false;");
-    btnCreateApiToken.show();
-
-    var modalCreateApiToken = $("#modalCreateApiToken");
-    modalCreateApiToken.modal("show");
-
-    HTTPRequest({
-        url: "api/admin/users/list",
-        token: sessionData.token,
-        success: function (responseJSON) {
-            var userListHtml = "";
-
-            for (var i = 0; i < responseJSON.response.users.length; i++) {
-                userListHtml += "<option>" + htmlEncode(responseJSON.response.users[i].username) + "</option>";
-            }
-
-            $("#optCreateApiTokenUsername").html(userListHtml);
-
-            $("#optCreateApiTokenUsername").show();
-            $("#txtCreateApiTokenUsername").hide();
-            $("#txtCreateApiTokenName").val("");
-
-            divCreateApiTokenLoader.hide();
-            divCreateApiTokenForm.show();
-
-            setTimeout(function () {
-                $("#optCreateApiTokenUsername").trigger("focus");
-            }, 1000);
-        },
-        error: function () {
-            divCreateApiTokenLoader.hide();
-        },
-        invalidToken: function () {
-            modalCreateApiToken.modal("hide");
-            showPageLogin();
-        },
-        objAlertPlaceholder: divCreateApiTokenAlert,
-        objLoaderPlaceholder: divCreateApiTokenLoader
-    });
-}
-
-function createApiToken(objBtn) {
-    var btn = $(objBtn);
-
-    var divCreateApiTokenAlert = $("#divCreateApiTokenAlert");
-
-    var user = $("#optCreateApiTokenUsername").val();
-    var tokenName = $("#txtCreateApiTokenName").val();
-
-    if (user === "") {
-        showAlert("warning", "Angabe fehlt", "Bitte einen Benutzer auswählen.", divCreateApiTokenAlert);
-        $("#optCreateApiTokenUsername").trigger("focus");
-        return;
-    }
-
-    if (tokenName === "") {
-        showAlert("warning", "Angabe fehlt", "Bitte einen Namen für das Token eingeben.", divCreateApiTokenAlert);
-        $("#txtCreateApiTokenName").trigger("focus");
-        return;
-    }
-
-    btn.button("loading");
-
-    HTTPRequest({
-        url: "api/admin/sessions/createToken?user=" + encodeURIComponent(user) + "&tokenName=" + encodeURIComponent(tokenName),
-        token: sessionData.token,
-        success: function (responseJSON) {
-            btn.button("reset");
-            btn.hide();
-
-            $("#lblCreateApiTokenOutputUsername").text(responseJSON.response.username);
-            $("#lblCreateApiTokenOutputTokenName").text(responseJSON.response.tokenName);
-            $("#lblCreateApiTokenOutputToken").text(responseJSON.response.token);
-
-            $("#divCreateApiTokenForm").hide();
-            $("#divCreateApiTokenOutput").show();
-
-            showAlert("success", "Token erstellt", "Das API-Token wurde erstellt.", divCreateApiTokenAlert);
-
-            refreshAdminSessions();
-        },
-        error: function () {
-            btn.button("reset");
-        },
-        invalidToken: function () {
-            btn.button("reset");
-            $("#modalCreateApiToken").hide("");
-            showPageLogin();
-        },
-        objAlertPlaceholder: divCreateApiTokenAlert
     });
 }
 

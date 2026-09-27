@@ -197,7 +197,7 @@ function showPageMain() {
 
     refreshTimerHandle = setInterval(function () {
         var type = $("input[name=rdStatType]:checked").val();
-        if (type === "lastHour")
+        if ((type === "lastHour") || (type === "last30Minutes"))
             refreshDashboard(true);
 
         checkDashboardHealth();
@@ -270,6 +270,10 @@ $(function () {
         var recursion = $("input[name=rdRecursion]:checked").val();
 
         $("#txtRecursionNetworkACL").prop("disabled", recursion !== "UseSpecifiedNetworkACL");
+    });
+
+    $("input[type=radio][name=rdDo53Mode]").on("change", function () {
+        updateDo53ModeState();
     });
 
     $("input[type=radio][name=rdBlockingType]").on("change", function () {
@@ -438,6 +442,7 @@ $(function () {
 
         $("#chkIgnoreResolverLogs").prop("disabled", !enableLogging);
         $("#chkNoStackTrace").prop("disabled", !enableLogging);
+        $("#chkHideClientAddresses").prop("disabled", !enableLogging);
         $("#chkLogQueries").prop("disabled", !enableLogging);
         $("#chkUseLocalTime").prop("disabled", !enableLogging);
         $("#txtLogFolderPath").prop("disabled", !enableLogging);
@@ -636,6 +641,111 @@ function enableUpdateNotification() {
     showAlert("success", "Hinweise eingeblendet", "Update-Hinweise werden wieder angezeigt.");
 }
 
+function setAboutVersionInfo(info) {
+    $("#lblAboutVersion").text(info.version);
+    $("#lblAboutUptime").text(moment(info.uptimestamp).local().format("lll") + " (" + moment(info.uptimestamp).fromNow() + ")");
+
+    if (info.technitiumVersion != null)
+        $("#lblAboutTechnitiumVersion").text(info.technitiumVersion);
+
+    if (info.runtimeVersion != null)
+        $("#lblAboutRuntime").text(info.runtimeVersion + " auf " + info.osDescription + " (" + info.osArchitecture + ")");
+}
+
+function renderReleaseNotesInline(text) {
+    var html = htmlEncode(text);
+
+    html = html.replace(/`([^`]+)`/g, "<code>$1</code>");
+    html = html.replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>");
+    html = html.replace(/\[([^\]]+)\]\((https:\/\/[^\s)"]+)\)/g, "<a href=\"$2\" target=\"_blank\" rel=\"noopener noreferrer\">$1</a>");
+
+    return html;
+}
+
+function renderReleaseNotes(markdown) {
+    if ((markdown == null) || (markdown.trim().length === 0))
+        return "<p>Für diese Version gibt es keine Beschreibung.</p>";
+
+    var lines = markdown.replace(/\r\n/g, "\n").split("\n");
+    var html = "";
+    var inList = false;
+    var inCode = false;
+    var paragraph = [];
+
+    function flushParagraph() {
+        if (paragraph.length > 0) {
+            html += "<p>" + paragraph.map(renderReleaseNotesInline).join(" ") + "</p>";
+            paragraph = [];
+        }
+    }
+
+    function closeList() {
+        if (inList) {
+            html += "</ul>";
+            inList = false;
+        }
+    }
+
+    for (var i = 0; i < lines.length; i++) {
+        var line = lines[i];
+
+        if (/^```/.test(line.trim())) {
+            flushParagraph();
+            closeList();
+            html += inCode ? "</pre>" : "<pre>";
+            inCode = !inCode;
+            continue;
+        }
+
+        if (inCode) {
+            html += htmlEncode(line) + "\n";
+            continue;
+        }
+
+        var heading = /^(#{1,6})\s+(.*)$/.exec(line);
+        if (heading != null) {
+            flushParagraph();
+            closeList();
+            html += "<h5>" + renderReleaseNotesInline(heading[2]) + "</h5>";
+            continue;
+        }
+
+        var item = /^\s*[-*]\s+(.*)$/.exec(line);
+        if (item != null) {
+            flushParagraph();
+            if (!inList) {
+                html += "<ul>";
+                inList = true;
+            }
+
+            html += "<li>" + renderReleaseNotesInline(item[1]) + "</li>";
+            continue;
+        }
+
+        if (line.trim().length === 0) {
+            flushParagraph();
+            closeList();
+            continue;
+        }
+
+        if (inList && /^\s+/.test(line)) {
+            html = html.replace(/<\/li>$/, " " + renderReleaseNotesInline(line.trim()) + "</li>");
+            continue;
+        }
+
+        closeList();
+        paragraph.push(line.trim());
+    }
+
+    flushParagraph();
+    closeList();
+
+    if (inCode)
+        html += "</pre>";
+
+    return html;
+}
+
 function checkForUpdate(force) {
     if (!force) {
         var disableUpdateNotification = localStorage.getItem("disableUpdateNotification");
@@ -644,70 +754,75 @@ function checkForUpdate(force) {
     }
 
     HTTPRequest({
-        url: "api/user/checkForUpdate",
+        url: "api/user/checkForUpdate" + (force ? "?force=true" : ""),
         token: sessionData.token,
         success: function (responseJSON) {
+            var response = responseJSON.response;
             var lnkUpdateAvailable = $("#lnkUpdateAvailable");
+            var lblAboutUpdateStatus = $("#lblAboutUpdateStatus");
 
-            if (responseJSON.response.updateAvailable) {
-                $("#lblUpdateVersion").text(responseJSON.response.updateVersion);
-                $("#lblCurrentVersion").text(responseJSON.response.currentVersion);
+            if (!response.dnsServerEnableCheckForUpdate) {
+                lnkUpdateAvailable.hide();
+                lblAboutUpdateStatus.text("Die Update-Prüfung ist in den Einstellungen ausgeschaltet.");
 
-                if (responseJSON.response.updateTitle == null)
-                    responseJSON.response.updateTitle = "Neue Version verfügbar!";
+                if (force)
+                    showAlert("warning", "Update-Prüfung ausgeschaltet", "Die Update-Prüfung ist unter Einstellungen > Allgemein ausgeschaltet.");
 
-                lnkUpdateAvailable.text(responseJSON.response.updateTitle);
-                $("#lblUpdateAvailableTitle").text(responseJSON.response.updateTitle);
+                return;
+            }
 
-                var lblUpdateMessage = $("#lblUpdateMessage");
-                var lnkUpdateDownload = $("#lnkUpdateDownload");
-                var lnkUpdateInstructions = $("#lnkUpdateInstructions");
-                var lnkUpdateChangeLog = $("#lnkUpdateChangeLog");
+            if (response.updateCheckError != null) {
+                lnkUpdateAvailable.hide();
+                lblAboutUpdateStatus.text("GitHub ist gerade nicht erreichbar: " + response.updateCheckError);
 
-                if (responseJSON.response.updateMessage == null) {
-                    lblUpdateMessage.hide();
-                }
-                else {
-                    lblUpdateMessage.text(responseJSON.response.updateMessage);
-                    lblUpdateMessage.show();
-                }
+                if (force)
+                    showAlert("warning", "Update-Prüfung fehlgeschlagen", "GitHub ist gerade nicht erreichbar: " + response.updateCheckError);
 
-                if (responseJSON.response.downloadLink == null) {
-                    lnkUpdateDownload.hide();
-                }
-                else {
-                    lnkUpdateDownload.attr("href", responseJSON.response.downloadLink);
-                    lnkUpdateDownload.show();
-                }
+                return;
+            }
 
-                if (responseJSON.response.instructionsLink == null) {
-                    lnkUpdateInstructions.hide();
-                }
-                else {
-                    lnkUpdateInstructions.attr("href", responseJSON.response.instructionsLink);
-                    lnkUpdateInstructions.show();
-                }
+            if (!response.updateAvailable) {
+                lnkUpdateAvailable.hide();
+                lblAboutUpdateStatus.text("Die installierte Version ist aktuell. Neueste Version auf GitHub: " + response.updateVersion + ".");
 
-                if (responseJSON.response.changeLogLink == null) {
-                    lnkUpdateChangeLog.hide();
-                }
-                else {
-                    lnkUpdateChangeLog.attr("href", responseJSON.response.changeLogLink);
-                    lnkUpdateChangeLog.show();
-                }
+                if (force)
+                    showAlert("success", "Kein Update verfügbar", "Die installierte Version " + response.currentVersion + " ist aktuell.");
 
-                lnkUpdateAvailable.show();
+                return;
+            }
+
+            $("#lblUpdateAvailableTitle").text(response.updateTitle);
+            $("#lblUpdateVersion").text(response.updateVersion);
+            $("#lblCurrentVersion").text(response.currentVersion);
+            $("#lblUpdatePublished").text(response.publishedAt == null ? "" : ", veröffentlicht am " + moment(response.publishedAt).local().format("LL"));
+            $("#divUpdateReleaseNotes").html(renderReleaseNotes(response.releaseNotes));
+
+            if (response.releaseUrl == null)
+                $("#lnkUpdateRelease").hide();
+            else
+                $("#lnkUpdateRelease").attr("href", response.releaseUrl).show();
+
+            if (response.downloadLink == null) {
+                $("#divUpdateInstall").hide();
             }
             else {
-                lnkUpdateAvailable.hide();
+                $("#lnkUpdateDownload").attr("href", response.downloadLink).text(response.downloadName + " (" + (response.downloadSize / 1048576).toFixed(1).replace(".", ",") + " MB)");
+                $("#preUpdateInstall").text("wget " + response.downloadLink + "\nsudo apt install ./" + response.downloadName);
 
-                if (force) {
-                    if (responseJSON.response.dnsServerEnableCheckForUpdate)
-                        showAlert("success", "Kein Update verfügbar", "Die installierte Version ist aktuell.");
-                    else
-                        showAlert("danger", "Update-Prüfung deaktiviert", "Die Update-Prüfung ist in den Einstellungen deaktiviert.");
-                }
+                if (response.checksumsLink == null)
+                    $("#lnkUpdateChecksums").hide();
+                else
+                    $("#lnkUpdateChecksums").attr("href", response.checksumsLink).show();
+
+                $("#divUpdateInstall").show();
             }
+
+            lnkUpdateAvailable.html("<span class=\"fa fa-arrow-circle-up\" aria-hidden=\"true\"></span> Version " + htmlEncode(response.updateVersion) + " verfügbar");
+            lnkUpdateAvailable.show();
+            lblAboutUpdateStatus.html("Version <b>" + htmlEncode(response.updateVersion) + "</b> ist verfügbar. <a href=\"#\" data-toggle=\"modal\" data-target=\"#modalUpdateAvailable\">Änderungen und Installation ansehen</a>");
+
+            if (force)
+                $("#modalUpdateAvailable").modal("show");
         },
         invalidToken: function () {
             showPageLogin();
@@ -915,8 +1030,7 @@ function updateDnsSettingsDataAndGui(responseJSON) {
     sessionData.info.uptimestamp = responseJSON.response.uptimestamp;
 
     document.title = responseJSON.response.dnsServerDomain + " - " + "ZenitiumDNS v" + responseJSON.response.version;
-    $("#lblAboutVersion").text(responseJSON.response.version);
-    $("#lblAboutUptime").text(moment(responseJSON.response.uptimestamp).local().format("lll") + " (" + moment(responseJSON.response.uptimestamp).fromNow() + ")");
+    setAboutVersionInfo(responseJSON.response);
     $("#lblDnsServerDomain").text(responseJSON.response.dnsServerDomain);
 }
 
@@ -941,7 +1055,6 @@ function loadDnsSettings(responseJSON) {
     $("#txtDefaultResponsiblePerson").val(responseJSON.response.defaultResponsiblePerson);
 
     $("#chkDnsServerEnableCheckForUpdate").prop("checked", responseJSON.response.dnsServerEnableCheckForUpdate);
-    $("#chkDnsAppsEnableAutomaticUpdate").prop("checked", responseJSON.response.dnsAppsEnableAutomaticUpdate);
 
     switch (responseJSON.response.ipv6Mode) {
         case "Enabled":
@@ -1130,6 +1243,40 @@ function loadDnsSettings(responseJSON) {
     $("#chkEnableDdr").prop("checked", responseJSON.response.enableDdr);
     $("#chkDdrOnlyUnencrypted").prop("checked", responseJSON.response.ddrOnlyUnencrypted);
 
+    switch (responseJSON.response.do53Mode) {
+        case "DdrOnlyDrop":
+            $("#rdDo53ModeDdrOnlyDrop").prop("checked", true);
+            break;
+
+        case "DdrOnlyRefused":
+            $("#rdDo53ModeDdrOnlyRefused").prop("checked", true);
+            break;
+
+        case "Disabled":
+            $("#rdDo53ModeDisabled").prop("checked", true);
+            break;
+
+        default:
+            $("#rdDo53ModeEnabled").prop("checked", true);
+            break;
+    }
+
+    updateDo53ModeState();
+
+    switch (responseJSON.response.eDnsPaddingMode) {
+        case "Always":
+            $("#rdEDnsPaddingModeAlways").prop("checked", true);
+            break;
+
+        case "Disabled":
+            $("#rdEDnsPaddingModeDisabled").prop("checked", true);
+            break;
+
+        default:
+            $("#rdEDnsPaddingModeWhenRequested").prop("checked", true);
+            break;
+    }
+
     if ((responseJSON.response.ddrRecords == null) || (responseJSON.response.ddrRecords.length === 0))
         $("#preDdrRecords").text("Keine Einträge: Es ist kein TLS-Zertifikat geladen oder kein verschlüsselter Dienst aktiv.");
     else
@@ -1196,6 +1343,7 @@ function loadDnsSettings(responseJSON) {
     $("#txtCacheMinimumRecordTtl").val(responseJSON.response.cacheMinimumRecordTtl);
     $("#txtCacheMaximumRecordTtl").val(responseJSON.response.cacheMaximumRecordTtl);
     $("#txtCacheNegativeRecordTtl").val(responseJSON.response.cacheNegativeRecordTtl);
+    $("#txtCacheMaximumNegativeRecordTtl").val(responseJSON.response.cacheMaximumNegativeRecordTtl);
     $("#txtCacheFailureRecordTtl").val(responseJSON.response.cacheFailureRecordTtl);
 
     $("#txtCachePrefetchEligibility").val(responseJSON.response.cachePrefetchEligibility);
@@ -1249,6 +1397,16 @@ function loadDnsSettings(responseJSON) {
 
     $("#txtBlockingAnswerTtl").val(responseJSON.response.blockingAnswerTtl);
     $("#txtBlockingNegativeTtl").val(responseJSON.response.blockingNegativeTtl);
+    $("#chkBlockFirefoxCanaryDomain").prop("checked", responseJSON.response.blockFirefoxCanaryDomain);
+    $("#chkEnableLiveMonitoring").prop("checked", responseJSON.response.enableLiveMonitoring);
+    $("#chkEnableWatchdog").prop("checked", responseJSON.response.enableWatchdog);
+    renderIanaData(responseJSON.response.ianaData);
+    $("#chkForceChromePreflight").prop("checked", responseJSON.response.forceChromePreflight);
+
+    if ((responseJSON.response.autoAllowedNames == null) || (responseJSON.response.autoAllowedNames.length === 0))
+        $("#lblAutoAllowedNames").text("Keine: Der Serverdomainname ist kein vollständiger Domainname und es ist kein TLS-Zertifikat geladen.");
+    else
+        $("#lblAutoAllowedNames").text(responseJSON.response.autoAllowedNames.join(", "));
     $("#txtBlockingReportText").val(responseJSON.response.blockingReportText == null ? "" : responseJSON.response.blockingReportText);
 
     var blockListUrls = responseJSON.response.blockListUrls;
@@ -1384,12 +1542,14 @@ function loadDnsSettings(responseJSON) {
 
     $("#chkIgnoreResolverLogs").prop("disabled", !enableLogging);
     $("#chkNoStackTrace").prop("disabled", !enableLogging);
+    $("#chkHideClientAddresses").prop("disabled", !enableLogging);
     $("#chkLogQueries").prop("disabled", !enableLogging);
     $("#chkUseLocalTime").prop("disabled", !enableLogging);
     $("#txtLogFolderPath").prop("disabled", !enableLogging);
 
     $("#chkIgnoreResolverLogs").prop("checked", responseJSON.response.ignoreResolverLogs);
     $("#chkNoStackTrace").prop("checked", responseJSON.response.noStackTrace);
+    $("#chkHideClientAddresses").prop("checked", responseJSON.response.hideClientAddresses);
     $("#chkLogQueries").prop("checked", responseJSON.response.logQueries);
     $("#chkUseLocalTime").prop("checked", responseJSON.response.useLocalTime);
     $("#txtLogFolderPath").val(responseJSON.response.logFolder);
@@ -1431,9 +1591,8 @@ function saveDnsSettings(objBtn) {
     var defaultResponsiblePerson = $("#txtDefaultResponsiblePerson").val();
 
     var dnsServerEnableCheckForUpdate = $("#chkDnsServerEnableCheckForUpdate").prop("checked");
-    var dnsAppsEnableAutomaticUpdate = $("#chkDnsAppsEnableAutomaticUpdate").prop("checked");
 
-    formData += "&defaultRecordTtl=" + encodeURIComponent(defaultRecordTtl) + "&defaultResponsiblePerson=" + encodeURIComponent(defaultResponsiblePerson) + "&dnsServerEnableCheckForUpdate=" + dnsServerEnableCheckForUpdate + "&dnsAppsEnableAutomaticUpdate=" + dnsAppsEnableAutomaticUpdate;
+    formData += "&defaultRecordTtl=" + encodeURIComponent(defaultRecordTtl) + "&defaultResponsiblePerson=" + encodeURIComponent(defaultResponsiblePerson) + "&dnsServerEnableCheckForUpdate=" + dnsServerEnableCheckForUpdate;
 
     var ipv6Mode = $("input[name=rdIPv6Mode]:checked").val();
     var ipv6AutoFallback = $("#chkIpv6AutoFallback").prop("checked");
@@ -1491,6 +1650,9 @@ function saveDnsSettings(objBtn) {
     var eDnsClientSubnetIpv4Override = $("#txtEDnsClientSubnetIpv4Override").val();
     var eDnsClientSubnetIpv6Override = $("#txtEDnsClientSubnetIpv6Override").val();
 
+    if (!validateQpsPrefixLimits($("#tableQpsPrefixLimitsIPv4"), 32) || !validateQpsPrefixLimits($("#tableQpsPrefixLimitsIPv6"), 128))
+        return;
+
     var qpsPrefixLimitsIPv4 = serializeTableData($("#tableQpsPrefixLimitsIPv4"), 3);
     if (qpsPrefixLimitsIPv4 === false)
         return;
@@ -1506,15 +1668,15 @@ function saveDnsSettings(objBtn) {
         qpsPrefixLimitsIPv6 = false;
 
     var rateLimitBurstSeconds = $("#txtRateLimitBurstSeconds").val();
-    if ((rateLimitBurstSeconds == null) || (rateLimitBurstSeconds === "")) {
-        showAlert("warning", "Angabe fehlt", "Bitte die Burst-Dauer für die Ratenbegrenzung eingeben.");
+    if (!isIntegerInRange(rateLimitBurstSeconds, 1, 60)) {
+        showAlert("warning", "Ungültige Angabe", "Die Burst-Dauer muss zwischen 1 und 60 Sekunden liegen.");
         $("#txtRateLimitBurstSeconds").trigger("focus");
         return;
     }
 
     var rateLimitUdpTruncationPercentage = $("#txtRateLimitUdpTruncation").val();
-    if ((rateLimitUdpTruncationPercentage == null) || (rateLimitUdpTruncationPercentage === "")) {
-        showAlert("warning", "Angabe fehlt", "Bitte den Anteil der TC-Antworten für die Ratenbegrenzung eingeben.");
+    if (!isIntegerInRange(rateLimitUdpTruncationPercentage, 0, 100)) {
+        showAlert("warning", "Ungültige Angabe", "Der Anteil der TC-Antworten muss zwischen 0 und 100 % liegen.");
         $("#txtRateLimitUdpTruncation").trigger("focus");
         return;
     }
@@ -1705,8 +1867,9 @@ function saveDnsSettings(objBtn) {
     var dnsTlsCertificateKeyPath = $("#txtDnsTlsCertificateKeyPath").val();
     var enableDdr = $("#chkEnableDdr").prop("checked");
     var ddrOnlyUnencrypted = $("#chkDdrOnlyUnencrypted").prop("checked");
+    var do53Mode = $("input[name=rdDo53Mode]:checked").val();
 
-    formData += "&enableEDnsClientSubnetSourceAddress=" + enableEDnsClientSubnetSourceAddress + "&enableDnsOverUdpProxy=" + enableDnsOverUdpProxy + "&enableDnsOverTcpProxy=" + enableDnsOverTcpProxy + "&enableDnsOverHttp=" + enableDnsOverHttp + "&enableDnsOverHttpUnixSocket=" + enableDnsOverHttpUnixSocket + "&enableDnsOverHttpsUnixSocket=" + enableDnsOverHttpsUnixSocket + "&enableDnsOverTls=" + enableDnsOverTls + "&enableDnsOverHttps=" + enableDnsOverHttps + "&enableDnsOverHttp3=" + enableDnsOverHttp3 + "&enableDnsOverQuic=" + enableDnsOverQuic + "&enableDnsOverHttpHelpRedirect=" + enableDnsOverHttpHelpRedirect + "&dnsOverUdpProxyPort=" + dnsOverUdpProxyPort + "&dnsOverTcpProxyPort=" + dnsOverTcpProxyPort + "&dnsOverHttpPort=" + dnsOverHttpPort + "&dnsOverHttpUnixSocket=" + encodeURIComponent(dnsOverHttpUnixSocket) + "&dnsOverHttpsUnixSocket=" + encodeURIComponent(dnsOverHttpsUnixSocket) + "&dnsOverTlsPort=" + dnsOverTlsPort + "&dnsOverHttpsPort=" + dnsOverHttpsPort + "&dnsOverQuicPort=" + dnsOverQuicPort + "&dnsReverseProxyNetworkACL=" + encodeURIComponent(dnsReverseProxyNetworkACL) + "&dnsOverHttpRealIpHeader=" + encodeURIComponent(dnsOverHttpRealIpHeader) + "&dnsTlsCertificatePath=" + encodeURIComponent(dnsTlsCertificatePath) + "&dnsTlsCertificatePassword=" + encodeURIComponent(dnsTlsCertificatePassword) + "&dnsTlsCertificateKeyPath=" + encodeURIComponent(dnsTlsCertificateKeyPath) + "&enableDdr=" + enableDdr + "&ddrOnlyUnencrypted=" + ddrOnlyUnencrypted;
+    formData += "&enableEDnsClientSubnetSourceAddress=" + enableEDnsClientSubnetSourceAddress + "&enableDnsOverUdpProxy=" + enableDnsOverUdpProxy + "&enableDnsOverTcpProxy=" + enableDnsOverTcpProxy + "&enableDnsOverHttp=" + enableDnsOverHttp + "&enableDnsOverHttpUnixSocket=" + enableDnsOverHttpUnixSocket + "&enableDnsOverHttpsUnixSocket=" + enableDnsOverHttpsUnixSocket + "&enableDnsOverTls=" + enableDnsOverTls + "&enableDnsOverHttps=" + enableDnsOverHttps + "&enableDnsOverHttp3=" + enableDnsOverHttp3 + "&enableDnsOverQuic=" + enableDnsOverQuic + "&enableDnsOverHttpHelpRedirect=" + enableDnsOverHttpHelpRedirect + "&dnsOverUdpProxyPort=" + dnsOverUdpProxyPort + "&dnsOverTcpProxyPort=" + dnsOverTcpProxyPort + "&dnsOverHttpPort=" + dnsOverHttpPort + "&dnsOverHttpUnixSocket=" + encodeURIComponent(dnsOverHttpUnixSocket) + "&dnsOverHttpsUnixSocket=" + encodeURIComponent(dnsOverHttpsUnixSocket) + "&dnsOverTlsPort=" + dnsOverTlsPort + "&dnsOverHttpsPort=" + dnsOverHttpsPort + "&dnsOverQuicPort=" + dnsOverQuicPort + "&dnsReverseProxyNetworkACL=" + encodeURIComponent(dnsReverseProxyNetworkACL) + "&dnsOverHttpRealIpHeader=" + encodeURIComponent(dnsOverHttpRealIpHeader) + "&dnsTlsCertificatePath=" + encodeURIComponent(dnsTlsCertificatePath) + "&dnsTlsCertificatePassword=" + encodeURIComponent(dnsTlsCertificatePassword) + "&dnsTlsCertificateKeyPath=" + encodeURIComponent(dnsTlsCertificateKeyPath) + "&enableDdr=" + enableDdr + "&ddrOnlyUnencrypted=" + ddrOnlyUnencrypted + "&do53Mode=" + do53Mode + "&eDnsPaddingMode=" + $("input[name=rdEDnsPaddingMode]:checked").val();
 
     var recursion = $("input[name=rdRecursion]:checked").val();
 
@@ -1787,6 +1950,13 @@ function saveDnsSettings(objBtn) {
         return;
     }
 
+    var cacheMaximumNegativeRecordTtl = $("#txtCacheMaximumNegativeRecordTtl").val();
+    if ((cacheMaximumNegativeRecordTtl === null) || (cacheMaximumNegativeRecordTtl === "")) {
+        showAlert("warning", "Angabe fehlt", "Bitte die maximale negative TTL für den Cache eingeben.");
+        $("#txtCacheMaximumNegativeRecordTtl").trigger("focus");
+        return;
+    }
+
     var cacheFailureRecordTtl = $("#txtCacheFailureRecordTtl").val();
     if ((cacheFailureRecordTtl === null) || (cacheFailureRecordTtl === "")) {
         showAlert("warning", "Angabe fehlt", "Bitte die Fehler-TTL eingeben.");
@@ -1808,7 +1978,7 @@ function saveDnsSettings(objBtn) {
         return;
     }
 
-    formData += "&saveCache=" + saveCache + "&serveStale=" + serveStale + "&serveStaleTtl=" + serveStaleTtl + "&serveStaleAnswerTtl=" + serveStaleAnswerTtl + "&serveStaleResetTtl=" + serveStaleResetTtl + "&serveStaleMaxWaitTime=" + serveStaleMaxWaitTime + "&cacheMaximumEntries=" + cacheMaximumEntries + "&cacheMinimumRecordTtl=" + cacheMinimumRecordTtl + "&cacheMaximumRecordTtl=" + cacheMaximumRecordTtl + "&cacheNegativeRecordTtl=" + cacheNegativeRecordTtl + "&cacheFailureRecordTtl=" + cacheFailureRecordTtl + "&cachePrefetchEligibility=" + cachePrefetchEligibility + "&cachePrefetchTrigger=" + cachePrefetchTrigger;
+    formData += "&saveCache=" + saveCache + "&serveStale=" + serveStale + "&serveStaleTtl=" + serveStaleTtl + "&serveStaleAnswerTtl=" + serveStaleAnswerTtl + "&serveStaleResetTtl=" + serveStaleResetTtl + "&serveStaleMaxWaitTime=" + serveStaleMaxWaitTime + "&cacheMaximumEntries=" + cacheMaximumEntries + "&cacheMinimumRecordTtl=" + cacheMinimumRecordTtl + "&cacheMaximumRecordTtl=" + cacheMaximumRecordTtl  + "&cacheNegativeRecordTtl=" + cacheNegativeRecordTtl + "&cacheMaximumNegativeRecordTtl=" + cacheMaximumNegativeRecordTtl + "&cacheFailureRecordTtl=" + cacheFailureRecordTtl + "&cachePrefetchEligibility=" + cachePrefetchEligibility + "&cachePrefetchTrigger=" + cachePrefetchTrigger;
 
     var enableBlocking = $("#chkEnableBlocking").prop("checked");
     var allowTxtBlockingReport = $("#chkAllowTxtBlockingReport").prop("checked");
@@ -1840,7 +2010,7 @@ function saveDnsSettings(objBtn) {
 
     var blockListUpdateIntervalHours = $("#txtBlockListUpdateIntervalHours").val();
 
-    formData += "&enableBlocking=" + enableBlocking + "&allowTxtBlockingReport=" + allowTxtBlockingReport + "&blockingBypassList=" + encodeURIComponent(blockingBypassList) + "&blockingType=" + blockingType + "&customBlockingAddresses=" + encodeURIComponent(customBlockingAddresses) + "&blockingAnswerTtl=" + blockingAnswerTtl + "&blockingNegativeTtl=" + blockingNegativeTtl + "&blockingReportText=" + encodeURIComponent(blockingReportText) + "&blockListUrls=" + encodeURIComponent(blockListUrls) + "&blockListUpdateIntervalHours=" + blockListUpdateIntervalHours;
+    formData += "&enableBlocking=" + enableBlocking + "&allowTxtBlockingReport=" + allowTxtBlockingReport + "&blockingBypassList=" + encodeURIComponent(blockingBypassList) + "&blockingType=" + blockingType + "&customBlockingAddresses=" + encodeURIComponent(customBlockingAddresses) + "&blockingAnswerTtl=" + blockingAnswerTtl + "&blockingNegativeTtl=" + blockingNegativeTtl  + "&blockingReportText=" + encodeURIComponent(blockingReportText) + "&blockFirefoxCanaryDomain=" + $("#chkBlockFirefoxCanaryDomain").prop("checked") + "&forceChromePreflight=" + $("#chkForceChromePreflight").prop("checked") + "&enableLiveMonitoring=" + $("#chkEnableLiveMonitoring").prop("checked") + "&enableWatchdog=" + $("#chkEnableWatchdog").prop("checked") + "&rootZoneMode=" + $("input[name=rdRootZoneMode]:checked").val() + "&arpaZoneMode=" + $("input[name=rdArpaZoneMode]:checked").val() + "&trustAnchorMode=" + $("input[name=rdTrustAnchorMode]:checked").val() + "&blockListUrls=" + encodeURIComponent(blockListUrls) + "&blockListUpdateIntervalHours=" + blockListUpdateIntervalHours;
 
     var proxy;
 
@@ -1912,6 +2082,7 @@ function saveDnsSettings(objBtn) {
     var loggingType = $("input[name=rdLoggingType]:checked").val();
     var ignoreResolverLogs = $("#chkIgnoreResolverLogs").prop("checked");
     var noStackTrace = $("#chkNoStackTrace").prop("checked");
+    var hideClientAddresses = $("#chkHideClientAddresses").prop("checked");
     var logQueries = $("#chkLogQueries").prop("checked");
     var useLocalTime = $("#chkUseLocalTime").prop("checked");
     var logFolder = $("#txtLogFolderPath").val();
@@ -1920,7 +2091,7 @@ function saveDnsSettings(objBtn) {
     var enableInMemoryStats = $("#chkEnableInMemoryStats").prop("checked");
     var maxStatFileDays = $("#txtMaxStatFileDays").val();
 
-    formData += "&loggingType=" + loggingType + "&ignoreResolverLogs=" + ignoreResolverLogs + "&noStackTrace=" + noStackTrace + "&logQueries=" + logQueries + "&useLocalTime=" + useLocalTime + "&logFolder=" + encodeURIComponent(logFolder) + "&maxLogFileDays=" + maxLogFileDays + "&enableInMemoryStats=" + enableInMemoryStats + "&maxStatFileDays=" + maxStatFileDays;
+    formData += "&loggingType=" + loggingType + "&ignoreResolverLogs=" + ignoreResolverLogs + "&noStackTrace=" + noStackTrace + "&hideClientAddresses=" + hideClientAddresses + "&logQueries=" + logQueries + "&useLocalTime=" + useLocalTime + "&logFolder=" + encodeURIComponent(logFolder) + "&maxLogFileDays=" + maxLogFileDays + "&enableInMemoryStats=" + enableInMemoryStats + "&maxStatFileDays=" + maxStatFileDays;
 
     var btn = $(objBtn);
     btn.button("loading");
@@ -1953,12 +2124,69 @@ function saveDnsSettings(objBtn) {
     });
 }
 
+function isIntegerInRange(value, min, max) {
+    if ((value == null) || !/^[0-9]+$/.test(String(value).trim()))
+        return false;
+
+    var number = parseInt(value, 10);
+
+    return (number >= min) && (number <= max);
+}
+
+function validateQpsPrefixLimits(table, maxPrefix) {
+    var rows = table.find("tr");
+    var prefixes = {};
+
+    for (var i = 0; i < rows.length; i++) {
+        var inputs = $(rows[i]).find("input");
+        var prefix = $(inputs[0]);
+
+        if (!isIntegerInRange(prefix.val(), 0, maxPrefix)) {
+            showAlert("warning", "Ungültige Angabe", "Die Präfixlänge muss zwischen 0 und " + maxPrefix + " liegen.");
+            prefix.trigger("focus");
+            return false;
+        }
+
+        if (prefixes[prefix.val().trim()]) {
+            showAlert("warning", "Doppelter Eintrag", "Das Präfix /" + prefix.val().trim() + " ist mehrfach eingetragen.");
+            prefix.trigger("focus");
+            return false;
+        }
+
+        prefixes[prefix.val().trim()] = true;
+
+        for (var j = 1; j < 3; j++) {
+            var limit = $(inputs[j]);
+
+            if (!isIntegerInRange(limit.val(), 0, 1000000)) {
+                showAlert("warning", "Ungültige Angabe", "Das Limit muss zwischen 0 und 1.000.000 Anfragen pro Sekunde liegen, 0 bedeutet unbegrenzt.");
+                limit.trigger("focus");
+                return false;
+            }
+        }
+    }
+
+    return true;
+}
+
+function setRecommendedQpsPrefixLimits() {
+    $("#tableQpsPrefixLimitsIPv4").html("");
+    addQpsPrefixLimitsIPv4Row(32, 1000, 5000);
+
+    $("#tableQpsPrefixLimitsIPv6").html("");
+    addQpsPrefixLimitsIPv6Row(64, 1000, 5000);
+    addQpsPrefixLimitsIPv6Row(48, 10000, 50000);
+
+    $("#txtRateLimitBurstSeconds").val(5);
+    $("#txtRateLimitUdpTruncation").val(100);
+}
+
 function addQpsPrefixLimitsIPv4Row(prefix, udpLimit, tcpLimit) {
     var id = Math.floor(Math.random() * 10000);
 
-    var tableHtmlRows = "<tr id=\"tableQpsPrefixLimitsIPv4Row" + id + "\"><td><input type=\"number\" class=\"form-control\" value=\"" + htmlEncode(prefix) + "\"></td>";
-    tableHtmlRows += "<td><input type=\"number\" class=\"form-control\" value=\"" + htmlEncode(udpLimit) + "\"></td>";
-    tableHtmlRows += "<td><input type=\"number\" class=\"form-control\" value=\"" + htmlEncode(tcpLimit) + "\"></td>";
+    var tableHtmlRows = "<tr id=\"tableQpsPrefixLimitsIPv4Row" + id + "\"><td><input type=\"number\" class=\"form-control\" min=\"0\" max=\"32\" step=\"1\" placeholder=\"32\" value=\"" + htmlEncode(prefix) + "\"></td>";
+    tableHtmlRows += "<td><input type=\"number\" class=\"form-control\" min=\"0\" max=\"1000000\" step=\"1\" placeholder=\"0 = unbegrenzt\" value=\"" + htmlEncode(udpLimit) + "\"></td>";
+    tableHtmlRows += "<td><input type=\"number\" class=\"form-control\" min=\"0\" max=\"1000000\" step=\"1\" placeholder=\"0 = unbegrenzt\" value=\"" + htmlEncode(tcpLimit) + "\"></td>";
 
     tableHtmlRows += "<td><button type=\"button\" class=\"btn btn-danger\" onclick=\"$('#tableQpsPrefixLimitsIPv4Row" + id + "').remove();\">Löschen</button></td></tr>";
 
@@ -1968,9 +2196,9 @@ function addQpsPrefixLimitsIPv4Row(prefix, udpLimit, tcpLimit) {
 function addQpsPrefixLimitsIPv6Row(prefix, udpLimit, tcpLimit) {
     var id = Math.floor(Math.random() * 10000);
 
-    var tableHtmlRows = "<tr id=\"tableQpsPrefixLimitsIPv6Row" + id + "\"><td><input type=\"number\" class=\"form-control\" value=\"" + htmlEncode(prefix) + "\"></td>";
-    tableHtmlRows += "<td><input type=\"number\" class=\"form-control\" value=\"" + htmlEncode(udpLimit) + "\"></td>";
-    tableHtmlRows += "<td><input type=\"number\" class=\"form-control\" value=\"" + htmlEncode(tcpLimit) + "\"></td>";
+    var tableHtmlRows = "<tr id=\"tableQpsPrefixLimitsIPv6Row" + id + "\"><td><input type=\"number\" class=\"form-control\" min=\"0\" max=\"128\" step=\"1\" placeholder=\"64\" value=\"" + htmlEncode(prefix) + "\"></td>";
+    tableHtmlRows += "<td><input type=\"number\" class=\"form-control\" min=\"0\" max=\"1000000\" step=\"1\" placeholder=\"0 = unbegrenzt\" value=\"" + htmlEncode(udpLimit) + "\"></td>";
+    tableHtmlRows += "<td><input type=\"number\" class=\"form-control\" min=\"0\" max=\"1000000\" step=\"1\" placeholder=\"0 = unbegrenzt\" value=\"" + htmlEncode(tcpLimit) + "\"></td>";
 
     tableHtmlRows += "<td><button type=\"button\" class=\"btn btn-danger\" onclick=\"$('#tableQpsPrefixLimitsIPv6Row" + id + "').remove();\">Löschen</button></td></tr>";
 
@@ -2451,3 +2679,177 @@ function showChangeThemeModal() {
 
     $("#modalChangeTheme").modal("show");
 }
+
+function updateDo53ModeState() {
+    var do53Mode = $("input[name=rdDo53Mode]:checked").val();
+    var ddrOnly = (do53Mode === "DdrOnlyDrop") || (do53Mode === "DdrOnlyRefused");
+
+    if (ddrOnly)
+        $("#chkEnableDdr").prop("checked", true);
+
+    $("#chkEnableDdr").prop("disabled", ddrOnly);
+}
+
+var ianaDataEditorItem = null;
+
+function formatIanaDate(value) {
+    if (value == null)
+        return null;
+
+    return moment(value).local().format("DD.MM.YYYY HH:mm");
+}
+
+function renderIanaZoneStatus(target, status) {
+    var div = $(target);
+    var html;
+
+    if (status.error != null) {
+        html = "<span class=\"iana-state iana-state-error\">Fehler</span> " + htmlEncode(status.error);
+
+        if (status.active)
+            html += " Die zuletzt geprüfte Version ist weiter aktiv.";
+    }
+    else if (status.mode === "Disabled") {
+        html = "<span class=\"iana-state\">Aus</span>";
+    }
+    else if (status.active) {
+        html = "<span class=\"iana-state iana-state-ok\">Aktiv</span> Seriennummer " + htmlEncode(String(status.serial)) + ", " + formatNumber(status.delegations) + " Delegationen, Quelle " + htmlEncode(status.source) + ". " + htmlEncode(status.message);
+
+        if (status.validUntil != null)
+            html += " Signaturen gültig bis " + formatIanaDate(status.validUntil) + ".";
+    }
+    else if (status.loadedOn == null) {
+        html = "<span class=\"iana-state\">Wird geladen</span> Die Zone wird kurz nach dem Start geladen und geprüft.";
+    }
+    else {
+        html = "<span class=\"iana-state iana-state-warning\">Nicht aktiv</span> " + htmlEncode(status.message == null ? "" : status.message);
+    }
+
+    if (status.lastCheck != null)
+        html += " <span class=\"iana-checked\">Zuletzt geprüft " + formatIanaDate(status.lastCheck) + ".</span>";
+
+    div.html(html);
+}
+
+function renderIanaData(ianaData) {
+    if (ianaData == null)
+        return;
+
+    $("input[name=rdRootZoneMode][value=" + ianaData.rootZone.mode + "]").prop("checked", true);
+    $("input[name=rdArpaZoneMode][value=" + ianaData.arpaZone.mode + "]").prop("checked", true);
+    $("input[name=rdTrustAnchorMode][value=" + ianaData.trustAnchors.mode + "]").prop("checked", true);
+
+    $("input[name=rdRootZoneMode][value=Custom]").prop("disabled", !ianaData.rootZone.hasCustom);
+    $("input[name=rdArpaZoneMode][value=Custom]").prop("disabled", !ianaData.arpaZone.hasCustom);
+    $("input[name=rdTrustAnchorMode][value=Custom]").prop("disabled", !ianaData.trustAnchors.hasCustom);
+
+    renderIanaZoneStatus("#divIanaStatusRootZone", ianaData.rootZone);
+    renderIanaZoneStatus("#divIanaStatusArpaZone", ianaData.arpaZone);
+
+    var anchors = ianaData.trustAnchors;
+    var html;
+
+    if (anchors.error != null)
+        html = "<span class=\"iana-state iana-state-error\">Fehler</span> " + htmlEncode(anchors.error);
+    else if (anchors.source == null)
+        html = "<span class=\"iana-state\">Wird geladen</span>";
+    else
+        html = "<span class=\"iana-state iana-state-ok\">Aktiv</span> Quelle " + htmlEncode(anchors.source) + ". " + htmlEncode(anchors.message);
+
+    html += " Schlüssel: " + htmlEncode(anchors.keyTags.join(", ")) + ".";
+
+    if (anchors.lastCheck != null)
+        html += " <span class=\"iana-checked\">Zuletzt geprüft " + formatIanaDate(anchors.lastCheck) + ".</span>";
+
+    $("#divIanaStatusTrustAnchors").html(html);
+}
+
+function updateIanaData(objBtn) {
+    var btn = $(objBtn);
+    btn.button("loading");
+
+    HTTPRequest({
+        url: "api/settings/iana/update",
+        token: sessionData.token,
+        success: function (responseJSON) {
+            btn.button("reset");
+            renderIanaData(responseJSON.response.ianaData);
+            showAlert("success", "Geprüft", "Root-Zone, arpa-Zone und Vertrauensanker wurden geprüft und, falls nötig, aktualisiert.");
+        },
+        error: function () {
+            btn.button("reset");
+        },
+        invalidToken: function () {
+            showPageLogin();
+        }
+    });
+}
+
+function showIanaDataEditor(objBtn, item) {
+    var btn = $(objBtn);
+    btn.button("loading");
+
+    var titles = { RootZone: "Eigene Root-Zone", ArpaZone: "Eigene arpa-Zone", TrustAnchors: "Eigene Vertrauensanker (Root-KSK)" };
+    var hints = {
+        RootZone: "Zonendatei im Standardformat. Vorbelegt ist die aktuell verwendete Version. Nach dem Speichern wird sie geprüft und sofort verwendet; ist sie nicht gültig signiert, gelten ihre Top-Level-Domains als unsigniert, was mit eingeschalteter DNSSEC-Validierung zu Fehlern führen kann.",
+        ArpaZone: "Zonendatei der arpa-Zone im Standardformat. Nach dem Speichern wird sie geprüft und sofort verwendet.",
+        TrustAnchors: "Ein DS-Eintrag pro Zeile für die Root-Zone, zum Beispiel: . IN DS 20326 8 2 E06D44B8… Nach dem Speichern werden ausschließlich diese Anker für die DNSSEC-Validierung verwendet."
+    };
+
+    HTTPRequest({
+        url: "api/settings/iana/get?item=" + encodeURIComponent(item),
+        token: sessionData.token,
+        success: function (responseJSON) {
+            btn.button("reset");
+
+            ianaDataEditorItem = item;
+            $("#divIanaDataAlert").html("");
+            $("#lblIanaDataTitle").text(titles[item]);
+            $("#lblIanaDataHint").text(hints[item]);
+            $("#txtIanaData").val(responseJSON.response.content);
+            $("#btnIanaDataSave").button("reset");
+            $("#modalIanaData").modal("show");
+        },
+        error: function () {
+            btn.button("reset");
+        },
+        invalidToken: function () {
+            showPageLogin();
+        }
+    });
+}
+
+function saveIanaData() {
+    var divIanaDataAlert = $("#divIanaDataAlert");
+    var content = $("#txtIanaData").val();
+
+    if (content.trim().length === 0) {
+        showAlert("warning", "Angabe fehlt", "Der Inhalt darf nicht leer sein.", divIanaDataAlert);
+        return;
+    }
+
+    var btn = $("#btnIanaDataSave");
+    btn.button("loading");
+
+    HTTPRequest({
+        url: "api/settings/iana/set",
+        token: sessionData.token,
+        method: "POST",
+        data: "item=" + encodeURIComponent(ianaDataEditorItem) + "&content=" + encodeURIComponent(content),
+        processData: false,
+        success: function (responseJSON) {
+            $("#modalIanaData").modal("hide");
+            renderIanaData(responseJSON.response.ianaData);
+            showAlert("success", "Gespeichert", "Die eigene Version wurde gespeichert und wird jetzt verwendet.");
+        },
+        error: function () {
+            btn.button("reset");
+        },
+        invalidToken: function () {
+            $("#modalIanaData").modal("hide");
+            showPageLogin();
+        },
+        objAlertPlaceholder: divIanaDataAlert
+    });
+}
+

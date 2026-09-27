@@ -2,8 +2,13 @@
 
 	<PropertyGroup>
 		<Version>$(ZenitiumDnsVersion)</Version>
+		<InformationalVersion>$(ZenitiumDnsVersion)-$(ZenitiumDnsRevision)</InformationalVersion>
 		<CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
 	</PropertyGroup>
+
+	<ItemGroup>
+		<AssemblyMetadata Include="TechnitiumVersion" Value="$(TechnitiumVersion)" />
+	</ItemGroup>
 
 	<ItemGroup>
 		<FrameworkReference Include="Microsoft.AspNetCore.App" />
@@ -26,8 +31,8 @@
 	</ItemGroup>
 
 	<ItemGroup>
-		<None Remove="www\**;dohwww\**;named.root;root-anchors.xml" />
-		<Content Include="www\**;dohwww\**;named.root;root-anchors.xml">
+		<None Remove="www\**;dohwww\**;named.root;root-anchors.xml;icannbundle.pem" />
+		<Content Include="www\**;dohwww\**;named.root;root-anchors.xml;icannbundle.pem">
 			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 		</Content>
 	</ItemGroup>

@@ -8,7 +8,7 @@ Dieses Dokument listet ausschließlich die Unterschiede zwischen dem Original-Bu
 | ------- | -------------------------- | ---------------- |
 | Name, Pfade, Dienst | Technitium, `/etc/dns`, Dienst `dns` | ZenitiumDNS, `/etc/zenitiumdns`, Dienst `zenitiumdns` |
 | Einsatzzweck | autoritativer und rekursiver DNS-Server, DHCP-Server, Clustering | öffentlicher rekursiver Resolver; autoritative Zonen, Zonentransfers, DHCP, Clustering und Windows-Komponenten entfernt |
-| Update-Prüfung und App-Store | fest auf Technitium-Server | standardmäßig aus, per Umgebungsvariable auf eigene Server umstellbar |
+| Update-Prüfung und App-Store | fest auf Technitium-Server | Update-Prüfung gegen die GitHub-Releases von ZenitiumDNS mit Changelog, App-Store entfernt |
 | Installation unter Debian 13 | Skript lädt Binärdateien und .NET aus dem Internet | eigenständiges `.deb`-Paket mit eingebauter .NET-Laufzeit |
 | Erstes Admin-Passwort | `admin` | zufällig erzeugt |
 | Sprache der Weboberfläche und Doku | Englisch | Deutsch |
@@ -18,7 +18,7 @@ Dieses Dokument listet ausschließlich die Unterschiede zwischen dem Original-Bu
 | Cache-Wartung | blockierende Garbage Collection jede Minute (50–250 ms Hänger) | Garbage Collection im Hintergrund |
 | CPU-Zeit pro Anfrage bei 100.000 Anfragen/s | 86–100 µs | 24–30 µs |
 | Pipelining über DNS-over-TCP/TLS | unbegrenzt viele gleichzeitige Anfragen pro Verbindung | standardmäßig höchstens 100 pro Verbindung, einstellbar |
-| Gestörte IPv6-Anbindung | IPv6-Adressen werden weiter angefragt, Zeitüberschreitungen verzögern Auflösungen | IPv6 wird automatisch ausgesetzt und nach erfolgreicher Prüfung wieder genutzt |
+| Gestörte IPv6-Anbindung | IPv6-Adressen werden weiter angefragt, Zeitüberschreitungen verzögern Auflösungen | IPv6 wird nur bei bestätigtem Ausfall ausgesetzt (Gegenprobe über die IPv6-Root-Server), einzelne tote IPv6-Nameserver lösen nichts aus, die erste IPv6-Antwort hebt die Sperre auf |
 | Antwortzeiten in Übersicht und Metriken | nicht vorhanden | Median, Perzentile, Cache/rekursiv, live und pro Minute |
 | Weboberfläche | Bootstrap-Standardoptik, feste Mindestbreite 970 px, Einstellungen in einer langen Seite je Tab | eigenes Design mit Seitenleiste und Messwertleiste, mobil nutzbar, thematische Einstellungsbereiche mit Erklärungen |
 | Anfragen vom Typ ANY, AXFR/IXFR, ohne RD-Flag, fremde Opcodes oder Klassen | werden verarbeitet | per Anfragefilter über UDP verworfen, über TCP/DoT/DoH/DoQ mit `REFUSED` abgewiesen |
@@ -32,6 +32,15 @@ Dieses Dokument listet ausschließlich die Unterschiede zwischen dem Original-Bu
 | Selbsttest | nicht vorhanden | eigener Bereich, schwere Probleme auf der Übersicht |
 | Speicher für 2,5 Mio. Blocklisten-Einträge | ca. 395 MB | ca. 200 MB |
 | TCP-Anfragen an Cloudflare-Nameserver | wiederverwendete Verbindungen laufen in Timeouts | eigene Verbindung, Wiederverwendung wird erkannt |
+| Lokale Root-Zone (RFC 8806) | nur als selbst angelegte Secondary-Zone | eingebaut, Root- und arpa-Zone von IANA mit ZONEMD- und Signaturprüfung, NXDOMAIN für nicht existierende TLDs ohne Root-Server |
+| Root-Vertrauensanker | nur mitgelieferte Datei | täglich von IANA, nur mit gültiger ICANN-Signatur, oder eigene Version |
+| Do53 | immer aktiv | aktiviert, nur DDR (verwerfen oder REFUSED) oder aus |
+| Apps konfigurieren | JSON-Textfeld | Formular mit deutschen Bezeichnungen, JSON für Experten |
+| Übersicht | ab 1 Stunde | ab 1 Minute, Echtzeitgraphen interner Prozesse |
+| Automatisches Eingreifen bei Speicherplatz-, Speicher- oder Dienstproblemen | nicht vorhanden | Wächter |
+| EDNS-Padding (RFC 7830, RFC 8467) | nicht vorhanden | Antworten über DoT, DoH und DoQ auf Vielfache von 468 Byte, Anfragen an verschlüsselte Forwarder auf 128 Byte |
+| Protokollierung von Client-Adressen | immer | abschaltbar |
+| Prometheus-Metriken, API-Tokens | vorhanden | entfernt |
 
 ## Messwerte
 
@@ -176,10 +185,10 @@ Funktionstests im isolierten Netz-Namespace mit nachgebauter DNS-Hierarchie:
 
 ## Kompatibilität
 
-- **Konfiguration:** Einstellungen, Benutzer, Conditional-Forwarder-Zonen, Blocklisten, erlaubte und blockierte Domains, Statistiken und Sicherungen von Technitium DNS Server 15.5 können übernommen werden. ZenitiumDNS speichert die DNS-Einstellungen im Format Version 9 und die Einstellungen der Weboberfläche im Format Version 5 und Zonendateien mit Zoneninformationen Version 15. Diese Dateien kann das Original nicht mehr lesen.
+- **Konfiguration:** Einstellungen, Benutzer, Conditional-Forwarder-Zonen, Blocklisten, erlaubte und blockierte Domains, Statistiken und Sicherungen von Technitium DNS Server 15.5 können übernommen werden. ZenitiumDNS speichert die DNS-Einstellungen im Format Version 10 und die Einstellungen der Weboberfläche im Format Version 5 und Zonendateien mit Zoneninformationen Version 15. Diese Dateien kann das Original nicht mehr lesen.
 - **Entfernte Zonentypen:** Zonendateien von Primary-, Secondary-, Stub-, Secondary-Forwarder- und Catalog-Zonen bleiben im Ordner `zones` liegen, werden aber beim Start übersprungen und protokolliert. Sie lassen sich bei Bedarf mit dem Original weiterverwenden.
 - **DHCP und Cluster:** DHCP-Bereichsdateien und die Cluster-Konfiguration werden ignoriert. Berechtigungen für den Bereich DHCP werden beim Laden verworfen. Eine vorhandene Gruppe „DHCP Administrators“ bleibt als gewöhnliche Gruppe ohne Sonderrechte bestehen und kann gelöscht werden.
-- **HTTP-API:** Die Aufrufe für DNSSEC, Catalog-Zonen, Zonenkonvertierung, Resync, TSIG, DHCP und Clustering sowie der Parameter `node` entfallen. `api/zones/create` akzeptiert nur noch den Typ `Forwarder`.
+- **HTTP-API:** Die API dient nur noch der Weboberfläche. Die Aufrufe für DNSSEC, Catalog-Zonen, Zonenkonvertierung, Resync, TSIG, DHCP und Clustering, der App-Store, das Installieren und Deinstallieren von Apps, API-Tokens und die Prometheus-Metriken sowie der Parameter `node` entfallen. `api/zones/create` akzeptiert nur noch den Typ `Forwarder`.
 - **Cache-Datei:** ZenitiumDNS speichert die Nameserver-Statistik in `cache.bin` in einem erweiterten Format (Version 2). Wird eine solche Cache-Datei mit dem Original geladen, verwirft das Original den Cache. Die Konfiguration ist davon nicht betroffen.
 - **DNS-Apps:** Die Namensräume wurden umbenannt (`ZenitiumDns.*`, `ZenitiumLibrary.*`). Für Technitium kompilierte Apps müssen gegen `ZenitiumDns.ApplicationCommon` neu kompiliert werden. Alle mitgelieferten Apps sind bereits angepasst.
 - **Syslog-Export:** Durch die Korrektur der doppelten Formatierung ändert sich das Format der Syslog-Nachrichten der Log Exporter App. Die Metadaten stehen jetzt als echte strukturierte Daten nach RFC 5424 in der Nachricht.

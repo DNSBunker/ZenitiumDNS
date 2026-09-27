@@ -101,7 +101,6 @@ namespace ZenitiumDns.Core
                 _dnsServer.EnableUdpSocketPool = Environment.OSVersion.Platform == PlatformID.Win32NT;
                 UdpClientConnection.SocketPoolExcludedPorts = [(ushort)_webServiceTlsPort];
                 _dnsServer.MaxConcurrentResolutionsPerCore = 100;
-                _dnsServer.DnsApplicationManager.EnableAutomaticUpdate = true;
                 _webServiceEnableHttp3 = _webServiceEnableTls && QuicConnection.IsSupported && Socket.OSSupportsIPv6;
                 _dnsServer.EnableDnsOverHttp3 = _dnsServer.EnableDnsOverHttps && QuicConnection.IsSupported && Socket.OSSupportsIPv6;
                 _webServiceRealIpHeader = "X-Real-IP";
@@ -279,7 +278,7 @@ namespace ZenitiumDns.Core
                 if (version >= 34)
                     AuthZoneInfo.ReadNetworkAddressesFrom(bR);
 
-                _dnsServer.DnsApplicationManager.EnableAutomaticUpdate = bR.ReadBoolean();
+                bR.ReadBoolean();
 
                 _dnsServer.IPv6Mode = bR.ReadBoolean() ? IPv6Mode.Preferred : IPv6Mode.Disabled;
 

@@ -149,9 +149,6 @@ namespace ZenitiumLibrary.Net.Dns
                 UpdateAverage(ref _srtt, rtt);
 
             UpdateAverage(ref _answerRate, 1);
-
-            if (_parent is not null)
-                IPv6Reachability.RecordSuccess();
         }
 
         internal void UpdateFailure(double penaltyRTT)
@@ -160,9 +157,6 @@ namespace ZenitiumLibrary.Net.Dns
 
             UpdateAverage(ref _sprtt, penaltyRTT);
             UpdateAverage(ref _answerRate, 0);
-
-            if (_parent is not null)
-                IPv6Reachability.RecordFailure();
         }
 
         #endregion

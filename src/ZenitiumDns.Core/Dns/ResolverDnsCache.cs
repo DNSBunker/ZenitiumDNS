@@ -186,6 +186,10 @@ namespace ZenitiumDns.Core.Dns
 
         public virtual async Task<DnsDatagram> QueryAsync(DnsDatagram request, bool serveStale, bool findClosestNameServers = false, bool resetExpiry = false)
         {
+            DnsDatagram localZoneResponse = _dnsServer.IanaDataManager.GetNameErrorResponse(request);
+            if (localZoneResponse is not null)
+                return localZoneResponse;
+
             DnsDatagram authResponse = await _dnsServer.AuthoritativeQueryAsync(request, DnsTransportProtocol.Tcp, true, _skipDnsAppAuthoritativeRequestHandlers);
             if (authResponse is not null)
             {

@@ -20,6 +20,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Security.Cryptography;
 using System.Text.Json;
 using System.Threading.Tasks;
 using ZenitiumLibrary.IO;
@@ -195,6 +196,100 @@ namespace ZenitiumLibrary.Net.Dns.ResourceRecords
             jsonWriter.WriteString("Digest", Convert.ToHexString(_digest));
 
             jsonWriter.WriteEndObject();
+        }
+
+        #endregion
+
+        #region static
+
+        public static byte[] ComputeDigest(IReadOnlyList<DnsResourceRecord> zoneRecords, string zoneName, ZoneMdHashAlgorithm hashAlgorithm)
+        {
+            HashAlgorithmName hashAlgorithmName;
+
+            switch (hashAlgorithm)
+            {
+                case ZoneMdHashAlgorithm.SHA384:
+                    hashAlgorithmName = HashAlgorithmName.SHA384;
+                    break;
+
+                case ZoneMdHashAlgorithm.SHA512:
+                    hashAlgorithmName = HashAlgorithmName.SHA512;
+                    break;
+
+                default:
+                    throw new NotSupportedException("ZONEMD hash algorithm is not supported: " + hashAlgorithm.ToString());
+            }
+
+            List<DnsResourceRecord> records = new List<DnsResourceRecord>(zoneRecords.Count);
+
+            foreach (DnsResourceRecord record in zoneRecords)
+            {
+                if (record.Name.Equals(zoneName, StringComparison.OrdinalIgnoreCase))
+                {
+                    if (record.Type == DnsResourceRecordType.ZONEMD)
+                        continue;
+
+                    if ((record.Type == DnsResourceRecordType.RRSIG) && ((record.RDATA as DnsRRSIGRecordData).TypeCovered == DnsResourceRecordType.ZONEMD))
+                        continue;
+                }
+
+                if ((zoneName.Length > 0) && !record.Name.Equals(zoneName, StringComparison.OrdinalIgnoreCase) && !record.Name.EndsWith("." + zoneName, StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                records.Add(record);
+            }
+
+            records.Sort(delegate (DnsResourceRecord x, DnsResourceRecord y)
+            {
+                int value = DnsNSECRecordData.CanonicalComparison(x.Name, y.Name);
+                if (value != 0)
+                    return value;
+
+                return ((ushort)x.Type).CompareTo((ushort)y.Type);
+            });
+
+            using IncrementalHash hash = IncrementalHash.CreateHash(hashAlgorithmName);
+            using MemoryStream buffer = new MemoryStream(512);
+            using MemoryStream output = new MemoryStream(512);
+
+            List<CanonicallySerializedResourceRecord> rrset = new List<CanonicallySerializedResourceRecord>();
+            byte[] previous = null;
+
+            for (int i = 0; i < records.Count;)
+            {
+                DnsResourceRecord first = records[i];
+                int j = i;
+
+                rrset.Clear();
+
+                while ((j < records.Count) && (records[j].Type == first.Type) && records[j].Name.Equals(first.Name, StringComparison.OrdinalIgnoreCase))
+                {
+                    DnsResourceRecord record = records[j];
+                    rrset.Add(CanonicallySerializedResourceRecord.Create(record.Name, record.Type, record.Class, record.OriginalTtlValue, record.RDATA, buffer));
+                    j++;
+                }
+
+                rrset.Sort();
+                previous = null;
+
+                foreach (CanonicallySerializedResourceRecord serialized in rrset)
+                {
+                    output.SetLength(0);
+                    serialized.WriteTo(output);
+
+                    byte[] bytes = output.ToArray();
+
+                    if ((previous is not null) && bytes.AsSpan().SequenceEqual(previous))
+                        continue;
+
+                    hash.AppendData(bytes);
+                    previous = bytes;
+                }
+
+                i = j;
+            }
+
+            return hash.GetHashAndReset();
         }
 
         #endregion

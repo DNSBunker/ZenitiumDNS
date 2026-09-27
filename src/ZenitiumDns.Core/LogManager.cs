@@ -57,6 +57,7 @@ namespace ZenitiumDns.Core
         LoggingType _loggingType;
         string _logFolder;
         bool _noStackTrace;
+        bool _hideClientAddresses;
         int _maxLogFileDays;
         bool _useLocalTime;
 
@@ -67,6 +68,7 @@ namespace ZenitiumDns.Core
         string _logFile;
         StreamWriter _logWriter;
         DateTime _logDate;
+        bool _fileLoggingSuspended;
         readonly Lock _logFileLock = new Lock();
 
         Channel<LogQueueItem> _channel;
@@ -249,7 +251,7 @@ namespace ZenitiumDns.Core
                     }
                 }
 
-                _maxLogFileDays = 30;
+                _maxLogFileDays = 7;
 
                 lock (_saveLock)
                 {
@@ -344,6 +346,7 @@ namespace ZenitiumDns.Core
             {
                 case 1:
                 case 2:
+                case 3:
                     _loggingType = (LoggingType)bR.ReadByte();
                     _logFolder = s.ReadShortString();
 
@@ -354,6 +357,12 @@ namespace ZenitiumDns.Core
 
                     _maxLogFileDays = bR.ReadInt32();
                     _useLocalTime = bR.ReadBoolean();
+
+                    if (version >= 3)
+                        _hideClientAddresses = bR.ReadBoolean();
+                    else
+                        _hideClientAddresses = false;
+
                     break;
 
                 default:
@@ -366,13 +375,14 @@ namespace ZenitiumDns.Core
             BinaryWriter bW = new BinaryWriter(s);
 
             bW.Write(Encoding.ASCII.GetBytes("LS"));
-            bW.Write((byte)2);
+            bW.Write((byte)3);
 
             bW.Write((byte)_loggingType);
             s.WriteShortString(_logFolder);
             bW.Write(_noStackTrace);
             bW.Write(_maxLogFileDays);
             bW.Write(_useLocalTime);
+            bW.Write(_hideClientAddresses);
         }
 
         #endregion
@@ -420,9 +430,13 @@ namespace ZenitiumDns.Core
                             lock (_logFileLock)
                             {
                                 if (dateTime.Date > _logDate)
+                                {
                                     StartNewLogFile();
+                                    _fileLoggingSuspended = false;
+                                }
 
-                                WriteLogEntry(logEntry);
+                                if (!_fileLoggingSuspended)
+                                    WriteLogEntry(logEntry);
                             }
                         }
                     }
@@ -611,11 +625,11 @@ namespace ZenitiumDns.Core
             }
         }
 
-        private static string GetIpInfo(EndPoint ep)
+        private string GetIpInfo(EndPoint ep)
         {
             string ipInfo;
 
-            if (ep is null)
+            if ((ep is null) || (_hideClientAddresses && (ep is IPEndPoint)))
             {
                 ipInfo = "";
             }
@@ -637,6 +651,71 @@ namespace ZenitiumDns.Core
         #endregion
 
         #region public
+
+        internal long CurrentLogFileSize
+        {
+            get
+            {
+                lock (_logFileLock)
+                {
+                    try
+                    {
+                        return _logWriter?.BaseStream.Length ?? 0;
+                    }
+                    catch (ObjectDisposedException)
+                    {
+                        return 0;
+                    }
+                }
+            }
+        }
+
+        internal bool IsFileLoggingSuspended
+        {
+            get
+            {
+                lock (_logFileLock)
+                {
+                    return _fileLoggingSuspended;
+                }
+            }
+        }
+
+        internal void SuspendFileLoggingForToday(string reason)
+        {
+            lock (_logFileLock)
+            {
+                if (_fileLoggingSuspended)
+                    return;
+
+                WriteLogEntry(GetLogEntry(_useLocalTime ? DateTime.Now : DateTime.UtcNow, "Watchdog suspended file logging until the end of the day: " + reason));
+                _fileLoggingSuspended = true;
+            }
+        }
+
+        internal int DeleteLogFilesBefore(DateTime date)
+        {
+            int deleted = 0;
+
+            foreach (string logFile in ListLogFiles())
+            {
+                if (!DateTime.TryParseExact(Path.GetFileNameWithoutExtension(logFile), LOG_FILE_DATE_TIME_FORMAT, CultureInfo.InvariantCulture, DateTimeStyles.None, out DateTime logFileDate))
+                    continue;
+
+                if (logFileDate.Date >= date.Date)
+                    continue;
+
+                try
+                {
+                    File.Delete(logFile);
+                    deleted++;
+                }
+                catch
+                { }
+            }
+
+            return deleted;
+        }
 
         public string[] ListLogFiles()
         {
@@ -944,6 +1023,12 @@ namespace ZenitiumDns.Core
                     ApplyLogFolder();
                 }
             }
+        }
+
+        public bool HideClientAddresses
+        {
+            get { return _hideClientAddresses; }
+            set { _hideClientAddresses = value; }
         }
 
         public bool NoStackTrace

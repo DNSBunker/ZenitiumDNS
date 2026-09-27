@@ -48,19 +48,23 @@ Die folgende Liste enthält die RFCs, die ZenitiumDNS umsetzt. Die Titel sind di
 | RFC 7816 | DNS Query Name Minimisation to Improve Privacy
 | RFC 7830 | The EDNS(0) Padding Option
 | RFC 7871 | Client Subnet in DNS Queries
+| RFC 7958 | DNSSEC Trust Anchor Publication for the Root Zone
 | RFC 7858 | Specification for DNS over Transport Layer Security (TLS)
 | RFC 8080 | Edwards-Curve Digital Security Algorithm (EdDSA) for DNSSEC
 | RFC 8109 | Initializing a DNS Resolver with Priming Queries
 | RFC 8375 | Special-Use Domain 'home.arpa.'
+| RFC 8467 | Padding Policies for Extension Mechanisms for DNS (EDNS(0))
 | RFC 8484 | DNS Queries over HTTPS (DoH)
 | RFC 8709 | Ed25519 and Ed448 Public Key Algorithms for the Secure Shell (SSH) Protocol
 | RFC 8767 | Serving Stale Data to Improve DNS Resiliency
 | RFC 8806 | Running a Root Server Local to a Resolver
 | RFC 8914 | Extended DNS Errors
+| RFC 8976 | Message Digest for DNS Zones
 | RFC 9156 | DNS Query Name Minimisation to Improve Privacy
 | RFC 9250 | DNS over Dedicated QUIC Connections 
 | RFC 9276 | Guidance for NSEC3 Parameter Settings
 | RFC 9520 | Negative Caching of DNS Resolution Failures
 | RFC 9460 | Service Binding and Parameter Specification via the DNS (SVCB and HTTPS Resource Records) 
+| RFC 9462 | Discovery of Designated Resolvers
 | RFC 9609 | Initializing a DNS Resolver with Priming Queries
 | draft-vixie-dnsext-dns0x20 | Use of Bit 0x20 in DNS Labels to Improve Transaction Identity

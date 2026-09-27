@@ -74,6 +74,8 @@ namespace ZenitiumLibrary.Net.Dns
         const int MAX_NS_TO_QUERY_PER_REFERRAL = 8;
         const int MAX_ASYNC_NS_RESOLUTIONS_PER_REFERRAL = 4;
         const int MAX_OUTBOUND_REQUESTS = 400;
+        const int QUERY_PADDING_BLOCK_SIZE = 128;
+        const int IPV6_UNANSWERED_FAILURE_TIME = 1000;
         internal const int MAX_NSEC3_ITERATIONS = 100;
 
         const int KEY_TRAP_MAX_KEY_TAG_COLLISIONS = 4;
@@ -93,6 +95,7 @@ namespace ZenitiumLibrary.Net.Dns
         IPv6Mode _ipv6Mode;
         ushort _udpPayloadSize = DnsDatagram.EDNS_DEFAULT_UDP_PAYLOAD_SIZE;
         bool _randomizeName;
+        bool _eDnsPadding;
         bool _dnssecValidation;
         NetworkAddress _eDnsClientSubnet;
         bool _advancedForwardingClientSubnet;
@@ -317,8 +320,17 @@ namespace ZenitiumLibrary.Net.Dns
         {
             string rootTrustXmlFile = Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location), "root-anchors.xml");
 
+            IReadOnlyList<DnsResourceRecord> rootTrustAnchors = ParseRootTrustAnchors(File.ReadAllText(rootTrustXmlFile));
+
+            if (rootTrustAnchors.Count > 0)
+                ROOT_TRUST_ANCHORS = rootTrustAnchors;
+        }
+
+        public static IReadOnlyList<DnsResourceRecord> ParseRootTrustAnchors(string xml)
+        {
             XmlDocument rootTrustXml = new XmlDocument();
-            rootTrustXml.Load(rootTrustXmlFile);
+            rootTrustXml.XmlResolver = null;
+            rootTrustXml.LoadXml(xml);
 
             XmlNamespaceManager nsMgr = new XmlNamespaceManager(rootTrustXml.NameTable);
             XmlNodeList nodeList = rootTrustXml.SelectNodes("//TrustAnchor/KeyDigest", nsMgr);
@@ -381,8 +393,19 @@ namespace ZenitiumLibrary.Net.Dns
                 rootTrustAnchors.Add(new DnsResourceRecord("", DnsResourceRecordType.DS, DnsClass.IN, 0, new DnsDSRecordData(keyTag, algorithm, digestType, Convert.FromHexString(digest))));
             }
 
-            if (rootTrustAnchors.Count > 0)
-                ROOT_TRUST_ANCHORS = rootTrustAnchors;
+            return rootTrustAnchors;
+        }
+
+        public static IReadOnlyList<DnsResourceRecord> RootTrustAnchors
+        {
+            get { return ROOT_TRUST_ANCHORS; }
+            set
+            {
+                if ((value is null) || (value.Count == 0))
+                    throw new ArgumentException("At least one root trust anchor is required.", nameof(RootTrustAnchors));
+
+                ROOT_TRUST_ANCHORS = value;
+            }
         }
 
         public static async Task<DnsDatagram> RecursiveResolveAsync(DnsQuestionRecord question, IDnsCache cache = null, NetProxy proxy = null, IPv6Mode ipv6Mode = IPv6Mode.Disabled, ushort udpPayloadSize = DnsDatagram.EDNS_DEFAULT_UDP_PAYLOAD_SIZE, bool randomizeName = false, bool qnameMinimization = false, bool dnssecValidation = false, NetworkAddress eDnsClientSubnet = null, int retries = 2, int timeout = 2000, int concurrency = 2, int maxStackCount = 16, bool minimalResponse = false, bool asyncNsResolution = false, List<DnsDatagram> rawResponses = null, ResolverContext context = null, CancellationToken cancellationToken = default)
@@ -1062,6 +1085,15 @@ namespace ZenitiumLibrary.Net.Dns
 
                                 if (wasIPv6Attempted)
                                 {
+                                    PushStack(currentNameServer.DomainEndPoint.Address, DnsResourceRecordType.A);
+                                }
+                                else if (!wasIPv4Attempted && (ipv6Mode == IPv6Mode.Enabled) && IPv6Reachability.IsUnconfirmed)
+                                {
+                                    nameServers.Insert(nameServerIndex + 1, currentNameServer);
+
+                                    if ((referralLimit < nameServers.Count) && (referralLimit < MAX_NS_TO_QUERY_PER_REFERRAL))
+                                        referralLimit++;
+
                                     PushStack(currentNameServer.DomainEndPoint.Address, DnsResourceRecordType.A);
                                 }
                                 else
@@ -2575,7 +2607,7 @@ namespace ZenitiumLibrary.Net.Dns
                     health = 2;
                 else if (exploit && metadata.IsUnhealthy)
                     health = 1;
-                else if ((ipEndPoint is not null) && (ipEndPoint.AddressFamily == AddressFamily.InterNetworkV6) && IPv6Reachability.IsUnavailable)
+                else if ((ipEndPoint is not null) && (ipEndPoint.AddressFamily == AddressFamily.InterNetworkV6) && (IPv6Reachability.IsUnavailable || IPv6Reachability.IsUnconfirmed))
                     health = 1;
                 else
                     health = 0;
@@ -2649,7 +2681,7 @@ namespace ZenitiumLibrary.Net.Dns
                         ipv4Hints.Shuffle();
                         ipv6Hints.Shuffle();
 
-                        rootHints = ipv6Hints.Interleave(ipv4Hints);
+                        rootHints = DeprioritizeUnconfirmedIPv6(ipv6Hints.Interleave(ipv4Hints));
                     }
                     break;
 
@@ -2659,7 +2691,7 @@ namespace ZenitiumLibrary.Net.Dns
                         nameServersList.Shuffle();
                         nameServersList.Sort(CompareNameServersToPreferIPv6);
 
-                        rootHints = nameServersList;
+                        rootHints = DeprioritizeUnconfirmedIPv6(nameServersList);
                     }
                     break;
 
@@ -2730,7 +2762,34 @@ namespace ZenitiumLibrary.Net.Dns
 
             rootServers.Shuffle();
 
-            return rootServers;
+            return DeprioritizeUnconfirmedIPv6(rootServers);
+        }
+
+        private static List<NameServerAddress> DeprioritizeUnconfirmedIPv6(IEnumerable<NameServerAddress> nameServers)
+        {
+            List<NameServerAddress> result = [.. nameServers];
+
+            if (!IPv6Reachability.IsUnavailable && !IPv6Reachability.IsUnconfirmed)
+                return result;
+
+            List<NameServerAddress> ipv6 = new List<NameServerAddress>(result.Count);
+            int j = 0;
+
+            for (int i = 0; i < result.Count; i++)
+            {
+                NameServerAddress nameServer = result[i];
+                IPEndPoint ep = nameServer.IPEndPoint;
+
+                if ((ep is not null) && (ep.AddressFamily == AddressFamily.InterNetworkV6))
+                    ipv6.Add(nameServer);
+                else
+                    result[j++] = nameServer;
+            }
+
+            for (int i = 0; i < ipv6.Count; i++)
+                result[j++] = ipv6[i];
+
+            return result;
         }
 
         private static async Task DnssecValidateResponseAsync(DnsDatagram response, IReadOnlyList<DnsResourceRecord> lastDSRecords, DnsClient dnsClient, IDnsCache cache, ushort udpPayloadSize, ResolverContext context, CancellationToken cancellationToken = default)
@@ -3725,6 +3784,24 @@ namespace ZenitiumLibrary.Net.Dns
             }
         }
 
+        private static void RecordIPv6Failure(NameServerAddress server, NetProxy proxy, Exception ex)
+        {
+            if (IPv6Reachability.IsTransportFailure(ex))
+                RecordIPv6Failure(server, proxy);
+        }
+
+        private static void RecordIPv6Failure(NameServerAddress server, NetProxy proxy)
+        {
+            if (proxy is not null)
+                return;
+
+            IPEndPoint ep = server.IPEndPoint;
+            if ((ep is null) || (ep.AddressFamily != AddressFamily.InterNetworkV6))
+                return;
+
+            IPv6Reachability.RecordFailure(ep.Address);
+        }
+
         private static void FindSignersNames(IReadOnlyList<DnsResourceRecord> records, List<string> signersNames, bool isAuthoritySection)
         {
             foreach (DnsResourceRecord record in records)
@@ -4477,7 +4554,24 @@ namespace ZenitiumLibrary.Net.Dns
                                     if (context is not null)
                                         context.DecrementMaxOutboundRequests();
 
-                                    DnsDatagram response = await connection.QueryAsync(asyncRequest, _timeout, _retries, cancellationToken);
+                                    DnsDatagram queryRequest = asyncRequest;
+
+                                    if (_eDnsPadding && (asyncRequest.EDNS is not null))
+                                    {
+                                        switch (server.Protocol)
+                                        {
+                                            case DnsTransportProtocol.Tls:
+                                            case DnsTransportProtocol.Https:
+                                            case DnsTransportProtocol.Quic:
+                                                queryRequest = asyncRequest.CloneWithPadding(QUERY_PADDING_BLOCK_SIZE);
+                                                break;
+                                        }
+                                    }
+
+                                    DnsDatagram response = await connection.QueryAsync(queryRequest, _timeout, _retries, cancellationToken);
+
+                                    if ((proxy is null) && (server.IPEndPoint is not null) && (server.IPEndPoint.AddressFamily == AddressFamily.InterNetworkV6))
+                                        IPv6Reachability.RecordSuccess();
                                     if (response.Truncation)
                                     {
                                         if (server.Protocol == DnsTransportProtocol.Udp)
@@ -4648,6 +4742,8 @@ namespace ZenitiumLibrary.Net.Dns
                                     {
                                         asyncRequest = asyncRequest.CloneWithoutEDns();
 
+                                        RecordIPv6Failure(server, proxy, ex);
+
                                         server.Metadata.UpdateFailure(_timeout);
                                         lastException = ex;
                                         retryRequest = true;
@@ -4703,6 +4799,9 @@ namespace ZenitiumLibrary.Net.Dns
 
                         double maxWaitTime = _timeout * _retries;
 
+                        if ((successTime == default) && (timeTaken >= Math.Min(_timeout, IPV6_UNANSWERED_FAILURE_TIME)))
+                            RecordIPv6Failure(server, proxy);
+
                         if (maxWaitTime > timeTaken)
                         {
                             double mean = timeTaken + ((maxWaitTime - timeTaken) / 2);
@@ -4719,6 +4818,8 @@ namespace ZenitiumLibrary.Net.Dns
                     {
                         server.Metadata.UpdateFailure(_timeout * _retries);
                         lastException = ex;
+
+                        RecordIPv6Failure(server, proxy, ex);
                     }
                     catch (DnsClientResponseValidationException ex)
                     {
@@ -4733,6 +4834,8 @@ namespace ZenitiumLibrary.Net.Dns
                     catch (Exception ex)
                     {
                         server.Metadata.UpdateFailure(_timeout * _retries);
+
+                        RecordIPv6Failure(server, proxy, ex);
 
                         if (protocolWasSwitched && (lastException is DnsClientResponseValidationException) && (ex is SocketException))
                         {
@@ -5299,6 +5402,12 @@ namespace ZenitiumLibrary.Net.Dns
         {
             get { return _randomizeName; }
             set { _randomizeName = value; }
+        }
+
+        public bool EDnsPadding
+        {
+            get { return _eDnsPadding; }
+            set { _eDnsPadding = value; }
         }
 
         public bool DnssecValidation

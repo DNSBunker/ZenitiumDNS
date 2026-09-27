@@ -17,6 +17,82 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 */
 
+var appConfigState = null;
+
+var APP_CONFIG_LABELS = {
+    enableBlocking: "Blockieren aktiviert",
+    blockingAnswerTtl: "TTL der Blockierantwort (Sekunden)",
+    blockListUrlUpdateIntervalHours: "Aktualisierung der Listen (Stunden)",
+    blockListUrlUpdateIntervalMinutes: "Aktualisierung der Listen (zusätzliche Minuten)",
+    localEndPointGroupMap: "Gruppe je lokalem Endpunkt",
+    networkGroupMap: "Gruppe je Client-Netz",
+    groups: "Gruppen",
+    name: "Name",
+    allowTxtBlockingReport: "Blockiergrund per TXT-Abfrage abrufbar",
+    blockAsNxDomain: "Als NXDOMAIN blockieren",
+    blockingAddresses: "Blockieradressen",
+    allowed: "Erlaubte Domains",
+    blocked: "Blockierte Domains",
+    allowListUrls: "URLs von Allowlisten",
+    blockListUrls: "URLs von Blocklisten",
+    allowedRegex: "Erlaubte Domains (regulärer Ausdruck)",
+    blockedRegex: "Blockierte Domains (regulärer Ausdruck)",
+    regexAllowListUrls: "URLs von Regex-Allowlisten",
+    regexBlockListUrls: "URLs von Regex-Blocklisten",
+    adblockListUrls: "URLs von Adblock-Listen",
+    url: "URL",
+    appPreference: "Reihenfolge (kleiner wird zuerst ausgeführt)",
+    enableForwarding: "Weiterleitung aktiviert",
+    proxyServers: "Proxyserver",
+    type: "Typ",
+    proxyAddress: "Proxy-Adresse",
+    proxyPort: "Proxy-Port",
+    proxyUsername: "Benutzername",
+    proxyPassword: "Passwort",
+    forwarders: "Forwarder",
+    proxy: "Proxy",
+    dnssecValidation: "DNSSEC-Validierung",
+    forwarderProtocol: "Protokoll",
+    forwarderAddresses: "Adressen",
+    forwardings: "Weiterleitungen",
+    domains: "Domains",
+    adguardUpstreams: "AdGuard-Upstreams",
+    configFile: "Konfigurationsdatei",
+    enableDns64: "DNS64 aktiviert",
+    dns64PrefixMap: "DNS64-Präfix je IPv4-Netz",
+    excludedIpv6: "Ausgenommene IPv6-Netze",
+    enableProtection: "Schutz aktiviert",
+    bypassNetworks: "Ausgenommene Client-Netze",
+    privateNetworks: "Private Netze",
+    privateDomains: "Private Domains",
+    dropMalformedRequests: "Fehlerhafte Anfragen verwerfen",
+    allowedNetworks: "Erlaubte Client-Netze",
+    blockedNetworks: "Blockierte Client-Netze",
+    allowedLocalEndPoints: "Erlaubte lokale Endpunkte",
+    blockedQuestions: "Blockierte Anfragen",
+    blockZone: "Ganze Zone blockieren",
+    maxQueueSize: "Maximale Warteschlange",
+    enableEdnsLogging: "EDNS-Daten mitschreiben",
+    file: "Datei",
+    path: "Pfad",
+    enabled: "Aktiviert",
+    http: "HTTP",
+    endpoint: "Endpunkt",
+    headers: "HTTP-Header",
+    syslog: "Syslog",
+    address: "Adresse",
+    port: "Port",
+    protocol: "Protokoll",
+    enableLogging: "Protokollierung aktiviert",
+    maxLogDays: "Aufbewahrung in Tagen (0 = unbegrenzt)",
+    maxLogRecords: "Maximale Einträge (0 = unbegrenzt)",
+    databaseName: "Datenbankname",
+    connectionString: "Verbindungszeichenfolge",
+    enableVacuum: "Datenbank regelmäßig verdichten (VACUUM)",
+    useInMemoryDb: "Datenbank nur im Arbeitsspeicher",
+    sqliteDbPath: "Pfad der SQLite-Datei"
+};
+
 function refreshApps() {
     var divViewAppsLoader = $("#divViewAppsLoader");
     var divViewApps = $("#divViewApps");
@@ -36,11 +112,7 @@ function refreshApps() {
             }
 
             $("#tableAppsBody").html(tableHtmlRows);
-
-            if (apps.length > 0)
-                $("#tableAppsFooter").html("<tr><td colspan=\"3\"><b>Apps gesamt: " + apps.length + "</b></td></tr>");
-            else
-                $("#tableAppsFooter").html("<tr><td colspan=\"3\" align=\"center\">Keine Apps installiert</td></tr>");
+            updateAppsFooterCount();
 
             divViewAppsLoader.hide();
             divViewApps.show();
@@ -63,9 +135,6 @@ function getAppRowId(appName) {
 function getAppRowHtml(app) {
     var name = app.name;
     var version = app.version;
-    var updateVersion = app.updateVersion;
-    var updateUrl = app.updateUrl;
-    var updateAvailable = app.updateAvailable;
 
     var dnsAppsTable = null;
 
@@ -112,7 +181,7 @@ function getAppRowHtml(app) {
     }
 
     var id = getAppRowId(name);
-    var tableHtmlRow = "<tr id=\"trApp" + id + "\"><td><div><span style=\"font-weight: bold; font-size: 16px;\">" + htmlEncode(name) + "</span><br /><span id=\"trAppVersion" + id + "\" class=\"label label-primary\">Version " + htmlEncode(version) + "</span> <span id=\"trAppUpdateVersion" + id + "\" class=\"label label-warning\" style=\"" + (updateAvailable ? "" : "display: none;") + "\">Update " + htmlEncode(updateVersion) + "</span>" + (app.enabled ? "" : " <span class=\"label label-default\">Deaktiviert</span>") + "</div>";
+    var tableHtmlRow = "<tr id=\"trApp" + id + "\"><td><div><span style=\"font-weight: bold; font-size: 16px;\">" + htmlEncode(name) + "</span><br /><span class=\"label label-primary\">Version " + htmlEncode(version) + "</span>" + (app.enabled ? " <span class=\"label label-success\">Aktiv</span>" : " <span class=\"label label-default\">Deaktiviert</span>") + "</div>";
 
     if (app.description != null)
         tableHtmlRow += "<div style=\"margin-top: 10px;\">" + htmlEncode(app.description).replace(/\n/g, "<br />") + "</div>";
@@ -126,326 +195,9 @@ function getAppRowHtml(app) {
 
     tableHtmlRow += "</td>";
     tableHtmlRow += "<td><button type=\"button\" data-id=\"" + id + "\" class=\"btn " + (app.enabled ? "btn-default" : "btn-primary") + "\" style=\"font-size: 12px; padding: 2px 0px; width: 108px; margin-bottom: 6px; display: block;\" data-name=\"" + htmlEncode(name) + "\" onclick=\"setAppEnabled(this, $(this).attr('data-name'), " + (app.enabled ? "false" : "true") + ");\" data-loading-text=\"Bitte warten...\">" + (app.enabled ? "Deaktivieren" : "Aktivieren") + "</button>";
-    tableHtmlRow += "<button type=\"button\" class=\"btn btn-default\" style=\"font-size: 12px; padding: 2px 0px; width: 108px; margin-bottom: 6px; display: block;\" data-name=\"" + htmlEncode(name) + "\" onclick=\"showAppConfigModal(this, $(this).attr('data-name'));\" data-loading-text=\"Lade...\">Konfiguration</button>";
-    tableHtmlRow += "<button type=\"button\" class=\"btn btn-warning\" style=\"font-size: 12px; padding: 2px 0px; width: 108px; margin-bottom: 6px; display: block;\" data-name=\"" + htmlEncode(name) + "\" onclick=\"showUpdateAppModal($(this).attr('data-name'));\">Aktualisieren</button>";
-    tableHtmlRow += "<button id=\"btnAppsStoreUpdate" + id + "\" type=\"button\" data-id=\"" + id + "\" class=\"btn btn-warning\" style=\"font-size: 12px; padding: 2px 0px; width: 108px; margin-bottom: 6px; " + (updateAvailable ? "" : "display: none;") + "\" data-name=\"" + htmlEncode(name) + "\" data-url=\"" + htmlEncode(updateUrl) + "\" onclick=\"updateStoreApp(this, $(this).attr('data-name'), $(this).attr('data-url'), false);\" data-loading-text=\"Aktualisiere...\">Store-Update</button>";
-    tableHtmlRow += "<button type=\"button\" data-id=\"" + id + "\" class=\"btn btn-danger\" style=\"font-size: 12px; padding: 2px 0px; width: 108px; margin-bottom: 6px; display: block;\" data-name=\"" + htmlEncode(name) + "\" onclick=\"uninstallApp(this, $(this).attr('data-name'));\" data-loading-text=\"Entferne...\">Deinstallieren</button></td></tr>";
+    tableHtmlRow += "<button type=\"button\" class=\"btn btn-default\" style=\"font-size: 12px; padding: 2px 0px; width: 108px; margin-bottom: 6px; display: block;\" data-name=\"" + htmlEncode(name) + "\" onclick=\"showAppConfigModal(this, $(this).attr('data-name'));\" data-loading-text=\"Lade...\">Konfigurieren</button></td></tr>";
 
-    return tableHtmlRow
-}
-
-function showStoreAppsModal() {
-    var divStoreAppsAlert = $("#divStoreAppsAlert");
-    var divStoreAppsLoader = $("#divStoreAppsLoader");
-    var divStoreApps = $("#divStoreApps");
-
-    divStoreAppsLoader.show();
-    divStoreApps.hide();
-    $("#modalStoreApps").modal("show");
-
-    HTTPRequest({
-        url: "api/apps/listStoreApps",
-        token: sessionData.token,
-        success: function (responseJSON) {
-            var storeApps = responseJSON.response.storeApps;
-            var tableHtmlRows = "";
-
-            for (var i = 0; i < storeApps.length; i++) {
-                var id = Math.floor(Math.random() * 10000);
-                var name = storeApps[i].name;
-                var version = storeApps[i].version;
-                var description = storeApps[i].description;
-                var url = storeApps[i].url;
-                var size = storeApps[i].size;
-                var installed = storeApps[i].installed;
-                var installedVersion = storeApps[i].installedVersion;
-                var updateAvailable = installed ? storeApps[i].updateAvailable : false;
-
-                var displayVersion = installed ? installedVersion : version;
-                description = htmlEncode(description).replace(/\n/g, "<br />");
-
-                tableHtmlRows += "<tr id=\"trStoreApp" + id + "\"><td><div style=\"margin-bottom: 14px;\"><span style=\"font-weight: bold; font-size: 16px;\">" + htmlEncode(name) + "</span><br /><span id=\"spanStoreAppDisplayVersion" + id + "\" class=\"label label-primary\">Version " + htmlEncode(displayVersion) + "</span> <span id=\"spanStoreAppUpdateVersion" + id + "\" class=\"label label-warning\" style=\"" + (updateAvailable ? "" : "display: none;") + "\">Update " + htmlEncode(version) + "</span></div>";
-                tableHtmlRows += "<div style=\"margin-bottom: 10px;\">" + description + "</div><div><b>App-Datei</b>: " + htmlEncode(url) + "<br /><b>Größe</b>: " + htmlEncode(size) + "</div></td><td>";
-                tableHtmlRows += "<button id=\"btnStoreAppInstall" + id + "\" type=\"button\" data-id=\"" + id + "\" class=\"btn btn-primary\" style=\"font-size: 12px; padding: 2px 0px; width: 80px; margin-bottom: 6px; " + (installed ? "display: none;" : "") + "\" data-name=\"" + htmlEncode(name) + "\" data-url=\"" + htmlEncode(url) + "\" onclick=\"installStoreApp(this, $(this).attr('data-name'), $(this).attr('data-url'));\" data-loading-text=\"Installiere...\">Installieren</button>";
-                tableHtmlRows += "<button id=\"btnStoreAppUpdate" + id + "\" type=\"button\" data-id=\"" + id + "\" class=\"btn btn-warning\" style=\"font-size: 12px; padding: 2px 0px; width: 80px; margin-bottom: 6px; " + (updateAvailable ? "" : "display: none;") + "\" data-name=\"" + htmlEncode(name) + "\" data-url=\"" + htmlEncode(url) + "\" onclick=\"updateStoreApp(this, $(this).attr('data-name'), $(this).attr('data-url'), true);\" data-loading-text=\"Aktualisiere...\">Aktualisieren</button>";
-                tableHtmlRows += "<button id=\"btnStoreAppUninstall" + id + "\" type=\"button\" data-id=\"" + id + "\" class=\"btn btn-danger\" style=\"font-size: 12px; padding: 2px 0px; width: 80px; margin-bottom: 6px; " + (installed ? "" : "display: none;") + "\" data-name=\"" + htmlEncode(name) + "\" onclick=\"uninstallStoreApp(this, $(this).attr('data-name'));\" data-loading-text=\"Entferne...\">Deinstallieren</button>";
-                tableHtmlRows += "</td></tr>";
-            }
-
-            $("#tableStoreAppsBody").html(tableHtmlRows);
-
-            if (storeApps.length > 0)
-                $("#tableStoreAppsFooter").html("<tr><td colspan=\"3\"><b>Apps gesamt: " + storeApps.length + "</b></td></tr>");
-            else
-                $("#tableStoreAppsFooter").html("<tr><td colspan=\"3\" align=\"center\">Keine Apps installiert</td></tr>");
-
-            divStoreAppsLoader.hide();
-            divStoreApps.show();
-        },
-        error: function () {
-            divStoreAppsLoader.hide();
-            divStoreApps.show();
-        },
-        invalidToken: function () {
-            $("#modalStoreApps").modal("hide");
-            showPageLogin();
-        },
-        objAlertPlaceholder: divStoreAppsAlert,
-        objLoaderPlaceholder: divStoreAppsLoader
-    });
-}
-
-function showInstallAppModal() {
-    $("#divInstallAppAlert").html("");
-    $("#txtInstallApp").val("");
-    $("#fileAppZip").val("");
-    $("#btnInstallApp").button("reset");
-
-    $("#modalInstallApp").modal("show");
-
-    setTimeout(function () {
-        $("#txtInstallApp").trigger("focus");
-    }, 1000);
-}
-
-function showUpdateAppModal(appName) {
-    $("#divUpdateAppAlert").html("");
-    $("#txtUpdateApp").val(appName);
-    $("#fileUpdateAppZip").val("");
-    $("#btnUpdateApp").button("reset");
-
-    $("#modalUpdateApp").modal("show");
-}
-
-function installStoreApp(objBtn, appName, url) {
-    var divStoreAppsAlert = $("#divStoreAppsAlert");
-
-    var btn = $(objBtn);
-    btn.button("loading");
-
-    HTTPRequest({
-        url: "api/apps/downloadAndInstall?name=" + encodeURIComponent(appName) + "&url=" + encodeURIComponent(url),
-        token: sessionData.token,
-        success: function (responseJSON) {
-            btn.button("reset");
-            btn.hide();
-
-            var id = btn.attr("data-id");
-            $("#btnStoreAppUninstall" + id).show();
-
-            var tableHtmlRow = getAppRowHtml(responseJSON.response.installedApp);
-            $("#tableAppsBody").prepend(tableHtmlRow);
-            updateAppsFooterCount();
-
-            showAlert("success", "App installiert", "Die App '" + appName + "' wurde aus dem App-Store installiert.", divStoreAppsAlert);
-        },
-        error: function () {
-            btn.button("reset");
-        },
-        invalidToken: function () {
-            $("#modalStoreApps").modal("hide");
-            showPageLogin();
-        },
-        objAlertPlaceholder: divStoreAppsAlert
-    });
-}
-
-function updateStoreApp(objBtn, appName, url, isModal) {
-    var divStoreAppsAlert;
-
-    if (isModal)
-        divStoreAppsAlert = $("#divStoreAppsAlert");
-
-    var btn = $(objBtn);
-    btn.button("loading");
-
-    HTTPRequest({
-        url: "api/apps/downloadAndUpdate?name=" + encodeURIComponent(appName) + "&url=" + encodeURIComponent(url),
-        token: sessionData.token,
-        success: function (responseJSON) {
-            btn.button("reset");
-            btn.hide();
-
-            if (isModal) {
-                var id = btn.attr("data-id");
-                $("#spanStoreAppUpdateVersion" + id).hide();
-                $("#spanStoreAppDisplayVersion" + id).text($("#spanStoreAppUpdateVersion" + id).text().replace(/Update/g, "Version"));
-            }
-
-            var tableHtmlRow = getAppRowHtml(responseJSON.response.updatedApp);
-            var id = getAppRowId(responseJSON.response.updatedApp.name);
-            $("#trApp" + id).replaceWith(tableHtmlRow);
-
-            showAlert("success", "App aktualisiert", "Die App '" + appName + "' wurde aus dem App-Store aktualisiert.", divStoreAppsAlert);
-        },
-        error: function () {
-            btn.button("reset");
-        },
-        invalidToken: function () {
-            $("#modalStoreApps").modal("hide");
-            showPageLogin();
-        },
-        objAlertPlaceholder: divStoreAppsAlert
-    });
-}
-
-function uninstallStoreApp(objBtn, appName) {
-    if (!confirm("App '" + appName + "' wirklich deinstallieren?"))
-        return;
-
-    var divStoreAppsAlert = $("#divStoreAppsAlert");
-    var btn = $(objBtn);
-
-    btn.button("loading");
-
-    HTTPRequest({
-        url: "api/apps/uninstall?name=" + encodeURIComponent(appName),
-        token: sessionData.token,
-        success: function (responseJSON) {
-            btn.button("reset");
-            btn.hide();
-
-            var id = btn.attr("data-id");
-            $("#btnStoreAppInstall" + id).show();
-            $("#btnStoreAppUpdate" + id).hide();
-            $("#spanStoreAppVersion" + id).attr("class", "label label-primary");
-
-            var id = getAppRowId(appName);
-            $("#trApp" + id).remove();
-            updateAppsFooterCount();
-
-            showAlert("success", "App deinstalliert", "Die App '" + appName + "' wurde deinstalliert.", divStoreAppsAlert);
-        },
-        error: function () {
-            btn.button("reset");
-        },
-        invalidToken: function () {
-            $("#modalStoreApps").modal("hide");
-            showPageLogin();
-        },
-        objAlertPlaceholder: divStoreAppsAlert
-    });
-}
-
-function installApp() {
-    var divInstallAppAlert = $("#divInstallAppAlert");
-    var appName = $("#txtInstallApp").val();
-
-    if ((appName === null) || (appName === "")) {
-        showAlert("warning", "Angabe fehlt", "Bitte einen Namen für die App eingeben.", divInstallAppAlert);
-        $("#txtInstallApp").trigger("focus");
-        return;
-    }
-
-    var fileAppZip = $("#fileAppZip");
-
-    if (fileAppZip[0].files.length === 0) {
-        showAlert("warning", "Angabe fehlt", "Bitte die App-Datei (ZIP) auswählen.", divInstallAppAlert);
-        fileAppZip.trigger("focus");
-        return;
-    }
-
-    var formData = new FormData();
-    formData.append("fileAppZip", $("#fileAppZip")[0].files[0]);
-
-    var btn = $("#btnInstallApp");
-    btn.button("loading");
-
-    HTTPRequest({
-        url: "api/apps/install?name=" + encodeURIComponent(appName),
-        token: sessionData.token,
-        method: "POST",
-        data: formData,
-        contentType: false,
-        processData: false,
-        success: function (responseJSON) {
-            $("#modalInstallApp").modal("hide");
-
-            var tableHtmlRow = getAppRowHtml(responseJSON.response.installedApp);
-            $("#tableAppsBody").prepend(tableHtmlRow);
-            updateAppsFooterCount();
-
-            showAlert("success", "App installiert", "Die App '" + appName + "' wurde installiert.");
-        },
-        error: function () {
-            btn.button("reset");
-        },
-        invalidToken: function () {
-            $("#modalInstallApp").modal("hide");
-            showPageLogin();
-        },
-        objAlertPlaceholder: divInstallAppAlert
-    });
-}
-
-function updateApp() {
-    var divUpdateAppAlert = $("#divUpdateAppAlert");
-    var appName = $("#txtUpdateApp").val();
-    var fileAppZip = $("#fileUpdateAppZip");
-
-    if (fileAppZip[0].files.length === 0) {
-        showAlert("warning", "Angabe fehlt", "Bitte die App-Datei (ZIP) auswählen.", divUpdateAppAlert);
-        fileAppZip.trigger("focus");
-        return;
-    }
-
-    var formData = new FormData();
-    formData.append("fileAppZip", $("#fileUpdateAppZip")[0].files[0]);
-
-    var btn = $("#btnUpdateApp");
-    btn.button("loading");
-
-    HTTPRequest({
-        url: "api/apps/update?name=" + encodeURIComponent(appName),
-        token: sessionData.token,
-        method: "POST",
-        data: formData,
-        contentType: false,
-        processData: false,
-        success: function (responseJSON) {
-            $("#modalUpdateApp").modal("hide");
-
-            var tableHtmlRow = getAppRowHtml(responseJSON.response.updatedApp);
-            var id = getAppRowId(responseJSON.response.updatedApp.name);
-            $("#trApp" + id).replaceWith(tableHtmlRow);
-
-            showAlert("success", "App aktualisiert", "Die App '" + appName + "' wurde aktualisiert.");
-        },
-        error: function () {
-            btn.button("reset");
-        },
-        invalidToken: function () {
-            $("#modalUpdateApp").modal("hide");
-            showPageLogin();
-        },
-        objAlertPlaceholder: divUpdateAppAlert
-    });
-}
-
-function uninstallApp(objBtn, appName) {
-    if (!confirm("App '" + appName + "' wirklich deinstallieren?"))
-        return;
-
-    var btn = $(objBtn);
-    btn.button("loading");
-
-    HTTPRequest({
-        url: "api/apps/uninstall?name=" + encodeURIComponent(appName),
-        token: sessionData.token,
-        success: function (responseJSON) {
-            var id = btn.attr("data-id");
-            $("#trApp" + id).remove();
-            updateAppsFooterCount();
-
-            showAlert("success", "App deinstalliert", "Die App '" + appName + "' wurde deinstalliert.");
-        },
-        error: function () {
-            btn.button("reset");
-        },
-        invalidToken: function () {
-            showPageLogin();
-        }
-    });
+    return tableHtmlRow;
 }
 
 function setAppEnabled(objBtn, appName, enabled) {
@@ -472,9 +224,477 @@ function setAppEnabled(objBtn, appName, enabled) {
 function updateAppsFooterCount() {
     var totalApps = $("#tableApps >tbody >tr").length;
     if (totalApps > 0)
-        $("#tableAppsFooter").html("<tr><td colspan=\"3\"><b>Apps gesamt: " + totalApps + "</b></td></tr>");
+        $("#tableAppsFooter").html("<tr><td colspan=\"2\"><b>Apps gesamt: " + totalApps + "</b></td></tr>");
     else
-        $("#tableAppsFooter").html("<tr><td colspan=\"3\" align=\"center\">Keine App gefunden</td></tr>");
+        $("#tableAppsFooter").html("<tr><td colspan=\"2\" align=\"center\">Keine Apps vorhanden</td></tr>");
+}
+
+function getAppConfigLabel(key) {
+    if (APP_CONFIG_LABELS.hasOwnProperty(key))
+        return APP_CONFIG_LABELS[key];
+
+    var words = String(key).replace(/([a-z0-9])([A-Z])/g, "$1 $2").replace(/[_-]+/g, " ").trim();
+    if (words.length === 0)
+        return String(key);
+
+    return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
+function isAppConfigPlainObject(value) {
+    return (value !== null) && (typeof value === "object") && !Array.isArray(value);
+}
+
+function isAppConfigMap(key, value) {
+    if (!isAppConfigPlainObject(value))
+        return false;
+
+    if (/Map$/.test(key) || (key === "headers"))
+        return true;
+
+    var keys = Object.keys(value);
+    for (var i = 0; i < keys.length; i++) {
+        if (/[.:\/\s]/.test(keys[i]))
+            return true;
+    }
+
+    return false;
+}
+
+function isAppConfigPrimitiveArray(value) {
+    for (var i = 0; i < value.length; i++) {
+        if ((value[i] !== null) && (typeof value[i] === "object"))
+            return false;
+    }
+
+    return true;
+}
+
+function getAppConfigTemplate(value) {
+    if (Array.isArray(value))
+        return [];
+
+    if (isAppConfigPlainObject(value)) {
+        var template = {};
+        var keys = Object.keys(value);
+
+        for (var i = 0; i < keys.length; i++)
+            template[keys[i]] = getAppConfigTemplate(value[keys[i]]);
+
+        return template;
+    }
+
+    switch (typeof value) {
+        case "boolean":
+            return false;
+
+        case "number":
+            return 0;
+
+        case "string":
+            return "";
+
+        default:
+            return null;
+    }
+}
+
+function markAppConfigError(input, message) {
+    input.closest(".app-config-field").addClass("has-error");
+    input.attr("data-error", message);
+    appConfigState.errors[appConfigState.errorId(input)] = message;
+}
+
+function clearAppConfigError(input) {
+    input.closest(".app-config-field").removeClass("has-error");
+    input.removeAttr("data-error");
+    delete appConfigState.errors[appConfigState.errorId(input)];
+}
+
+function createAppConfigField(label, key) {
+    var field = $("<div class=\"app-config-field\"></div>");
+    var labelElement = $("<label class=\"app-config-label\"></label>").text(label);
+
+    if (key !== null)
+        labelElement.append($("<span class=\"app-config-key\"></span>").text(key));
+
+    field.append(labelElement);
+    return field;
+}
+
+function renderAppConfigPrimitiveInput(parent, key, value, onChange) {
+    var input;
+
+    if (typeof value === "boolean") {
+        input = $("<input type=\"checkbox\">").prop("checked", value);
+        input.on("change", function () {
+            onChange($(this).prop("checked"));
+        });
+
+        return input;
+    }
+
+    if (typeof value === "number") {
+        input = $("<input type=\"number\" step=\"any\" class=\"form-control\">").val(value);
+        input.on("input", function () {
+            var text = $(this).val().trim();
+            var number = Number(text);
+
+            if ((text === "") || !isFinite(number)) {
+                markAppConfigError($(this), "Bitte eine Zahl eingeben.");
+            }
+            else {
+                clearAppConfigError($(this));
+                onChange(number);
+            }
+        });
+
+        return input;
+    }
+
+    var nullable = (value === null);
+    var isSecret = /password|secret|token/i.test(String(key));
+
+    input = $("<input class=\"form-control\" spellcheck=\"false\">").attr("type", isSecret ? "password" : "text").val(value === null ? "" : value);
+
+    if (nullable)
+        input.attr("placeholder", "leer");
+
+    input.on("input", function () {
+        var text = $(this).val();
+        onChange((nullable && (text === "")) ? null : text);
+    });
+
+    return input;
+}
+
+function renderAppConfigPrimitiveList(parent, key, value) {
+    var numeric = (value.length > 0);
+
+    for (var i = 0; i < value.length; i++) {
+        if (typeof value[i] !== "number") {
+            numeric = false;
+            break;
+        }
+    }
+
+    var textarea = $("<textarea class=\"form-control\" spellcheck=\"false\"></textarea>");
+    textarea.attr("rows", Math.min(Math.max(value.length + 1, 3), 12));
+    textarea.val(value.map(function (item) { return item === null ? "" : String(item); }).join("\n"));
+
+    textarea.on("input", function () {
+        var lines = $(this).val().split("\n").map(function (line) { return line.trim(); }).filter(function (line) { return line.length > 0; });
+
+        if (numeric) {
+            var numbers = [];
+
+            for (var j = 0; j < lines.length; j++) {
+                var number = Number(lines[j]);
+                if (!isFinite(number)) {
+                    markAppConfigError($(this), "Jede Zeile muss eine Zahl sein.");
+                    return;
+                }
+
+                numbers.push(number);
+            }
+
+            clearAppConfigError($(this));
+            parent[key] = numbers;
+        }
+        else {
+            parent[key] = lines;
+        }
+    });
+
+    return textarea;
+}
+
+function renderAppConfigMap(parent, key, container) {
+    var map = parent[key];
+    var entries = Object.keys(map).map(function (entryKey) { return { key: entryKey, value: map[entryKey] }; });
+    var nullable = false;
+
+    for (var i = 0; i < entries.length; i++) {
+        if (entries[i].value === null)
+            nullable = true;
+    }
+
+    var table = $("<table class=\"table table-condensed app-config-map\"><thead><tr><th>Schlüssel</th><th>Wert</th><th></th></tr></thead><tbody></tbody></table>");
+    var tbody = table.find("tbody");
+
+    function commit() {
+        var result = {};
+
+        for (var j = 0; j < entries.length; j++) {
+            if (entries[j].key.length > 0)
+                result[entries[j].key] = entries[j].value;
+        }
+
+        parent[key] = result;
+    }
+
+    function addRow(entry) {
+        var row = $("<tr></tr>");
+        var keyInput = $("<input type=\"text\" class=\"form-control\" spellcheck=\"false\">").val(entry.key);
+        var valueInput;
+
+        keyInput.on("input", function () {
+            entry.key = $(this).val().trim();
+            commit();
+        });
+
+        if ((entry.value !== null) && (typeof entry.value === "object")) {
+            valueInput = $("<textarea class=\"form-control\" rows=\"2\" spellcheck=\"false\"></textarea>").val(JSON.stringify(entry.value));
+            valueInput.on("input", function () {
+                try {
+                    entry.value = JSON.parse($(this).val());
+                    clearAppConfigError($(this));
+                    commit();
+                }
+                catch (e) {
+                    markAppConfigError($(this), "Bitte gültiges JSON eingeben.");
+                }
+            });
+        }
+        else {
+            valueInput = $("<input type=\"text\" class=\"form-control\" spellcheck=\"false\">").val(entry.value === null ? "" : entry.value);
+
+            if (nullable)
+                valueInput.attr("placeholder", "leer");
+
+            valueInput.on("input", function () {
+                var text = $(this).val();
+
+                if (typeof entry.value === "number") {
+                    var number = Number(text);
+                    if ((text.trim() === "") || !isFinite(number)) {
+                        markAppConfigError($(this), "Bitte eine Zahl eingeben.");
+                        return;
+                    }
+
+                    clearAppConfigError($(this));
+                    entry.value = number;
+                }
+                else {
+                    entry.value = (nullable && (text === "")) ? null : text;
+                }
+
+                commit();
+            });
+        }
+
+        var removeButton = $("<button type=\"button\" class=\"btn btn-default btn-xs\">Entfernen</button>");
+        removeButton.on("click", function () {
+            entries.splice(entries.indexOf(entry), 1);
+            row.find("input, textarea").each(function () { clearAppConfigError($(this)); });
+            row.remove();
+            commit();
+        });
+
+        row.append($("<td class=\"app-config-field\"></td>").append(keyInput));
+        row.append($("<td class=\"app-config-field\"></td>").append(valueInput));
+        row.append($("<td></td>").append(removeButton));
+        tbody.append(row);
+    }
+
+    for (var k = 0; k < entries.length; k++)
+        addRow(entries[k]);
+
+    var addButton = $("<button type=\"button\" class=\"btn btn-default btn-xs\">Zeile hinzufügen</button>");
+    addButton.on("click", function () {
+        var entry = { key: "", value: nullable ? null : "" };
+        entries.push(entry);
+        addRow(entry);
+    });
+
+    container.append(table);
+    container.append(addButton);
+}
+
+function renderAppConfigObjectList(parent, key, container) {
+    var list = parent[key];
+    var template = null;
+
+    for (var i = 0; i < list.length; i++) {
+        if (isAppConfigPlainObject(list[i])) {
+            template = getAppConfigTemplate(list[i]);
+            break;
+        }
+    }
+
+    var items = $("<div class=\"app-config-items\"></div>");
+
+    function render() {
+        items.find("input, textarea").each(function () { clearAppConfigError($(this)); });
+        items.empty();
+
+        for (var j = 0; j < list.length; j++)
+            items.append(renderItem(j));
+    }
+
+    function renderItem(index) {
+        var item = list[index];
+        var card = $("<div class=\"app-config-item\"></div>");
+        var head = $("<div class=\"app-config-item-head\"></div>");
+        var title = getAppConfigLabel(key) + " " + (index + 1);
+
+        if (isAppConfigPlainObject(item) && (typeof item.name === "string") && (item.name.length > 0))
+            title = item.name;
+
+        head.append($("<span class=\"app-config-item-title\"></span>").text(title));
+
+        var removeButton = $("<button type=\"button\" class=\"btn btn-default btn-xs\">Entfernen</button>");
+        removeButton.on("click", function () {
+            list.splice(index, 1);
+            render();
+        });
+
+        head.append(removeButton);
+        card.append(head);
+
+        if (isAppConfigPlainObject(item)) {
+            renderAppConfigObject(item, card);
+        }
+        else {
+            var holder = { value: item };
+            var field = createAppConfigField("Wert", null);
+            field.append(renderAppConfigPrimitiveInput(holder, "value", item, function (newValue) { list[index] = newValue; }));
+            card.append(field);
+        }
+
+        return card;
+    }
+
+    render();
+    container.append(items);
+
+    var addButton = $("<button type=\"button\" class=\"btn btn-default btn-xs\">Eintrag hinzufügen</button>");
+    addButton.on("click", function () {
+        list.push(template === null ? "" : JSON.parse(JSON.stringify(template)));
+        render();
+    });
+
+    container.append(addButton);
+}
+
+function renderAppConfigProperty(parent, key, container) {
+    var value = parent[key];
+    var field = createAppConfigField(getAppConfigLabel(key), key);
+
+    if (Array.isArray(value)) {
+        if (isAppConfigPrimitiveArray(value)) {
+            field.append(renderAppConfigPrimitiveList(parent, key, value));
+            field.append($("<div class=\"app-config-hint\"></div>").text("Ein Eintrag pro Zeile."));
+        }
+        else {
+            field.addClass("app-config-group");
+            renderAppConfigObjectList(parent, key, field);
+        }
+    }
+    else if (isAppConfigMap(key, value)) {
+        field.addClass("app-config-group");
+        renderAppConfigMap(parent, key, field);
+    }
+    else if (isAppConfigPlainObject(value)) {
+        field.addClass("app-config-group");
+        renderAppConfigObject(value, field);
+    }
+    else if (typeof value === "boolean") {
+        field.empty();
+        field.addClass("app-config-check");
+
+        var label = $("<label></label>");
+        label.append(renderAppConfigPrimitiveInput(parent, key, value, function (newValue) { parent[key] = newValue; }));
+        label.append(document.createTextNode(" " + getAppConfigLabel(key)));
+        label.append($("<span class=\"app-config-key\"></span>").text(key));
+        field.append(label);
+    }
+    else {
+        field.append(renderAppConfigPrimitiveInput(parent, key, value, function (newValue) { parent[key] = newValue; }));
+    }
+
+    container.append(field);
+}
+
+function renderAppConfigObject(obj, container) {
+    var keys = Object.keys(obj);
+
+    for (var i = 0; i < keys.length; i++)
+        renderAppConfigProperty(obj, keys[i], container);
+}
+
+function renderAppConfigForm() {
+    var form = $("#divAppConfigForm");
+    form.empty();
+
+    appConfigState.errors = {};
+
+    if (!isAppConfigPlainObject(appConfigState.model)) {
+        form.append($("<p class=\"app-config-empty\"></p>").text("Diese Konfiguration lässt sich nur im JSON-Modus bearbeiten."));
+        return;
+    }
+
+    if (Object.keys(appConfigState.model).length === 0) {
+        form.append($("<p class=\"app-config-empty\"></p>").text("Die App hat keine Einstellungen."));
+        return;
+    }
+
+    renderAppConfigObject(appConfigState.model, form);
+}
+
+function parseAppConfigText(text) {
+    if (text == null)
+        return { ok: true, value: {} };
+
+    text = String(text).replace(/^﻿/, "");
+
+    if (text.trim().length === 0)
+        return { ok: true, value: {} };
+
+    try {
+        return { ok: true, value: JSON.parse(text) };
+    }
+    catch (e) {
+        return { ok: false, error: e.message };
+    }
+}
+
+function setAppConfigMode(mode) {
+    var divAppConfigAlert = $("#divAppConfigAlert");
+
+    if (mode === appConfigState.mode)
+        return true;
+
+    if (mode === "json") {
+        if (Object.keys(appConfigState.errors).length > 0) {
+            showAlert("warning", "Ungültige Eingabe", "Bitte zuerst die markierten Felder korrigieren.", divAppConfigAlert);
+            return false;
+        }
+
+        $("#txtAppConfig").val(JSON.stringify(appConfigState.model, null, 2));
+        $("#divAppConfigForm").hide();
+        $("#divAppConfigJson").show();
+    }
+    else {
+        var parsed = parseAppConfigText($("#txtAppConfig").val());
+        if (!parsed.ok) {
+            showAlert("warning", "Ungültiges JSON", "Das Formular lässt sich erst öffnen, wenn das JSON gültig ist: " + parsed.error, divAppConfigAlert);
+            return false;
+        }
+
+        appConfigState.model = parsed.value;
+        renderAppConfigForm();
+
+        $("#divAppConfigJson").hide();
+        $("#divAppConfigForm").show();
+    }
+
+    divAppConfigAlert.html("");
+    appConfigState.mode = mode;
+
+    $("#btnAppConfigModeForm").toggleClass("active", mode === "form").attr("aria-pressed", mode === "form");
+    $("#btnAppConfigModeJson").toggleClass("active", mode === "json").attr("aria-pressed", mode === "json");
+
+    return true;
 }
 
 function showAppConfigModal(objBtn, appName) {
@@ -487,18 +707,43 @@ function showAppConfigModal(objBtn, appName) {
         success: function (responseJSON) {
             btn.button("reset");
 
+            var parsed = parseAppConfigText(responseJSON.response.config);
+            var errorCounter = 0;
+
+            appConfigState = {
+                name: appName,
+                mode: null,
+                model: parsed.ok ? parsed.value : null,
+                errors: {},
+                errorId: function (input) {
+                    var id = input.attr("data-error-id");
+                    if (id == null) {
+                        id = "e" + (++errorCounter);
+                        input.attr("data-error-id", id);
+                    }
+
+                    return id;
+                }
+            };
+
             $("#divAppConfigAlert").html("");
-
             $("#lblAppConfigName").text(appName);
-            $("#txtAppConfig").val(responseJSON.response.config);
-
+            $("#txtAppConfig").val(responseJSON.response.config == null ? "" : String(responseJSON.response.config).replace(/^﻿/, ""));
             $("#btnAppConfig").button("reset");
 
-            $("#modalAppConfig").modal("show");
+            if (parsed.ok && isAppConfigPlainObject(parsed.value)) {
+                appConfigState.mode = "json";
+                setAppConfigMode("form");
+            }
+            else {
+                appConfigState.mode = "form";
+                setAppConfigMode("json");
 
-            setTimeout(function () {
-                $("#txtAppConfig").trigger("focus");
-            }, 1000);
+                if (!parsed.ok)
+                    showAlert("warning", "Kein gültiges JSON", "Die Konfiguration ist kein gültiges JSON und lässt sich nur im JSON-Modus bearbeiten: " + parsed.error, $("#divAppConfigAlert"));
+            }
+
+            $("#modalAppConfig").modal("show");
         },
         error: function () {
             btn.button("reset");
@@ -511,10 +756,30 @@ function showAppConfigModal(objBtn, appName) {
 
 function saveAppConfig() {
     var divAppConfigAlert = $("#divAppConfigAlert");
+    var config;
 
-    var appName = $("#lblAppConfigName").text();
-    var config = $("#txtAppConfig").val();
+    if (appConfigState.mode === "form") {
+        var errorIds = Object.keys(appConfigState.errors);
+        if (errorIds.length > 0) {
+            showAlert("warning", "Ungültige Eingabe", appConfigState.errors[errorIds[0]] + " Die betroffenen Felder sind markiert.", divAppConfigAlert);
+            $("#divAppConfigForm .has-error input, #divAppConfigForm .has-error textarea").first().trigger("focus");
+            return;
+        }
 
+        config = JSON.stringify(appConfigState.model, null, 2);
+    }
+    else {
+        config = $("#txtAppConfig").val();
+
+        var parsed = parseAppConfigText(config);
+        if (!parsed.ok) {
+            showAlert("warning", "Ungültiges JSON", "Die Konfiguration wurde nicht gespeichert: " + parsed.error, divAppConfigAlert);
+            $("#txtAppConfig").trigger("focus");
+            return;
+        }
+    }
+
+    var appName = appConfigState.name;
     var btn = $("#btnAppConfig");
     btn.button("loading");
 

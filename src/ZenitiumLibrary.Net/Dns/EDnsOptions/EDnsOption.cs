@@ -82,6 +82,10 @@ namespace ZenitiumLibrary.Net.Dns.EDnsOptions
                     _data = new EDnsExtendedDnsErrorOptionData(s);
                     break;
 
+                case EDnsOptionCode.PADDING:
+                    _data = new EDnsPaddingOptionData(s);
+                    break;
+
                 default:
                     _data = new EDnsUnknownOptionData(s);
                     break;

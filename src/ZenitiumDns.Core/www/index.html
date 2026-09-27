@@ -93,7 +93,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
                         <li><a href="#" onclick="showMyProfileModal(); return false;">Mein Profil</a></li>
                         <li><a id="mnuUserChangePassword" href="#" onclick="showChangePasswordModal(); return false;">Passwort ändern</a></li>
                         <li><a id="mnuUserConfigure2FA" href="#" onclick="showConfigure2FAModal(); return false;">Zwei-Faktor-Anmeldung</a></li>
-                        <li><a href="#" onclick="showCreateMyApiTokenModal(); return false;">API-Token erstellen</a></li>
                         <li role="separator" class="divider"></li>
                         <li><a href="#" onclick="showChangeThemeModal(); return false;">Farbschema</a></li>
                         <li><a id="mnuDisableCheckForUpdateNotification" href="#" onclick="disableUpdateNotification(); return false;" style="display: none;">Update-Hinweise ausblenden</a></li>
@@ -168,6 +167,15 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
                                     <div class="dashboard-toolbar">
                                         <div class="pull-left">
                                             <div class="btn-group" data-toggle="buttons">
+                                                <label class="btn btn-default">
+                                                    <input type="radio" name="rdStatType" value="lastMinute" autocomplete="off"> 1 Minute
+                                                </label>
+                                                <label class="btn btn-default">
+                                                    <input type="radio" name="rdStatType" value="last5Minutes" autocomplete="off"> 5 Minuten
+                                                </label>
+                                                <label class="btn btn-default">
+                                                    <input type="radio" name="rdStatType" value="last30Minutes" autocomplete="off"> 30 Minuten
+                                                </label>
                                                 <label class="btn btn-default active">
                                                     <input type="radio" name="rdStatType" value="lastHour" autocomplete="off" checked> Letzte Stunde
                                                 </label>
@@ -358,6 +366,47 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
                                             <div class="inventory-item"><span class="fa fa-ban" aria-hidden="true"></span><div class="number" id="divDashboardStatsBlockedZones">0</div><div class="title">Blockierte Domains</div></div>
                                             <div class="inventory-item"><span class="fa fa-list" aria-hidden="true"></span><div class="number" id="divDashboardStatsAllowListZones">0</div><div class="title">Einträge Erlaubnislisten</div></div>
                                             <div class="inventory-item"><span class="fa fa-list" aria-hidden="true"></span><div class="number" id="divDashboardStatsBlockListZones">0</div><div class="title">Einträge Blocklisten</div></div>
+                                        </div>
+
+                                        <div id="divLiveSystem" class="live-system" style="display: none;">
+                                            <div class="live-system-head">
+                                                <h3 class="live-system-title">Interne Prozesse</h3>
+                                                <span class="live-system-note">Sekündlich gemessen, die letzten 5 Minuten. Abschaltbar unter Einstellungen &gt; Allgemein.</span>
+                                            </div>
+                                            <div class="live-grid">
+                                                <div class="panel panel-default live-panel">
+                                                    <div class="panel-heading live-heading"><span>CPU</span><span class="live-value" id="lblLiveCpu"></span></div>
+                                                    <div class="panel-body"><div class="chart-container chart-live"><canvas id="canvasLiveCpu"></canvas></div></div>
+                                                </div>
+                                                <div class="panel panel-default live-panel">
+                                                    <div class="panel-heading live-heading"><span>Arbeitsspeicher</span><span class="live-value" id="lblLiveMemory"></span></div>
+                                                    <div class="panel-body"><div class="chart-container chart-live"><canvas id="canvasLiveMemory"></canvas></div></div>
+                                                </div>
+                                                <div class="panel panel-default live-panel">
+                                                    <div class="panel-heading live-heading"><span>Anfragen pro Sekunde</span><span class="live-value" id="lblLiveQps"></span></div>
+                                                    <div class="panel-body"><div class="chart-container chart-live"><canvas id="canvasLiveQps"></canvas></div></div>
+                                                </div>
+                                                <div class="panel panel-default live-panel">
+                                                    <div class="panel-heading live-heading"><span>Warteschlangen</span><span class="live-value" id="lblLiveQueues"></span></div>
+                                                    <div class="panel-body"><div class="chart-container chart-live"><canvas id="canvasLiveQueues"></canvas></div></div>
+                                                </div>
+                                                <div class="panel panel-default live-panel">
+                                                    <div class="panel-heading live-heading"><span>Laufende Auflösungen</span><span class="live-value" id="lblLiveResolutions"></span></div>
+                                                    <div class="panel-body"><div class="chart-container chart-live"><canvas id="canvasLiveResolutions"></canvas></div></div>
+                                                </div>
+                                                <div class="panel panel-default live-panel">
+                                                    <div class="panel-heading live-heading"><span>GC-Läufe</span><span class="live-value" id="lblLiveGc"></span></div>
+                                                    <div class="panel-body"><div class="chart-container chart-live"><canvas id="canvasLiveGc"></canvas></div></div>
+                                                </div>
+                                                <div class="panel panel-default live-panel">
+                                                    <div class="panel-heading live-heading"><span>Threadpool</span><span class="live-value" id="lblLiveThreads"></span></div>
+                                                    <div class="panel-body"><div class="chart-container chart-live"><canvas id="canvasLiveThreads"></canvas></div></div>
+                                                </div>
+                                                <div class="panel panel-default live-panel">
+                                                    <div class="panel-heading live-heading"><span>Lock-Konflikte</span><span class="live-value" id="lblLiveLocks"></span></div>
+                                                    <div class="panel-body"><div class="chart-container chart-live"><canvas id="canvasLiveLocks"></canvas></div></div>
+                                                </div>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
@@ -692,20 +741,13 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
                                     <div id="divViewApps">
                                         <div class="section-intro">
-                                            <div class="pull-left">
-                                                Apps erweitern den Resolver, etwa um erweiterte Filterregeln, DNS64, Schutz vor DNS-Rebinding oder den Export der Abfrageprotokolle in eine Datenbank. Die mitgelieferten Apps sind vorinstalliert, bleiben aber deaktiviert, bis sie hier aktiviert werden. Vor dem Aktivieren lässt sich die Konfiguration anpassen.
-                                            </div>
-                                            <div class="pull-right">
-                                                <button type="button" class="btn btn-default btn-sm" onclick="showStoreAppsModal();"><span class="fa fa-shopping-bag" aria-hidden="true"></span> App-Store</button>
-                                                <button type="button" class="btn btn-primary btn-sm" onclick="showInstallAppModal();"><span class="glyphicon glyphicon-upload" aria-hidden="true"></span> App installieren</button>
-                                            </div>
-                                            <div class="clearfix"></div>
+                                            Apps erweitern den Resolver, etwa um erweiterte Filterregeln, DNS64, Schutz vor DNS-Rebinding oder den Export der Abfrageprotokolle in eine Datenbank. Alle Apps werden mit ZenitiumDNS ausgeliefert und mit jedem Paket-Update aktualisiert. Sie bleiben deaktiviert, bis sie hier aktiviert werden; vor dem Aktivieren lässt sich die Konfiguration anpassen.
                                         </div>
 
                                         <table id="tableApps" class="table table-hover">
                                             <thead>
                                                 <tr>
-                                                    <th style="min-width: 100px;"><a href="#" onclick="sortTable('tableAppsBody', 0); return false;">Installierte Apps</a></th>
+                                                    <th style="min-width: 100px;"><a href="#" onclick="sortTable('tableAppsBody', 0); return false;">Apps</a></th>
                                                     <th style="width: 124px;"></th>
                                                 </tr>
                                             </thead>
@@ -949,12 +991,12 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
                                                     <label for="optQueryLogsResponseCode">RCODE</label>
                                                     <select class="form-control" id="optQueryLogsResponseCode">
                                                         <option selected></option>
-                                                        <option value="NoError">Kein Fehler (NOERROR)</option>
-                                                        <option value="FormatError">Formatfehler (FORMERR)</option>
-                                                        <option value="ServerFailure">Serverfehler (SERVFAIL)</option>
-                                                        <option value="NxDomain">Existiert nicht (NXDOMAIN)</option>
-                                                        <option value="NotImplemented">Nicht unterstützt (NOTIMP)</option>
-                                                        <option value="Refused">Abgelehnt (REFUSED)</option>
+                                                        <option value="NoError">NOERROR</option>
+                                                        <option value="FormatError">FORMERR</option>
+                                                        <option value="ServerFailure">SERVFAIL</option>
+                                                        <option value="NxDomain">NXDOMAIN</option>
+                                                        <option value="NotImplemented">NOTIMP</option>
+                                                        <option value="Refused">REFUSED</option>
                                                         <option value="YXDomain">YXDOMAIN</option>
                                                         <option value="YXRRSet">YXRRSET</option>
                                                         <option value="NXRRSet">NXRRSET</option>
@@ -1142,11 +1184,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
                                         <div class="checkbox">
                                             <label><input id="chkDnsServerEnableCheckForUpdate" type="checkbox"> Nach Server-Updates suchen</label>
                                         </div>
-                                        <div class="option-help">Prüft nach der Anmeldung in der Weboberfläche, ob eine neue Version verfügbar ist. Funktioniert nur, wenn eine Update-URL über <code>DNS_SERVER_UPDATE_CHECK_URL</code> hinterlegt ist.</div>
-                                        <div class="checkbox">
-                                            <label><input id="chkDnsAppsEnableAutomaticUpdate" type="checkbox"> DNS-Apps automatisch aktualisieren</label>
-                                        </div>
-                                        <div class="option-help">Prüft einmal täglich auf neue Versionen installierter DNS-Apps und installiert sie automatisch. Setzt einen App-Store über <code>DNS_SERVER_APP_STORE_URL</code> voraus.</div>
+                                        <div class="option-help">Fragt nach der Anmeldung höchstens einmal pro Stunde die neueste Version von ZenitiumDNS auf GitHub ab und zeigt Änderungen und Installationsbefehl an. Installiert wird nichts automatisch. Über <code>DNS_SERVER_UPDATE_CHECK_URL</code> lässt sich ein anderes Repository angeben.</div>
                                     </div>
                                 </div>
                                 </div>
@@ -1167,9 +1205,29 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
                                 <div class="form-group">
                                     <label for="txtMaxStatFileDays" class="col-sm-3 control-label">Aufbewahrung</label>
                                     <div class="col-sm-8">
-                                        <input type="number" class="form-control" id="txtMaxStatFileDays" placeholder="Tage" style="width: 100px; display: inline;"> <span class="unit">Tage (Standard 365, 0 = unbegrenzt)</span>
+                                        <input type="number" class="form-control" id="txtMaxStatFileDays" min="0" step="1" placeholder="Tage" style="width: 100px; display: inline;"> <span class="unit">Tage (Standard 30, 0 = unbegrenzt)</span>
                                     </div>
-                                    <div class="col-sm-offset-3 col-sm-8 help-block-text">Ältere Statistikdateien werden automatisch gelöscht.</div>
+                                    <div class="col-sm-offset-3 col-sm-8 help-block-text">Ältere Statistikdateien werden automatisch gelöscht. Die Statistik enthält die häufigsten Client-Adressen, also personenbezogene Daten; länger als nötig aufzubewahren widerspricht der Datenminimierung nach DSGVO.</div>
+                                </div>
+
+                                <div class="form-group">
+                                    <label class="col-sm-3 control-label">Echtzeitgraphen</label>
+                                    <div class="col-sm-8">
+                                        <div class="checkbox">
+                                            <label><input id="chkEnableLiveMonitoring" type="checkbox"> Interne Prozesse live messen und in der Übersicht zeigen</label>
+                                        </div>
+                                        <div class="option-help">Misst jede Sekunde CPU, Arbeitsspeicher, Garbage Collection, Threadpool, Warteschlangen und laufende Auflösungen und hält die letzten 5 Minuten im Arbeitsspeicher. Der Aufwand ist vernachlässigbar; ausgeschaltet wird nichts gemessen.</div>
+                                    </div>
+                                </div>
+
+                                <div class="form-group">
+                                    <label class="col-sm-3 control-label">Wächter</label>
+                                    <div class="col-sm-8">
+                                        <div class="checkbox">
+                                            <label><input id="chkEnableWatchdog" type="checkbox"> Bei schweren Problemen automatisch eingreifen</label>
+                                        </div>
+                                        <div class="option-help">Prüft alle 10 Sekunden. Wird der Speicherplatz knapp oder wächst die heutige Protokolldatei über 512 MB, pausiert er das Datei-Protokoll bis Mitternacht und löscht bei Platzmangel ältere Protokolldateien. Bei Speichermangel kürzt er den Cache, eine überlaufende Statistik-Warteschlange leert er, einem ausgehungerten Threadpool gibt er mehr Threads, und fehlen DNS-Dienste, startet er sie bis zu dreimal neu. Jeder Eingriff steht im Protokoll und im Selbsttest.</div>
+                                    </div>
                                 </div>
                                 </div>
                                 </div>
@@ -1468,6 +1526,53 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
                                 </div>
 
+                                <div class="well well-sm form-horizontal settings-section" id="divSettingsIana">
+                                    <h4 class="settings-section-title">Root-Zone und Vertrauensanker</h4>
+                                    <p class="settings-section-desc">Nach RFC 8806 hält der Resolver eine eigene Kopie der Root-Zone und der arpa-Zone von IANA vor. Delegationen zu den Top-Level-Domains und den Reverse-Zonen kommen dann aus dem Speicher, und Anfragen nach Top-Level-Domains, die es nicht gibt, beantwortet er selbst mit NXDOMAIN samt signiertem NSEC-Beweis. Das erspart die Wege zu den Root-Servern, verrät ihnen keine Anfragen und hält den Resolver auch bei gestörten Root-Servern arbeitsfähig.</p>
+                                    <p class="settings-section-desc">Vor der Nutzung wird jede Zone vollständig geprüft: die Root-Zone über ihre ZONEMD-Prüfsumme und die DNSSEC-Signaturen, die arpa-Zone über die Signaturen aller Einträge. Eine Zone, die die Prüfung nicht besteht, wird nicht verwendet.</p>
+
+                                <div class="form-group">
+                                    <label class="col-sm-3 control-label">Root-Zone</label>
+                                    <div class="col-sm-8">
+                                        <div class="radio"><label><input type="radio" name="rdRootZoneMode" value="Automatic"> Automatisch von IANA laden und stündlich aktualisieren</label></div>
+                                        <div class="radio"><label><input type="radio" name="rdRootZoneMode" value="Custom"> Eigene Version verwenden</label></div>
+                                        <div class="radio"><label><input type="radio" name="rdRootZoneMode" value="Disabled"> Aus, wie bisher die Root-Server fragen</label></div>
+                                        <div class="iana-status" id="divIanaStatusRootZone"></div>
+                                        <button type="button" class="btn btn-default btn-xs" data-loading-text="Lade..." onclick="showIanaDataEditor(this, 'RootZone');">Eigene Version bearbeiten</button>
+                                    </div>
+                                </div>
+
+                                <div class="form-group">
+                                    <label class="col-sm-3 control-label">arpa-Zone</label>
+                                    <div class="col-sm-8">
+                                        <div class="radio"><label><input type="radio" name="rdArpaZoneMode" value="Automatic"> Automatisch von IANA laden und stündlich aktualisieren</label></div>
+                                        <div class="radio"><label><input type="radio" name="rdArpaZoneMode" value="Custom"> Eigene Version verwenden</label></div>
+                                        <div class="radio"><label><input type="radio" name="rdArpaZoneMode" value="Disabled"> Aus, wie bisher die Nameserver fragen</label></div>
+                                        <div class="iana-status" id="divIanaStatusArpaZone"></div>
+                                        <button type="button" class="btn btn-default btn-xs" data-loading-text="Lade..." onclick="showIanaDataEditor(this, 'ArpaZone');">Eigene Version bearbeiten</button>
+                                    </div>
+                                    <div class="col-sm-offset-3 col-sm-8 help-block-text">Die arpa-Zone enthält die Delegationen der Reverse-Zonen wie <code>in-addr.arpa</code> und <code>ip6.arpa</code>. Sie wird mit dem DS-Eintrag aus der Root-Zone geprüft.</div>
+                                </div>
+
+                                <div class="form-group">
+                                    <label class="col-sm-3 control-label">Root-KSK</label>
+                                    <div class="col-sm-8">
+                                        <div class="radio"><label><input type="radio" name="rdTrustAnchorMode" value="Automatic"> Automatisch von IANA laden und täglich aktualisieren</label></div>
+                                        <div class="radio"><label><input type="radio" name="rdTrustAnchorMode" value="Custom"> Eigene Version verwenden</label></div>
+                                        <div class="radio"><label><input type="radio" name="rdTrustAnchorMode" value="Disabled"> Die mit dem Paket ausgelieferte Datei verwenden</label></div>
+                                        <div class="iana-status" id="divIanaStatusTrustAnchors"></div>
+                                        <button type="button" class="btn btn-default btn-xs" data-loading-text="Lade..." onclick="showIanaDataEditor(this, 'TrustAnchors');">Eigene Version bearbeiten</button>
+                                    </div>
+                                    <div class="col-sm-offset-3 col-sm-8 help-block-text">Die Vertrauensanker sind der Ausgangspunkt jeder DNSSEC-Prüfung. IANA veröffentlicht sie in <code>root-anchors.xml</code>, die Datei wird nur übernommen, wenn ihre Signatur auf die ICANN Root CA zurückführt. Bei einem Schlüsselwechsel der Root-Zone sind die neuen Anker so rechtzeitig vorhanden.</div>
+                                </div>
+
+                                <div class="form-group">
+                                    <div class="col-sm-offset-3 col-sm-8">
+                                        <button id="btnIanaUpdate" type="button" class="btn btn-default" data-loading-text="Prüfe..." onclick="updateIanaData(this);">Jetzt prüfen und aktualisieren</button>
+                                    </div>
+                                </div>
+                                </div>
+
                                 <div class="well well-sm form-horizontal settings-section" id="divSettingsGeneralEDnsClientSubnet">
                                     <h4 class="settings-section-title">EDNS Client Subnet (ECS)</h4>
                                     <p class="settings-section-desc">Übermittelt einen Teil der Client-Adresse an Nameserver, damit CDNs geografisch passende Server liefern. Nur sinnvoll, wenn der Resolver weit entfernt von seinen Nutzern steht.</p>
@@ -1666,7 +1771,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
                                 <div class="form-group">
                                     <label for="txtCacheMaximumEntries" class="col-sm-3 control-label">Maximale Einträge</label>
                                     <div class="col-sm-8">
-                                        <input type="number" class="form-control" id="txtCacheMaximumEntries" placeholder="Einträge" style="width: 125px; display: inline;"> <span class="unit">(Standard 10000, 0 = unbegrenzt)</span>
+                                        <input type="number" class="form-control" id="txtCacheMaximumEntries" placeholder="Einträge" style="width: 125px; display: inline;"> <span class="unit">(Standard 100000, 0 = unbegrenzt)</span>
                                     </div>
                                     <div class="col-sm-offset-3 col-sm-8 help-block-text">Ein Eintrag ist ein vollständiges RRset, also alle Einträge eines Typs zu einem Namen. Bei Überschreitung entfernt der Server regelmäßig die am längsten ungenutzten Einträge. Den Wert anhand der Cache-Einträge in der Übersicht und des Speicherverbrauchs festlegen.</div>
                                 </div>
@@ -1682,9 +1787,9 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
                                 <div class="form-group">
                                     <label for="txtCacheMaximumRecordTtl" class="col-sm-3 control-label">Maximale TTL</label>
                                     <div class="col-sm-8">
-                                        <input type="text" class="form-control" id="txtCacheMaximumRecordTtl" placeholder="Max. TTL" style="width: 100px; display: inline;"> <span class="unit">Sekunden (Standard 604800 = 7 Tage)</span>
+                                        <input type="text" class="form-control" id="txtCacheMaximumRecordTtl" placeholder="Max. TTL" style="width: 100px; display: inline;"> <span class="unit">Sekunden (Standard 86400 = 1 Tag)</span>
                                     </div>
-                                    <div class="col-sm-offset-3 col-sm-8 help-block-text">Einträge mit längerer TTL werden spätestens nach dieser Zeit neu aufgelöst.</div>
+                                    <div class="col-sm-offset-3 col-sm-8 help-block-text">Einträge mit längerer TTL werden spätestens nach dieser Zeit neu aufgelöst. Ein Tag entspricht Unbound und PowerDNS und begrenzt, wie lange geänderte oder falsche Einträge nachwirken.</div>
                                 </div>
 
                                 <div class="form-group">
@@ -1693,6 +1798,14 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
                                         <input type="text" class="form-control" id="txtCacheNegativeRecordTtl" placeholder="TTL" style="width: 100px; display: inline;"> <span class="unit">Sekunden (empfohlen 300)</span>
                                     </div>
                                     <div class="col-sm-offset-3 col-sm-8 help-block-text">Cache-Dauer für <code>NXDOMAIN</code>- und <code>NODATA</code>-Antworten, wenn die Zone keinen SOA-Minimumwert liefert.</div>
+                                </div>
+
+                                <div class="form-group">
+                                    <label for="txtCacheMaximumNegativeRecordTtl" class="col-sm-3 control-label">Maximale negative TTL</label>
+                                    <div class="col-sm-8">
+                                        <input type="text" class="form-control" id="txtCacheMaximumNegativeRecordTtl" placeholder="TTL" style="width: 100px; display: inline;"> <span class="unit">Sekunden (Standard 3600 = 1 Stunde)</span>
+                                    </div>
+                                    <div class="col-sm-offset-3 col-sm-8 help-block-text">Obergrenze für die Cache-Dauer von <code>NXDOMAIN</code>- und <code>NODATA</code>-Antworten, auch wenn die Zone per SOA einen höheren Wert vorgibt. So werden neu angelegte Namen spätestens nach dieser Zeit sichtbar. RFC 2308 empfiehlt ein bis drei Stunden, Unbound und PowerDNS nutzen eine Stunde.</div>
                                 </div>
 
                                 <div class="form-group">
@@ -1866,8 +1979,34 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
                                 </div>
 
                                 <div class="well well-sm form-horizontal settings-section">
+                                    <h4 class="settings-section-title">Browser-Signale</h4>
+                                    <p class="settings-section-desc">Browser fragen bestimmte Domains ab, um zu erkennen, ob sie den Resolver des Netzes umgehen dürfen. Beantwortet dieser Resolver sie mit NXDOMAIN, bleiben die Browser bei ihm. Beide Optionen wirken unabhängig davon, ob Blockieren eingeschaltet ist, und erscheinen in der Statistik als blockiert.</p>
+                                <div class="form-group">
+                                    <label class="col-sm-3 control-label">Signale</label>
+                                    <div class="col-sm-8">
+                                        <div class="checkbox">
+                                            <label><input id="chkBlockFirefoxCanaryDomain" type="checkbox"> Firefox: automatisches DoH abschalten</label>
+                                        </div>
+                                        <div class="option-help">Beantwortet die Canary-Domain <code>use-application-dns.net</code> mit NXDOMAIN. Firefox schaltet dann nicht mehr von selbst auf DNS-over-HTTPS eines Partneranbieters um und nutzt weiter diesen Resolver samt Blocklisten. Hat jemand DoH in Firefox selbst eingeschaltet, bleibt es aktiv.</div>
+                                        <div class="checkbox">
+                                            <label><input id="chkForceChromePreflight" type="checkbox"> Chrome: Preflight-Modus für vorab geladene Seiten erzwingen</label>
+                                        </div>
+                                        <div class="option-help">Beantwortet <code>dns-tunnel-check.googlezip.net</code> mit NXDOMAIN. Chrome lädt Seiten sonst über Googles Private Prefetch Proxy vor, ohne diesen Resolver zu fragen. Im Preflight-Modus fragt Chrome vor dem Öffnen einer vorab geladenen Seite zusätzlich hier nach, sodass Blocklisten auch dafür greifen.</div>
+                                    </div>
+                                </div>
+
+                                <div class="form-group">
+                                    <label class="col-sm-3 control-label">Nie blockiert</label>
+                                    <div class="col-sm-8">
+                                        <p id="lblAutoAllowedNames" class="form-control-static"></p>
+                                    </div>
+                                    <div class="col-sm-offset-3 col-sm-8 help-block-text">Der Serverdomainname und alle Namen im TLS-Zertifikat stehen automatisch auf der Allowlist, samt Subdomains. Sonst könnten Listen wie HaGeZis DoH-Bypass den eigenen DoH- oder DoT-Hostnamen sperren. Ein Name ohne Punkt, etwa ein reiner Rechnername, wird dabei nicht berücksichtigt.</div>
+                                </div>
+                                </div>
+
+                                <div class="well well-sm form-horizontal settings-section">
                                     <h4 class="settings-section-title">Blocklisten</h4>
-                                    <p class="settings-section-desc">Listen werden heruntergeladen, zusammengeführt und im Arbeitsspeicher gehalten. Etwa 1 Million Domains benötigen rund 300 MB RAM; während einer Aktualisierung vorübergehend das Doppelte.</p>
+                                    <p class="settings-section-desc">Listen werden heruntergeladen, zusammengeführt und im Arbeitsspeicher gehalten. Etwa 1 Million Domains benötigen rund 80 MB RAM; während einer Aktualisierung vorübergehend das Doppelte.</p>
                                 <div class="form-group">
                                     <label for="txtBlockListUrls" class="col-sm-3 control-label">Listen-URLs</label>
                                     <div class="col-sm-6">
@@ -2018,57 +2157,64 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
                                 <div id="settingsTabPaneRateLimiting" role="tabpanel" class="tab-pane">
                                 <div class="well well-sm form-horizontal settings-section" id="divSettingsGeneralRateLimiting">
                                     <h4 class="settings-section-title">Anfragen pro Sekunde (QPS)</h4>
-                                    <p class="settings-section-desc">Begrenzt die Anfragen je Client-Subnetz mit einem Token-Bucket, wie bei dnsdist. Für einen öffentlichen Resolver ist das der wichtigste Schutz gegen Missbrauch für Amplification-Angriffe. Jede Anfrage verbraucht ein Token, pro Sekunde kommen so viele Tokens nach, wie das Limit erlaubt. Gebremste Clients erscheinen in der Übersicht orange markiert und werden im Log gemeldet.</p>
+                                    <p class="settings-section-desc">Begrenzt die Anfragen je Client-Subnetz mit einem Token-Bucket, wie bei dnsdist. Das schützt einen öffentlichen Resolver davor, mit gefälschten Absendern für Amplification-Angriffe missbraucht zu werden. Gebremste Clients erscheinen in der Übersicht orange markiert und werden im Log gemeldet.</p>
+                                    <p class="settings-section-desc">Hinter einer einzelnen IPv4-Adresse stehen bei CGNAT, in Firmennetzen oder öffentlichen WLANs oft Hunderte Nutzer. Ein Haushalt erzeugt beim Surfen kurz 50 bis 200 Anfragen pro Sekunde. Limits unter einigen Hundert Anfragen pro Sekunde je Adresse treffen deshalb vor allem echte Nutzer. Sammellimits für ganze IPv4-Netze wie <code>/24</code> bremsen CGNAT-Pools von Mobilfunk- und Glasfaseranbietern aus und sind nur bei gezieltem Missbrauch sinnvoll.</p>
                                 <div class="form-group">
                                     <label class="col-sm-3 control-label">Limits für IPv4</label>
-                                    <div class="col-sm-6">
+                                    <div class="col-sm-7">
                                         <table class="table table-condensed" style="margin-bottom: 0px;">
                                             <thead>
                                                 <tr>
-                                                    <th style="width: 110px;">IPv4-Präfix</th>
+                                                    <th style="width: 110px;">Präfix (0–32)</th>
                                                     <th>UDP (Anfragen/s)</th>
-                                                    <th>TCP (Anfragen/s)</th>
+                                                    <th>TCP, DoT, DoH, DoQ (Anfragen/s)</th>
                                                     <th style="width: 84px;"><button type="button" class="btn btn-default btn-xs" onclick="addQpsPrefixLimitsIPv4Row('', '', '');">Hinzufügen</button></th>
                                                 </tr>
                                             </thead>
                                             <tbody id="tableQpsPrefixLimitsIPv4"></tbody>
                                         </table>
                                     </div>
-                                    <div class="col-sm-offset-3 col-sm-8 help-block-text">Maximale Anfragen je Sekunde für ein IPv4-Subnetz der angegebenen Präfixlänge, getrennt nach UDP und TCP. <code>0</code> bedeutet unbegrenzt. Das TCP-Limit gilt auch für DoT, DoH und DoQ. Empfohlen: <code>/32</code> mit 100 und 400, <code>/24</code> mit 1000 und 4000.</div>
+                                    <div class="col-sm-offset-3 col-sm-8 help-block-text">Je Zeile ein Subnetz der angegebenen Präfixlänge, <code>/32</code> ist eine einzelne Adresse. Erlaubt sind 0 bis 1.000.000 Anfragen pro Sekunde, <code>0</code> bedeutet unbegrenzt. Empfohlen: <code>/32</code> mit 1000 für UDP und 5000 für TCP, ohne Sammellimit.</div>
                                 </div>
 
                                 <div class="form-group">
                                     <label class="col-sm-3 control-label">Limits für IPv6</label>
-                                    <div class="col-sm-6">
+                                    <div class="col-sm-7">
                                         <table class="table table-condensed" style="margin-bottom: 0px;">
                                             <thead>
                                                 <tr>
-                                                    <th style="width: 110px;">IPv6-Präfix</th>
+                                                    <th style="width: 110px;">Präfix (0–128)</th>
                                                     <th>UDP (Anfragen/s)</th>
-                                                    <th>TCP (Anfragen/s)</th>
+                                                    <th>TCP, DoT, DoH, DoQ (Anfragen/s)</th>
                                                     <th style="width: 84px;"><button type="button" class="btn btn-default btn-xs" onclick="addQpsPrefixLimitsIPv6Row('', '', '');">Hinzufügen</button></th>
                                                 </tr>
                                             </thead>
                                             <tbody id="tableQpsPrefixLimitsIPv6"></tbody>
                                         </table>
                                     </div>
-                                    <div class="col-sm-offset-3 col-sm-8 help-block-text">Wie oben, für IPv6-Subnetze. Empfohlen: <code>/64</code> mit 100 und 400, <code>/56</code> mit 1000 und 4000.</div>
+                                    <div class="col-sm-offset-3 col-sm-8 help-block-text">Bei IPv6 erhält jeder Anschluss ein eigenes <code>/64</code> oder <code>/56</code>, NAT gibt es praktisch nicht. Das Sammellimit für <code>/48</code> verhindert, dass jemand die Grenze umgeht, indem er Adressen aus seinem eigenen Netz durchwechselt. Empfohlen: <code>/64</code> mit 1000 und 5000, <code>/48</code> mit 10.000 und 50.000.</div>
                                 </div>
 
                                 <div class="form-group">
-                                    <label for="txtRateLimitBurstSeconds" class="col-sm-3 control-label">Burst</label>
-                                    <div class="col-sm-8">
-                                        <input type="number" class="form-control" id="txtRateLimitBurstSeconds" placeholder="Sekunden" style="width: 100px; display: inline;"> <span class="unit">Sekunden (1–60, Standard 5)</span>
+                                    <div class="col-sm-offset-3 col-sm-8">
+                                        <button type="button" class="btn btn-default" onclick="setRecommendedQpsPrefixLimits();">Empfohlene Werte eintragen</button>
                                     </div>
-                                    <div class="col-sm-offset-3 col-sm-8 help-block-text">Ein Client darf kurzzeitig so viele Anfragen senden, wie das Limit in dieser Zeit erlaubt, etwa beim Laden einer Webseite mit vielen Domains. Danach gilt das Limit pro Sekunde.</div>
+                                </div>
+
+                                <div class="form-group">
+                                    <label for="txtRateLimitBurstSeconds" class="col-sm-3 control-label">Burst-Dauer</label>
+                                    <div class="col-sm-8">
+                                        <input type="number" class="form-control" id="txtRateLimitBurstSeconds" min="1" max="60" step="1" placeholder="5" style="width: 100px; display: inline;"> <span class="unit">Sekunden (1–60, Standard 5)</span>
+                                    </div>
+                                    <div class="col-sm-offset-3 col-sm-8 help-block-text">Ein Client darf kurzzeitig so viele Anfragen senden, wie sein Limit in dieser Zeit erlaubt. Bei 1000 Anfragen pro Sekunde und 5 Sekunden sind das 5000 Anfragen am Stück, etwa beim Start eines Geräts oder beim Laden vieler Webseiten. Danach gilt das Limit pro Sekunde.</div>
                                 </div>
 
                                 <div class="form-group">
                                     <label for="txtRateLimitUdpTruncation" class="col-sm-3 control-label">Anteil TC-Antworten</label>
                                     <div class="col-sm-8">
-                                        <input type="number" class="form-control" id="txtRateLimitUdpTruncation" placeholder="%" style="width: 100px; display: inline;"> <span class="unit">% (0–100, Standard 50)</span>
+                                        <input type="number" class="form-control" id="txtRateLimitUdpTruncation" min="0" max="100" step="1" placeholder="100" style="width: 100px; display: inline;"> <span class="unit">% (0–100, Standard 100)</span>
                                     </div>
-                                    <div class="col-sm-offset-3 col-sm-8 help-block-text">Anteil der gebremsten UDP-Anfragen, die mit gesetztem TC-Bit beantwortet statt verworfen werden. Echte Clients wiederholen die Anfrage dann über TCP; gefälschte Absender bekommen so keine verstärkte Antwort.</div>
+                                    <div class="col-sm-offset-3 col-sm-8 help-block-text">Anteil der gebremsten UDP-Anfragen, die eine leere Antwort mit gesetztem TC-Bit erhalten statt verworfen zu werden. Echte Clients wiederholen die Anfrage dann sofort über TCP, wo das höhere TCP-Limit gilt. Eine TC-Antwort ist nicht größer als die Anfrage und eignet sich deshalb nicht für Amplification. Der Rest wird verworfen.</div>
                                 </div>
 
                                 <div class="form-group">
@@ -2081,6 +2227,31 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
                                 </div>
                                 </div>
                                 <div id="settingsTabPaneOptionalProtocols" role="tabpanel" class="tab-pane">
+                                <div class="well well-sm form-horizontal settings-section">
+                                    <h4 class="settings-section-title">Unverschlüsseltes DNS (Do53)</h4>
+                                    <p class="settings-section-desc">Legt fest, was der Resolver über UDP und TCP auf Port 53 beantwortet, auch hinter einem PROXY-Protokoll-Load-Balancer. Die Adressen stehen unter Netzwerk.</p>
+                                <div class="form-group">
+                                    <label class="col-sm-3 control-label">Do53</label>
+                                    <div class="col-sm-8">
+                                        <div class="radio">
+                                            <label><input type="radio" name="rdDo53Mode" id="rdDo53ModeEnabled" value="Enabled"> Aktiviert</label>
+                                        </div>
+                                        <div class="option-help">Beantwortet alle Anfragen.</div>
+                                        <div class="radio">
+                                            <label><input type="radio" name="rdDo53Mode" id="rdDo53ModeDdrOnlyDrop" value="DdrOnlyDrop"> Nur DDR, andere Anfragen verwerfen</label>
+                                        </div>
+                                        <div class="radio">
+                                            <label><input type="radio" name="rdDo53Mode" id="rdDo53ModeDdrOnlyRefused" value="DdrOnlyRefused"> Nur DDR, andere Anfragen mit REFUSED ablehnen</label>
+                                        </div>
+                                        <div class="option-help">Clients erfahren über Port 53 nur noch per DDR, wo sie den Resolver verschlüsselt erreichen. Verwerfen bietet Angreifern keine Antworten für Reflexionsangriffe, über TCP wird die Verbindung getrennt. REFUSED lässt Clients ohne DDR-Unterstützung sofort auf einen anderen Resolver ausweichen. Setzt aktiviertes DDR voraus. Anfragen von Loopback-Adressen werden immer beantwortet.</div>
+                                        <div class="radio">
+                                            <label><input type="radio" name="rdDo53Mode" id="rdDo53ModeDisabled" value="Disabled"> Deaktiviert</label>
+                                        </div>
+                                        <div class="option-help">Port 53 wird nicht geöffnet. Der Resolver ist dann nur verschlüsselt erreichbar, DDR ist nicht möglich.</div>
+                                    </div>
+                                </div>
+                                </div>
+
                                 <div class="well well-sm form-horizontal settings-section">
                                     <h4 class="settings-section-title">Verschlüsselte Protokolle</h4>
                                     <p class="settings-section-desc">Bietet den Resolver zusätzlich über DNS-over-TLS, DNS-over-HTTPS und DNS-over-QUIC an. Für Forwarder oder Weiterleitungszonen müssen diese Protokolle nicht aktiviert sein. Änderungen werden ohne Neustart übernommen.</p>
@@ -2103,6 +2274,24 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
                                             <label><input id="chkEnableDnsOverQuic" type="checkbox"> DNS-over-QUIC (DoQ)</label>
                                         </div>
                                         <div class="option-help">Nimmt Anfragen über QUIC an, Standardport 853/UDP. Benötigt <code>libmsquic</code>.</div>
+                                    </div>
+                                </div>
+
+                                <div class="form-group">
+                                    <label class="col-sm-3 control-label">EDNS-Padding</label>
+                                    <div class="col-sm-8">
+                                        <div class="radio">
+                                            <label><input type="radio" name="rdEDnsPaddingMode" id="rdEDnsPaddingModeWhenRequested" value="WhenRequested"> Wenn der Client es anfordert (empfohlen)</label>
+                                        </div>
+                                        <div class="option-help">Antworten über DoT, DoH und DoQ werden auf ein Vielfaches von 468 Byte aufgefüllt, wenn die Anfrage selbst Padding enthält (RFC 7830, RFC 8467). Browser, Android und die meisten verschlüsselten Clients tun das. So lässt sich aus der Größe der verschlüsselten Pakete nicht mehr ablesen, welche Domain abgefragt wurde.</div>
+                                        <div class="radio">
+                                            <label><input type="radio" name="rdEDnsPaddingMode" id="rdEDnsPaddingModeAlways" value="Always"> Immer</label>
+                                        </div>
+                                        <div class="option-help">Füllt jede verschlüsselte Antwort mit EDNS auf, auch wenn der Client kein Padding sendet. Etwas mehr Datenvolumen.</div>
+                                        <div class="radio">
+                                            <label><input type="radio" name="rdEDnsPaddingMode" id="rdEDnsPaddingModeDisabled" value="Disabled"> Aus</label>
+                                        </div>
+                                        <div class="option-help">Unverschlüsselte Antworten über Port 53 werden nie aufgefüllt. Anfragen an verschlüsselte Forwarder werden auf 128 Byte aufgefüllt, solange Padding nicht ausgeschaltet ist.</div>
                                     </div>
                                 </div>
 
@@ -2446,7 +2635,11 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
                                         <div class="checkbox">
                                             <label><input id="chkIgnoreResolverLogs" type="checkbox"> Auflösungsfehler nicht protokollieren</label>
                                         </div>
-                                        <div class="option-help">Fehler beim Auflösen einzelner Domains werden nicht protokolliert. Bei einem öffentlichen Resolver entstehen davon sehr viele.</div>
+                                        <div class="option-help">Fehler beim Auflösen einzelner Domains werden nicht protokolliert, standardmäßig an. Bei einem öffentlichen Resolver entstehen davon sehr viele, und über Domains mit absichtlich defekten Nameservern ließe sich das Protokoll gezielt füllen.</div>
+                                        <div class="checkbox">
+                                            <label><input id="chkHideClientAddresses" type="checkbox"> Keine Client-Adressen protokollieren</label>
+                                        </div>
+                                        <div class="option-help">Einträge enthalten dann weder IP-Adressen noch Ports der Clients, auch nicht in den Meldungen der Ratenbegrenzung. Sinnvoll, wenn in der Datenschutzerklärung zugesagt wird, dass keine Client-Adressen gespeichert werden.</div>
                                         <div class="checkbox">
                                             <label><input id="chkNoStackTrace" type="checkbox"> Ohne Stacktrace</label>
                                         </div>
@@ -2473,9 +2666,9 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
                                 <div class="form-group">
                                     <label for="txtMaxLogFileDays" class="col-sm-3 control-label">Aufbewahrung</label>
                                     <div class="col-sm-8">
-                                        <input type="number" class="form-control" id="txtMaxLogFileDays" placeholder="Tage" style="width: 100px; display: inline;"> <span class="unit">Tage (Standard 365, 0 = unbegrenzt)</span>
+                                        <input type="number" class="form-control" id="txtMaxLogFileDays" min="0" step="1" placeholder="Tage" style="width: 100px; display: inline;"> <span class="unit">Tage (Standard 7, 0 = unbegrenzt)</span>
                                     </div>
-                                    <div class="col-sm-offset-3 col-sm-8 help-block-text">Ältere Protokolldateien werden automatisch gelöscht.</div>
+                                    <div class="col-sm-offset-3 col-sm-8 help-block-text">Ältere Protokolldateien werden automatisch gelöscht. Protokolleinträge enthalten Client-Adressen; für die Fehlersuche genügen in der Regel wenige Tage.</div>
                                 </div>
 
                                 <div class="settings-note settings-warning"><b>Achtung:</b> Das Protokollieren aller Anfragen vergrößert die Protokolldateien erheblich.</div>
@@ -2522,10 +2715,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
                                             <div id="divAdminSessionsLoader" style="margin-top: 10px; height: 350px;"></div>
 
                                             <div id="divAdminSessionsView" style="margin-top: 10px;">
-                                                <div class="view-actions">
-                                                    <button id="btnAdminSessionsCreateToken" type="button" class="btn btn-primary" onclick="showCreateApiTokenModal();"><span class="fa fa-plus" aria-hidden="true"></span> Token erstellen</button>
-                                                </div>
-
                                                 <table id="tableAdminSessions" class="table table-hover">
                                                     <thead>
                                                         <tr>
@@ -2922,15 +3111,19 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
                                     <div class="about" style="text-align: center;">
                                         <img src="img/logo.png" alt="ZenitiumDNS-Logo" />
                                         <h1>ZenitiumDNS</h1>
-                                        <p>Version <span id="lblAboutVersion"></span></p>
+                                        <p class="about-version">Version <span id="lblAboutVersion"></span></p>
+                                        <p>Basiert auf Technitium DNS Server <span id="lblAboutTechnitiumVersion"></span></p>
+                                        <p><span id="lblAboutRuntime"></span></p>
                                         <p>Läuft seit <span id="lblAboutUptime"></span></p>
+                                        <div class="about-update">
+                                            <p id="lblAboutUpdateStatus">Noch nicht nach Updates gesucht.</p>
+                                            <button type="button" class="btn btn-default btn-sm" onclick="checkForUpdate(true);">Nach Updates suchen</button>
+                                        </div>
                                         <p style="max-width: 800px; margin: 0 auto 10px auto;">
                                             ZenitiumDNS ist ein Fork des <a href="https://github.com/TechnitiumSoftware/DnsServer" target="_blank">Technitium DNS Server</a>.<br /> Copyright (C) 2026 Shreyas Zare (shreyas@technitium.com)<br /> Für dieses Programm besteht KEINERLEI GARANTIE. Es ist freie Software und darf unter bestimmten Bedingungen weitergegeben werden.<br />
                                         </p>
                                         <p>Der Quellcode steht unter der <a href="https://www.gnu.org/licenses/gpl-3.0.html" target="_blank">GNU General Public License v3.0</a>.</p>
 
-                                        <h3 style="margin-top: 40px;">API-Dokumentation</h3>
-                                        <p>Über die HTTP-API lässt sich der Server aus eigenen Skripten und Anwendungen steuern. Die Weboberfläche nutzt dieselbe API, jede Aktion hier ist also auch per API möglich. Die vollständige Beschreibung steht im Quellcode unter <b>docs/APIDOCS.md</b>.</p>
                                     </div>
 
                                 </div>
@@ -3031,76 +3224,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
                     </div>
                     <div class="modal-footer">
                         <button type="submit" class="btn btn-primary" data-loading-text="Speichere..." onclick="saveMyProfile(this); return false;">Speichern</button>
-                        <button type="button" class="btn btn-default" data-dismiss="modal">Schließen</button>
-                    </div>
-                </div>
-            </div>
-        </form>
-    </div>
-
-    <div id="modalCreateApiToken" class="modal fade" tabindex="-1" role="dialog">
-        <form class="form-horizontal">
-            <div class="modal-dialog" role="document" style="width: 780px;">
-                <div class="modal-content">
-                    <div class="modal-header">
-                        <button type="button" class="close" data-dismiss="modal" aria-label="Schließen"><span aria-hidden="true">&times;</span></button>
-                        <h4 class="modal-title">API-Token erstellen</h4>
-                    </div>
-                    <div class="modal-body">
-                        <div id="divCreateApiTokenAlert"></div>
-
-                        <div id="divCreateApiTokenLoader" style="height: 350px;"></div>
-
-                        <div id="divCreateApiTokenForm">
-                            <div class="form-group">
-                                <label for="txtCreateApiTokenUsername" class="col-sm-4 control-label">Benutzername</label>
-                                <div class="col-sm-7">
-                                    <input id="txtCreateApiTokenUsername" type="text" class="form-control" placeholder="Benutzername" disabled>
-                                    <select id="optCreateApiTokenUsername" class="form-control"></select>
-                                </div>
-                            </div>
-
-                            <div class="form-group">
-                                <label for="txtCreateApiTokenName" class="col-sm-4 control-label">Token-Name</label>
-                                <div class="col-sm-7">
-                                    <input id="txtCreateApiTokenName" type="text" class="form-control" placeholder="Token-Name" maxlength="255">
-                                </div>
-                            </div>
-
-                            <div>
-                                <b>Achtung:</b> Das Token hat dieselben Rechte wie das Benutzerkonto. Für Automatisierungen empfiehlt sich ein eigenes Konto mit passend eingeschränkten Berechtigungen. Passwort und Profil lassen sich mit dem Token nicht ändern.
-                            </div>
-                        </div>
-
-                        <div id="divCreateApiTokenOutput">
-                            <div class="form-group">
-                                <label class="col-sm-3 control-label">Benutzername</label>
-                                <div class="col-sm-9">
-                                    <div id="lblCreateApiTokenOutputUsername" style="padding-top: 7px;"></div>
-                                </div>
-                            </div>
-
-                            <div class="form-group">
-                                <label class="col-sm-3 control-label">Token-Name</label>
-                                <div class="col-sm-9">
-                                    <div id="lblCreateApiTokenOutputTokenName" style="padding-top: 7px; word-wrap: anywhere;"></div>
-                                </div>
-                            </div>
-
-                            <div class="form-group">
-                                <label class="col-sm-3 control-label">Token</label>
-                                <div class="col-sm-9">
-                                    <div id="lblCreateApiTokenOutputToken" style="padding-top: 7px;"></div>
-                                </div>
-                            </div>
-
-                            <div>
-                                <b>Achtung:</b> Das Token wird nur jetzt angezeigt. Bitte sofort kopieren und sicher aufbewahren.
-                            </div>
-                        </div>
-                    </div>
-                    <div class="modal-footer">
-                        <button id="btnCreateApiToken" type="submit" class="btn btn-primary" data-loading-text="Erstelle...">Erstellen</button>
                         <button type="button" class="btn btn-default" data-dismiss="modal">Schließen</button>
                     </div>
                 </div>
@@ -3300,33 +3423,29 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
     </div>
 
     <div id="modalUpdateAvailable" class="modal fade" tabindex="-1" role="dialog">
-        <div class="modal-dialog" role="document">
+        <div class="modal-dialog modal-update" role="document">
             <div class="modal-content">
                 <div class="modal-header">
                     <button type="button" class="close" data-dismiss="modal" aria-label="Schließen"><span aria-hidden="true">&times;</span></button>
                     <h4 class="modal-title" id="lblUpdateAvailableTitle">Neue Version verfügbar</h4>
                 </div>
                 <div class="modal-body">
-                    <div style="margin-bottom: 20px;">
-                        <div id="lblUpdateMessage" style="margin-bottom: 10px;"></div>
-                        <a id="lnkUpdateDownload" href="#" target="_blank" style="font-weight: bold; font-size: 18px;">Herunterladen</a> <a id="lnkUpdateInstructions" href="#" target="_blank" style="font-weight: bold; font-size: 18px;">Anleitung</a>
-                    </div>
-                    <div style="margin-bottom: 10px;">
-                        <div style="font-weight: bold;">Neue Version: <span id="lblUpdateVersion"></span></div>
-                        <div>Installierte Version: <span id="lblCurrentVersion"></span></div>
-                    </div>
-                    <div style="margin-bottom: 10px;">
-                        <a id="lnkUpdateChangeLog" href="#" target="_blank" style="font-weight: bold;">Änderungen ansehen</a>
-                    </div>
-                    <div style="margin-bottom: 10px;">
-                        <b>Hinweis:</b> Vor dem Update unbedingt eine Sicherung erstellen.
-                    </div>
-                    <div>
-                        <b>Hinweis:</b> Nach dem Update die Seite neu laden, damit die neue Oberfläche geladen wird.
+                    <p class="update-versions">Version <b id="lblUpdateVersion"></b><span id="lblUpdatePublished"></span>. Installiert ist <span id="lblCurrentVersion"></span>.</p>
+
+                    <h5 class="update-section">Änderungen</h5>
+                    <div id="divUpdateReleaseNotes" class="release-notes"></div>
+
+                    <div id="divUpdateInstall">
+                        <h5 class="update-section">Installation</h5>
+                        <p>Das Paket auf dem Server herunterladen und mit apt installieren. Die Einstellungen bleiben erhalten, der Dienst startet danach automatisch neu.</p>
+                        <pre id="preUpdateInstall" class="update-command"></pre>
+                        <p><a id="lnkUpdateDownload" href="#" target="_blank" rel="noopener noreferrer"></a> <a id="lnkUpdateChecksums" href="#" target="_blank" rel="noopener noreferrer" style="margin-left: 12px;">SHA256SUMS</a></p>
+                        <p class="update-hint">Der Dienst läuft aus Sicherheitsgründen ohne Root-Rechte und installiert Updates deshalb nicht selbst. Vorher unter Einstellungen eine Sicherung erstellen und nach dem Update die Seite neu laden.</p>
                     </div>
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-default" data-dismiss="modal">Schließen</button>
+                    <a id="lnkUpdateRelease" href="#" target="_blank" rel="noopener noreferrer" class="btn btn-default">Release auf GitHub</a>
+                    <button type="button" class="btn btn-primary" data-dismiss="modal">Schließen</button>
                 </div>
             </div>
         </div>
@@ -4223,115 +4342,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
         </div>
     </div>
 
-    <div id="modalStoreApps" class="modal fade" tabindex="-1" role="dialog">
-        <form class="form-horizontal">
-            <div class="modal-dialog" role="document" style="width: 800px;">
-                <div class="modal-content">
-                    <div class="modal-header">
-                        <button type="button" class="close" data-dismiss="modal" aria-label="Schließen"><span aria-hidden="true">&times;</span></button>
-                        <h4 class="modal-title">App-Store</h4>
-                    </div>
-                    <div class="modal-body">
-                        <div id="divStoreAppsAlert"></div>
-
-                        <div id="divStoreAppsLoader" style="height: 500px;"></div>
-
-                        <div id="divStoreApps" style="max-height: 500px; overflow-y: auto; display: none;">
-                            <table class="table table-hover">
-                                <thead>
-                                    <tr>
-                                        <th style="min-width: 120px;"><a href="#" onclick="sortTable('tableStoreAppsBody', 0); return false;">Verfügbare Apps</a></th>
-                                        <th style="width: 96px;"></th>
-                                    </tr>
-                                </thead>
-                                <tbody id="tableStoreAppsBody">
-                                </tbody>
-                                <tfoot id="tableStoreAppsFooter">
-                                    <tr><td colspan="3"><b>Apps gesamt: 0</b></td></tr>
-                                </tfoot>
-                            </table>
-                        </div>
-                    </div>
-                    <div class="modal-footer">
-                        <button type="button" class="btn btn-default" data-dismiss="modal">Schließen</button>
-                    </div>
-                </div>
-            </div>
-        </form>
-    </div>
-
-    <div id="modalInstallApp" class="modal fade" tabindex="-1" role="dialog">
-        <form class="form-horizontal">
-            <div class="modal-dialog" role="document">
-                <div class="modal-content">
-                    <div class="modal-header">
-                        <button type="button" class="close" data-dismiss="modal" aria-label="Schließen"><span aria-hidden="true">&times;</span></button>
-                        <h4 class="modal-title">App installieren</h4>
-                    </div>
-                    <div class="modal-body">
-                        <div id="divInstallAppAlert"></div>
-
-                        <div class="form-group">
-                            <label for="txtInstallApp" class="col-sm-4 control-label">App</label>
-                            <div class="col-sm-7">
-                                <input id="txtInstallApp" type="text" class="form-control">
-                            </div>
-                        </div>
-
-                        <div class="form-group">
-                            <label for="fileAppZip" class="col-sm-4 control-label">App-Datei (ZIP)</label>
-                            <div class="col-sm-7">
-                                <input type="file" class="form-control" id="fileAppZip">
-                            </div>
-                        </div>
-
-                    </div>
-                    <div class="modal-footer">
-                        <button id="btnInstallApp" type="submit" class="btn btn-primary" data-loading-text="Installiere..." onclick="installApp(); return false;">Installieren</button>
-                        <button type="button" class="btn btn-default" data-dismiss="modal">Schließen</button>
-                    </div>
-                </div>
-            </div>
-        </form>
-    </div>
-
-    <div id="modalUpdateApp" class="modal fade" tabindex="-1" role="dialog">
-        <form class="form-horizontal">
-            <div class="modal-dialog" role="document">
-                <div class="modal-content">
-                    <div class="modal-header">
-                        <button type="button" class="close" data-dismiss="modal" aria-label="Schließen"><span aria-hidden="true">&times;</span></button>
-                        <h4 class="modal-title">App aktualisieren</h4>
-                    </div>
-                    <div class="modal-body">
-                        <div id="divUpdateAppAlert"></div>
-
-                        <div class="form-group">
-                            <label for="txtUpdateApp" class="col-sm-4 control-label">App</label>
-                            <div class="col-sm-7">
-                                <input id="txtUpdateApp" type="text" class="form-control" disabled>
-                            </div>
-                        </div>
-
-                        <div class="form-group">
-                            <label for="fileUpdateAppZip" class="col-sm-4 control-label">App-Datei (ZIP)</label>
-                            <div class="col-sm-7">
-                                <input type="file" class="form-control" id="fileUpdateAppZip">
-                            </div>
-                        </div>
-
-                    </div>
-                    <div class="modal-footer">
-                        <button id="btnUpdateApp" type="submit" class="btn btn-primary" data-loading-text="Aktualisiere..." onclick="updateApp(); return false;">Aktualisieren</button>
-                        <button type="button" class="btn btn-default" data-dismiss="modal">Schließen</button>
-                    </div>
-                </div>
-            </div>
-        </form>
-    </div>
-
     <div id="modalAppConfig" class="modal fade" tabindex="-1" role="dialog">
-        <div class="modal-dialog" role="document" style="width: 780px;">
+        <div class="modal-dialog modal-app-config" role="document">
             <div class="modal-content">
                 <div class="modal-header">
                     <button type="button" class="close" data-dismiss="modal" aria-label="Schließen"><span aria-hidden="true">&times;</span></button>
@@ -4340,17 +4352,43 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
                 <div class="modal-body">
                     <div id="divAppConfigAlert"></div>
 
-                    <p>Die Konfigurationsdatei <code>dnsApp.config</code> der App bearbeiten.</p>
-
-                    <div class="form-group">
-                        <label for="txtAppConfig" class="control-label">Konfiguration</label>
-                        <textarea id="txtAppConfig" class="form-control" rows="15" spellcheck="false"></textarea>
+                    <div class="app-config-toolbar">
+                        <div class="btn-group btn-group-sm" role="group" aria-label="Ansicht">
+                            <button id="btnAppConfigModeForm" type="button" class="btn btn-default active" aria-pressed="true" onclick="setAppConfigMode('form');">Formular</button>
+                            <button id="btnAppConfigModeJson" type="button" class="btn btn-default" aria-pressed="false" onclick="setAppConfigMode('json');">JSON für Experten</button>
+                        </div>
+                        <span class="app-config-toolbar-hint">Die App lädt die Konfiguration nach dem Speichern automatisch neu.</span>
                     </div>
 
-                    <p>Hinweis: Die App lädt die Konfiguration nach dem Speichern automatisch neu.</p>
+                    <div id="divAppConfigForm" class="app-config-form"></div>
+
+                    <div id="divAppConfigJson" style="display: none;">
+                        <p class="app-config-hint">Bearbeitet die Datei <code>dnsApp.config</code> direkt. Hier lassen sich auch Einstellungen ergänzen, die das Formular nicht kennt. Vor dem Speichern wird geprüft, ob das JSON gültig ist.</p>
+                        <textarea id="txtAppConfig" class="form-control app-config-json" rows="22" spellcheck="false"></textarea>
+                    </div>
                 </div>
                 <div class="modal-footer">
                     <button id="btnAppConfig" type="submit" class="btn btn-primary" data-loading-text="Speichere..." onclick="saveAppConfig(); return false;">Speichern</button>
+                    <button type="button" class="btn btn-default" data-dismiss="modal">Schließen</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="modalIanaData" class="modal fade" tabindex="-1" role="dialog">
+        <div class="modal-dialog modal-app-config" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Schließen"><span aria-hidden="true">&times;</span></button>
+                    <h4 class="modal-title" id="lblIanaDataTitle"></h4>
+                </div>
+                <div class="modal-body">
+                    <div id="divIanaDataAlert"></div>
+                    <p class="app-config-hint" id="lblIanaDataHint"></p>
+                    <textarea id="txtIanaData" class="form-control app-config-json" rows="24" spellcheck="false" wrap="off"></textarea>
+                </div>
+                <div class="modal-footer">
+                    <button id="btnIanaDataSave" type="button" class="btn btn-primary" data-loading-text="Prüfe und speichere..." onclick="saveIanaData();">Speichern und verwenden</button>
                     <button type="button" class="btn btn-default" data-dismiss="modal">Schließen</button>
                 </div>
             </div>

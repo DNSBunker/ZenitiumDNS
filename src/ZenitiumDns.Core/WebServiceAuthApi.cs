@@ -90,6 +90,7 @@ namespace ZenitiumDns.Core
                     jsonWriter.WriteStartObject("info");
 
                     jsonWriter.WriteString("version", _dnsWebService.GetServerVersion());
+                    _dnsWebService.WriteVersionInfo(jsonWriter);
                     jsonWriter.WriteString("uptimestamp", _dnsWebService._uptimestamp);
                     jsonWriter.WriteString("dnsServerDomain", _dnsWebService._dnsServer.ServerDomain);
                     jsonWriter.WriteNumber("defaultRecordTtl", _dnsWebService._dnsServer.AuthZoneManager.DefaultRecordTtl);
@@ -742,29 +743,6 @@ namespace ZenitiumDns.Core
                 WriteCurrentSessionDetails(jsonWriter, session, includeInfo);
             }
 
-            public Task CreateToken(HttpContext context)
-            {
-                if (_dnsWebService.TryValidateSession(context, out UserSession _))
-                {
-                    User sessionUser = _dnsWebService.GetSessionUser(context, true);
-                    HttpRequest request = context.Request;
-
-                    string tokenName = request.GetQueryOrForm("tokenName");
-                    IPEndPoint remoteEP = _dnsWebService.GetRemoteEndPoint(context);
-
-                    UserSession createdSession = _dnsWebService._authManager.CreateSession(UserSessionType.ApiToken, tokenName, sessionUser, remoteEP.Address, context.Request.Headers.UserAgent);
-
-                    Utf8JsonWriter jsonWriter = context.GetCurrentJsonWriter();
-                    WriteCurrentSessionDetails(jsonWriter, createdSession, false);
-
-                    return Task.CompletedTask;
-                }
-                else
-                {
-                    return LoginAsync(context, UserSessionType.ApiToken);
-                }
-            }
-
             public void CreateSingleUseToken(HttpContext context)
             {
                 User sessionUser = _dnsWebService.GetSessionUser(context, true);
@@ -929,33 +907,6 @@ namespace ZenitiumDns.Core
                 }
 
                 jsonWriter.WriteEndArray();
-            }
-
-            public void CreateApiToken(HttpContext context)
-            {
-                User sessionUser = _dnsWebService.GetSessionUser(context);
-
-                if (!_dnsWebService._authManager.IsPermitted(PermissionSection.Administration, sessionUser, PermissionFlag.Modify))
-                    throw new DnsWebServiceException("Access was denied.");
-
-                HttpRequest request = context.Request;
-
-                string username = request.GetQueryOrForm("user");
-                string tokenName = request.GetQueryOrForm("tokenName");
-
-                IPEndPoint remoteEP = _dnsWebService.GetRemoteEndPoint(context);
-
-                UserSession createdSession = _dnsWebService._authManager.CreateSession(UserSessionType.ApiToken, tokenName, username, remoteEP.Address, request.Headers.UserAgent);
-
-                _dnsWebService._log.Write(remoteEP, "[" + sessionUser.Username + "] API token [" + tokenName + "] was created successfully for user: " + username);
-
-                _dnsWebService._authManager.SaveConfigFile();
-
-                Utf8JsonWriter jsonWriter = context.GetCurrentJsonWriter();
-
-                jsonWriter.WriteString("username", createdSession.User.Username);
-                jsonWriter.WriteString("tokenName", createdSession.TokenName);
-                jsonWriter.WriteString("token", createdSession.Token);
             }
 
             public void DeleteSession(HttpContext context, bool isAdminContext)

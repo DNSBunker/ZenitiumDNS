@@ -56,6 +56,7 @@ namespace ZenitiumDns.Core.Dns
         long _totalDropped;
 
         readonly UniqueAddressCounter _uniqueClients = new UniqueAddressCounter();
+        readonly ShortTermStats _shortTermStats = new ShortTermStats();
 
         readonly StatCounter[] _lastHourStatCounters = new StatCounter[60];
         readonly StatCounter[] _lastHourStatCountersCopy = new StatCounter[60];
@@ -252,6 +253,7 @@ namespace ZenitiumDns.Core.Dns
                 responseType = (DnsServerResponseType)item._response.Tag;
 
             UpdateLifetimeCounters(responseCode, responseType, item._remoteEP.Address);
+            _shortTermStats.Record(item._timestamp, responseCode, responseType, item._remoteEP.Address);
 
             if (item._response is not null)
                 _responseTimeStats.Record(item._timestamp, item._responseTime, responseType);
@@ -782,6 +784,58 @@ namespace ZenitiumDns.Core.Dns
                 TopDomains = totalStatCounter.GetTopDomainStats(10),
                 TopBlockedDomains = totalStatCounter.GetTopBlockedDomainStats(10)
             };
+        }
+
+        private StatCounter MergeLastCompletedMinutes(int minutes)
+        {
+            StatCounter totalStatCounter = new StatCounter();
+            totalStatCounter.Lock();
+
+            DateTime startDateTime = DateTime.UtcNow.AddMinutes(-minutes);
+            startDateTime = new DateTime(startDateTime.Year, startDateTime.Month, startDateTime.Day, startDateTime.Hour, startDateTime.Minute, 0, DateTimeKind.Utc);
+
+            for (int minute = 0; minute < minutes; minute++)
+            {
+                StatCounter statCounter = _lastHourStatCountersCopy[startDateTime.AddMinutes(minute).Minute];
+                if ((statCounter != null) && statCounter.IsLocked)
+                    totalStatCounter.Merge(statCounter);
+            }
+
+            return totalStatCounter;
+        }
+
+        public DashboardStats GetShortTermStats(int rangeSeconds, bool utcFormat)
+        {
+            DashboardStats dashboardStats = _shortTermStats.GetStats(rangeSeconds, 60, utcFormat);
+            StatCounter totalStatCounter = MergeLastCompletedMinutes(Math.Max(1, rangeSeconds / 60));
+
+            dashboardStats.QueryTypeChartData = totalStatCounter.GetTopQueryTypesChartData();
+            dashboardStats.ProtocolTypeChartData = totalStatCounter.GetTopProtocolTypesChartData();
+            dashboardStats.TopClients = totalStatCounter.GetTopClientStats(10);
+            dashboardStats.TopDomains = totalStatCounter.GetTopDomainStats(10);
+            dashboardStats.TopBlockedDomains = totalStatCounter.GetTopBlockedDomainStats(10);
+
+            return dashboardStats;
+        }
+
+        public DashboardStats GetShortTermTopStats(int rangeSeconds, DashboardTopStatsType type, int limit)
+        {
+            StatCounter totalStatCounter = MergeLastCompletedMinutes(Math.Max(1, rangeSeconds / 60));
+
+            switch (type)
+            {
+                case DashboardTopStatsType.TopClients:
+                    return new DashboardStats() { TopClients = totalStatCounter.GetTopClientStats(limit) };
+
+                case DashboardTopStatsType.TopDomains:
+                    return new DashboardStats() { TopDomains = totalStatCounter.GetTopDomainStats(limit) };
+
+                case DashboardTopStatsType.TopBlockedDomains:
+                    return new DashboardStats() { TopBlockedDomains = totalStatCounter.GetTopBlockedDomainStats(limit) };
+
+                default:
+                    throw new NotSupportedException();
+            }
         }
 
         public DashboardStats GetLastDayHourWiseStats(bool utcFormat)
@@ -1605,6 +1659,19 @@ namespace ZenitiumDns.Core.Dns
 
         public ResponseTimeStats ResponseTimeStats
         { get { return _responseTimeStats; } }
+
+        internal int QueueLength
+        { get { return _queue.Count; } }
+
+        internal int DropQueuedItems()
+        {
+            int dropped = 0;
+
+            while (_queue.TryDequeue(out _))
+                dropped++;
+
+            return dropped;
+        }
 
         public long TotalQueries
         { get { return _totalQueries; } }

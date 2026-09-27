@@ -143,6 +143,17 @@ namespace ZenitiumDns.Core
                 }
             }
 
+            private static void AddStrictLimit(List<string> strictLimits, string prefix, int minimum, (int, int) limit)
+            {
+                (int udpLimit, int tcpLimit) = limit;
+
+                if ((udpLimit > 0) && (udpLimit < minimum))
+                    strictLimits.Add(prefix + " UDP " + udpLimit + " QPS");
+
+                if ((tcpLimit > 0) && (tcpLimit < minimum))
+                    strictLimits.Add(prefix + " TCP " + tcpLimit + " QPS");
+            }
+
             private void CheckServices(List<SelfTestResult> results)
             {
                 const string group = "Dienste";
@@ -166,6 +177,46 @@ namespace ZenitiumDns.Core
 
                 if ((dnsServer.EnableDnsOverTls || dnsServer.EnableDnsOverHttps || dnsServer.EnableDnsOverQuic) && (dnsServer.DnsTlsCertificate is null))
                     results.Add(new SelfTestResult(group, "Verschlüsselte Protokolle", SelfTestStatus.Error, "DoT, DoH oder DoQ ist aktiviert, aber es ist kein TLS-Zertifikat geladen. Diese Dienste bleiben deshalb aus."));
+
+                bool hasEncryptedService = (dnsServer.DnsTlsCertificate is not null) && (dnsServer.EnableDnsOverTls || dnsServer.EnableDnsOverHttps || dnsServer.EnableDnsOverQuic);
+
+                switch (dnsServer.Do53Mode)
+                {
+                    case DnsServerDo53Mode.DdrOnlyDrop:
+                    case DnsServerDo53Mode.DdrOnlyRefused:
+                        if (dnsServer.GetDdrRecords().Count == 0)
+                            results.Add(new SelfTestResult(group, "Do53", SelfTestStatus.Error, "Do53 beantwortet nur DDR, es gibt aber keine DDR-Einträge, weil kein TLS-Zertifikat geladen oder kein verschlüsselter Dienst aktiv ist. Clients erhalten über Port 53 damit gar keine Antworten."));
+                        else
+                            results.Add(new SelfTestResult(group, "Do53", SelfTestStatus.Info, "Do53 beantwortet nur DDR, andere Anfragen werden " + (dnsServer.Do53Mode == DnsServerDo53Mode.DdrOnlyDrop ? "verworfen" : "mit REFUSED abgelehnt") + ". Clients ohne DDR-Unterstützung können den Resolver nur verschlüsselt nutzen."));
+
+                        break;
+
+                    case DnsServerDo53Mode.Disabled:
+                        if (!hasEncryptedService && !dnsServer.EnableDnsOverHttp && !dnsServer.EnableDnsOverUdpProxy && !dnsServer.EnableDnsOverTcpProxy)
+                            results.Add(new SelfTestResult(group, "Do53", SelfTestStatus.Error, "Do53 ist deaktiviert und kein anderer Dienst ist aktiv. Der Resolver ist von außen nicht erreichbar."));
+                        else
+                            results.Add(new SelfTestResult(group, "Do53", SelfTestStatus.Info, "Do53 ist deaktiviert, Port 53 wird nicht geöffnet."));
+
+                        break;
+                }
+
+                if (hasEncryptedService || dnsServer.EnableDnsOverHttp)
+                {
+                    switch (dnsServer.EDnsPaddingMode)
+                    {
+                        case DnsServerEDnsPaddingMode.Disabled:
+                            results.Add(new SelfTestResult(group, "EDNS-Padding", SelfTestStatus.Warning, "Padding ist ausgeschaltet. Aus der Größe verschlüsselter Antworten lässt sich dann teilweise ablesen, welche Domain abgefragt wurde."));
+                            break;
+
+                        case DnsServerEDnsPaddingMode.Always:
+                            results.Add(new SelfTestResult(group, "EDNS-Padding", SelfTestStatus.Ok, "Verschlüsselte Antworten werden immer auf 468 Byte aufgefüllt."));
+                            break;
+
+                        default:
+                            results.Add(new SelfTestResult(group, "EDNS-Padding", SelfTestStatus.Ok, "Verschlüsselte Antworten werden auf 468 Byte aufgefüllt, wenn der Client Padding sendet."));
+                            break;
+                    }
+                }
 
                 if (dnsServer.EnableDnsOverQuic && !System.Net.Quic.QuicListener.IsSupported)
                     results.Add(new SelfTestResult(group, "DNS-over-QUIC", SelfTestStatus.Warning, "DoQ ist aktiviert, aber libmsquic ist nicht installiert."));
@@ -196,7 +247,7 @@ namespace ZenitiumDns.Core
 
                 stopwatch.Stop();
 
-                string via = ((dnsServer.Forwarders is not null) && (dnsServer.Forwarders.Count > 0)) ? "über die Forwarder" : "über die Root-Server";
+                string via = ((dnsServer.Forwarders is not null) && (dnsServer.Forwarders.Count > 0)) ? "über die Forwarder" : (dnsServer.IanaDataManager.GetZoneState(IanaDataItem.RootZone).Active ? "mit der lokalen Kopie der Root-Zone" : "über die Root-Server");
 
                 if ((response is null) || (response.RCODE != DnsResponseCode.NoError) || (response.Answer.Count == 0))
                 {
@@ -327,6 +378,20 @@ namespace ZenitiumDns.Core
                         results.Add(new SelfTestResult(group, "Ratenbegrenzung", SelfTestStatus.Ok, "Aktiv."));
                 }
 
+                List<string> strictLimits = new List<string>();
+
+                foreach (KeyValuePair<int, (int, int)> limit in dnsServer.QpsPrefixLimitsIPv4)
+                    AddStrictLimit(strictLimits, "/" + limit.Key, limit.Key >= 32 ? 200 : 5000, limit.Value);
+
+                foreach (KeyValuePair<int, (int, int)> limit in dnsServer.QpsPrefixLimitsIPv6)
+                    AddStrictLimit(strictLimits, "/" + limit.Key, limit.Key >= 64 ? 200 : 2000, limit.Value);
+
+                if (strictLimits.Count > 0)
+                    results.Add(new SelfTestResult(group, "Ratenbegrenzung", SelfTestStatus.Warning, "Sehr niedrige Limits: " + string.Join(", ", strictLimits) + ". Hinter einer IPv4-Adresse mit CGNAT oder einem Firmen-NAT stehen oft Hunderte Nutzer, die dann gebremst werden. Empfohlen sind 1000 UDP und 5000 TCP je /32 und /64."));
+
+                if (dnsServer.RateLimitUdpTruncationPercentage < 100)
+                    results.Add(new SelfTestResult(group, "TC-Antworten", SelfTestStatus.Info, "Nur " + dnsServer.RateLimitUdpTruncationPercentage + " % der gebremsten UDP-Anfragen erhalten eine TC-Antwort. Die übrigen Clients laufen in Zeitüberschreitungen, statt auf TCP auszuweichen. 100 % ist für Clients hinter NAT am verträglichsten."));
+
                 int disabledRules = 0;
 
                 if (!dnsServer.RequestFilterMalformed)
@@ -417,6 +482,64 @@ namespace ZenitiumDns.Core
 
                 if (appManager.LoadErrors.Count == 0)
                     results.Add(new SelfTestResult(group, "Geladene Apps", SelfTestStatus.Ok, appManager.Applications.Count + " installiert, " + enabled + " aktiviert."));
+            }
+
+            private void CheckIanaData(List<SelfTestResult> results)
+            {
+                const string group = "Root-Zone";
+                IanaDataManager manager = _dnsWebService._dnsServer.IanaDataManager;
+
+                foreach ((IanaDataItem item, string title) in new[] { (IanaDataItem.RootZone, "Root-Zone"), (IanaDataItem.ArpaZone, "arpa-Zone") })
+                {
+                    var state = manager.GetZoneState(item);
+
+                    if (state.Mode == IanaDataMode.Disabled)
+                        results.Add(new SelfTestResult(group, title, SelfTestStatus.Info, "Ausgeschaltet, der Resolver fragt die zuständigen Nameserver."));
+                    else if (state.Error is not null)
+                        results.Add(new SelfTestResult(group, title, SelfTestStatus.Warning, state.Error + (state.Active ? " Die zuletzt geprüfte Version ist weiter aktiv." : " Der Resolver fragt so lange die zuständigen Nameserver.")));
+                    else if (state.Active)
+                        results.Add(new SelfTestResult(group, title, SelfTestStatus.Ok, "Seriennummer " + state.Serial + ", " + state.Delegations.ToString("N0", CultureInfo.GetCultureInfo("de-DE")) + " Delegationen. " + state.Message));
+                    else if (state.Mode == IanaDataMode.Custom)
+                        results.Add(new SelfTestResult(group, title, SelfTestStatus.Warning, "Die eigene Version wird nicht verwendet: " + state.Message));
+                    else
+                        results.Add(new SelfTestResult(group, title, SelfTestStatus.Info, "Wird kurz nach dem Start geladen und geprüft."));
+                }
+
+                var anchors = manager.GetTrustAnchorState();
+
+                if (anchors.Error is not null)
+                    results.Add(new SelfTestResult(group, "Root-KSK", SelfTestStatus.Warning, anchors.Error));
+                else if (anchors.Source is not null)
+                    results.Add(new SelfTestResult(group, "Root-KSK", SelfTestStatus.Ok, "Quelle " + anchors.Source + ". " + anchors.Message));
+            }
+
+            private void CheckWatchdog(List<SelfTestResult> results)
+            {
+                const string group = "Wächter";
+                Watchdog watchdog = _dnsWebService._dnsServer.Watchdog;
+
+                if (!watchdog.Enabled)
+                {
+                    results.Add(new SelfTestResult(group, "Status", SelfTestStatus.Info, "Der Wächter ist ausgeschaltet. Bei vollem Datenträger, Speichermangel oder ausgefallenen Diensten greift niemand automatisch ein."));
+                    return;
+                }
+
+                DateTime cutoff = DateTime.UtcNow.AddHours(-24);
+                int shown = 0;
+
+                foreach (WatchdogEvent watchdogEvent in watchdog.GetEvents())
+                {
+                    if (watchdogEvent.Time < cutoff)
+                        break;
+
+                    if (shown++ >= 5)
+                        break;
+
+                    results.Add(new SelfTestResult(group, watchdogEvent.Title, SelfTestStatus.Warning, FormatDate(watchdogEvent.Time) + ": " + watchdogEvent.Message));
+                }
+
+                if (shown == 0)
+                    results.Add(new SelfTestResult(group, "Status", SelfTestStatus.Ok, "Aktiv, in den letzten 24 Stunden war kein Eingriff nötig."));
             }
 
             private void CheckSystem(List<SelfTestResult> results)
@@ -594,9 +717,11 @@ namespace ZenitiumDns.Core
                 }
 
                 Run("Zertifikate", CheckCertificates);
+                Run("Root-Zone", CheckIanaData);
                 Run("Sicherheit", CheckSecurity);
                 Run("Filter", CheckFilters);
                 Run("Apps", CheckApps);
+                Run("Wächter", CheckWatchdog);
                 Run("System", CheckSystem);
 
                 return results;

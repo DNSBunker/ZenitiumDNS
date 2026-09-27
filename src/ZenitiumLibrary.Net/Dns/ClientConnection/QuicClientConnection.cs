@@ -32,7 +32,7 @@ using ZenitiumLibrary.Net.Proxy;
 
 namespace ZenitiumLibrary.Net.Dns.ClientConnection
 {
-#pragma warning disable CA1416 // Validate platform compatibility
+#pragma warning disable CA1416
 
     public enum DnsOverQuicErrorCodes : long
     {
@@ -388,5 +388,5 @@ namespace ZenitiumLibrary.Net.Dns.ClientConnection
         #endregion
     }
 
-#pragma warning restore CA1416 // Validate platform compatibility
+#pragma warning restore CA1416
 }
