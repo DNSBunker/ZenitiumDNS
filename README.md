@@ -6,6 +6,10 @@
 	<b>Werbung und Schadsoftware im ganzen Netzwerk auf DNS-Ebene blockieren</b>
 </p>
 
+<p align="center">
+	<img src="docs/uebersicht.png" alt="Übersicht der Weboberfläche von ZenitiumDNS mit Anfragen pro Sekunde, Antwortzeit, Cache-Trefferquote und Anfragen im Zeitverlauf" width="100%" />
+</p>
+
 ZenitiumDNS ist ein quelloffener rekursiver DNS-Resolver, den du selbst betreiben kannst – als öffentlicher Resolver im Internet oder als zentraler Resolver im eigenen Netz. Er löst Namen selbst über die Root-Server auf oder leitet sie verschlüsselt an Forwarder weiter, blockiert Werbung und Schadsoftware auf DNS-Ebene und bringt eine deutschsprachige Weboberfläche mit Statistiken, Antwortzeiten und Protokollen mit.
 
 Um die Namensauflösung kümmert sich kaum jemand, denn sie läuft automatisch im Hintergrund und ist schwer zu durchschauen. Die meisten Programme nutzen den DNS-Resolver des Betriebssystems, der wiederum per UDP den DNS-Server des Internetanbieters fragt. Das funktioniert, aber der Anbieter sieht und kontrolliert damit, welche Webseiten du aufrufst, auch wenn diese HTTPS verwenden. Manche Anbieter leiten Anfragen sogar um, blockieren sie oder verändern Inhalte. ZenitiumDNS nimmt Anfragen über UDP, TCP, [DNS-over-TLS](https://de.wikipedia.org/wiki/DNS_over_TLS), [DNS-over-HTTPS](https://de.wikipedia.org/wiki/DNS_over_HTTPS) und [DNS-over-QUIC](https://www.ietf.org/rfc/rfc9250.html) entgegen und löst sie als rekursiver Resolver direkt über die Root-Server auf, auf Wunsch mit DNSSEC-Validierung. Alternativ nutzt er Forwarder über dieselben verschlüsselten Protokolle.
