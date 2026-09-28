@@ -96,6 +96,7 @@ ZenitiumDNS is a fork of [Technitium DNS Server](https://github.com/TechnitiumSo
 - Web interface for configuration in the browser, in English or German, with dark mode.
 - Multi-user operation with roles, two-factor authentication (2FA) via TOTP, single sign-on with OpenID Connect and sign-in via LDAP.
 - Built-in DNS client for testing resolutions.
+- Optional Prometheus endpoint `/metrics` with detailed metrics (histograms, protocols, query types, response codes, Extended DNS Errors, name server queries, process), protected by an ACL and a bearer token, see [Prometheus metrics](docs/Metrics.md).
 - Runs on Linux (Debian package) and anywhere .NET 10 is available.
 - Open source, cross-platform implementation with .NET 10.
 
@@ -116,7 +117,7 @@ ZenitiumDNS is a fork of [Technitium DNS Server](https://github.com/TechnitiumSo
 Ready-made Debian 13 packages for amd64 and arm64 are available under [Releases](https://github.com/DNSBunker/ZenitiumDNS/releases):
 
 ```
-sudo apt install ./zenitiumdns_15.5.1-9_amd64.deb
+sudo apt install ./zenitiumdns_15.5.1-10_amd64.deb
 ```
 
 The container image for amd64 and arm64 runs with Podman and Docker, see [Container image](docs/Container.md):
@@ -157,6 +158,7 @@ to list missing translations and to verify that markup and placeholders match. `
 - [Debian package](setup/debian/README.Debian.md)
 - [Container image](docs/Container.md)
 - [Environment variables](docs/EnvironmentVariables.md)
+- [Prometheus metrics](docs/Metrics.md)
 - [Supported RFCs](docs/SupportedRFCs.md)
 - [Changelog](CHANGELOG.md)
 - [Differences from the original build](CHANGELOG-ZenitiumDNS.md)

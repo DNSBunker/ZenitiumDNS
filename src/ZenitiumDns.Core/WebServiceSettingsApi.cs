@@ -272,6 +272,23 @@ namespace ZenitiumDns.Core
                 jsonWriter.WriteString("webServiceTlsCertificatePassword", string.IsNullOrEmpty(_dnsWebService._webServiceTlsCertificatePath) ? null : "************");
                 jsonWriter.WriteString("webServiceTlsCertificateKeyPath", _dnsWebService._webServiceTlsCertificateKeyPath);
 
+                jsonWriter.WriteBoolean("metricsEnabled", _dnsWebService._metricsEnabled);
+
+                jsonWriter.WritePropertyName("metricsAllowedNetworks");
+                {
+                    jsonWriter.WriteStartArray();
+
+                    if (_dnsWebService._metricsAllowedNetworks is not null)
+                    {
+                        foreach (NetworkAccessControl nac in _dnsWebService._metricsAllowedNetworks)
+                            jsonWriter.WriteStringValue(nac.ToString());
+                    }
+
+                    jsonWriter.WriteEndArray();
+                }
+
+                jsonWriter.WriteString("metricsToken", _dnsWebService._metricsToken);
+
                 jsonWriter.WriteBoolean("enableEDnsClientSubnetSourceAddress", _dnsWebService._dnsServer.EnableEDnsClientSubnetSourceAddress);
                 jsonWriter.WriteBoolean("enableDnsOverUdpProxy", _dnsWebService._dnsServer.EnableDnsOverUdpProxy);
                 jsonWriter.WriteBoolean("enableDnsOverTcpProxy", _dnsWebService._dnsServer.EnableDnsOverTcpProxy);
@@ -1013,6 +1030,45 @@ namespace ZenitiumDns.Core
                                 throw new ArgumentException("Web Service Content Security Policy (CSP) Frame Ancestors header value cannot exceed 255 characters.", nameof(webServiceCspFrameAncestorsHeader));
 
                             _dnsWebService._webServiceCspFrameAncestorsHeader = webServiceCspFrameAncestorsHeader;
+                        }
+
+                        if (request.TryQueryOrFormArray("metricsAllowedNetworks", NetworkAccessControl.Parse, out NetworkAccessControl[] metricsAllowedNetworks))
+                        {
+                            if ((metricsAllowedNetworks is null) || (metricsAllowedNetworks.Length == 0))
+                                _dnsWebService._metricsAllowedNetworks = null;
+                            else if (metricsAllowedNetworks.Length > byte.MaxValue)
+                                throw new ArgumentOutOfRangeException(nameof(metricsAllowedNetworks), Lang.T("Die Liste der erlaubten Netze für Metriken darf höchstens 255 Einträge haben.", "The list of networks allowed to read metrics cannot have more than 255 entries."));
+                            else
+                                _dnsWebService._metricsAllowedNetworks = metricsAllowedNetworks;
+                        }
+
+                        if (request.TryQueryOrForm("metricsToken", out string metricsToken))
+                        {
+                            metricsToken = metricsToken.Trim();
+
+                            if (metricsToken.Length == 0)
+                            {
+                                _dnsWebService._metricsToken = null;
+                            }
+                            else
+                            {
+                                if ((metricsToken.Length < 16) || (metricsToken.Length > 255))
+                                    throw new ArgumentException(Lang.T("Das Metrik-Token muss 16 bis 255 Zeichen lang sein.", "The metrics token must be 16 to 255 characters long."), nameof(metricsToken));
+
+                                foreach (char c in metricsToken)
+                                {
+                                    if ((c < '!') || (c > '~'))
+                                        throw new ArgumentException(Lang.T("Das Metrik-Token darf nur sichtbare ASCII-Zeichen ohne Leerzeichen enthalten.", "The metrics token may only contain visible ASCII characters without spaces."), nameof(metricsToken));
+                                }
+
+                                _dnsWebService._metricsToken = metricsToken;
+                            }
+                        }
+
+                        if (request.TryGetQueryOrForm("metricsEnabled", bool.Parse, out bool metricsEnabled))
+                        {
+                            _dnsWebService._metricsEnabled = metricsEnabled;
+                            _dnsWebService.ApplyMetricsEnabled();
                         }
 
                         string webServiceTlsCertificatePath = request.QueryOrForm("webServiceTlsCertificatePath");

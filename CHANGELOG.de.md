@@ -2,6 +2,23 @@
 
 [English version](CHANGELOG.md)
 
+## ZenitiumDNS 15.5.1 (Paket 15.5.1-10)
+Veröffentlicht: 28. September 2026
+
+### Neu
+- Prometheus-Metriken: Der optionale Endpunkt `/metrics` am Port der Weboberfläche liefert ausführliche Kennzahlen im Textformat von Prometheus. Er wird unter Einstellungen > Weboberfläche > Prometheus-Metriken eingeschaltet und ist standardmäßig aus. Er enthält Anfragen je Transportprotokoll und Adressfamilie des Clients, Abfragetyp, Flag, Antwortcode und Herkunft der Antwort, Extended DNS Errors (RFC 8914), unbeantwortete Anfragen, Histogramme der Antwortzeit (lokal, Cache, rekursiv, blockiert) und der Anfrage- und Antwortgrößen je Protokoll, Anfragen an Nameserver und Weiterleitungsserver je Protokoll und Adressfamilie mit Antwortcodes, Timeouts, Netzwerkfehlern, gekürzten Antworten und einem Histogramm der Round-Trip-Zeit, den Cache, den aggressiven NSEC-Cache, Sperrlisten, Anfragefilter, Client-Sperrlisten, Ratenbegrenzung und interne Warteschlangen sowie CPU, Speicher, Garbage Collection, Threadpool und Dateideskriptoren des Prozesses. Die Kennzahlen enthalten weder Client-Adressen noch Domainnamen; unbekannte Abfragetypen und Antwortcodes zählen als `other`. Alle Kennzahlen sind in [docs/Metrics.de.md](docs/Metrics.de.md) beschrieben.
+- Der Zugriff auf `/metrics` ist durch eine ACL (standardmäßig Loopback und private Netze) und optional durch ein Bearer-Token beschränkt. Hinter einem Reverse Proxy zählt die Client-Adresse aus dem Header mit Client-IP. Abrufe, die über einen Proxy ohne verwertbaren Header mit Client-IP kommen, werden abgelehnt, sofern kein Token gesetzt ist. Sitzungen der Weboberfläche berechtigen nicht zum Abruf. Die Einstellungsseite erzeugt zufällige Tokens und zeigt einen fertigen Eintrag für `prometheus.yml`.
+- Die ausführlichen Zähler werden nur erfasst, solange der Endpunkt eingeschaltet ist: Anfragen im Statistik-Thread, Anfragen an Nameserver mit atomaren Zählern dort, wo sie gesendet werden.
+
+### Messungen
+Entwicklungsrechner (20 Kerne), Cache-Treffer über UDP mit 20.000 Anfragen/s von 50.000 Client-Adressen, nach einer Aufwärmphase drei abwechselnde Durchläufe zu je 30 Sekunden:
+- CPU-Zeit pro Anfrage ohne Endpunkt 22,2 bis 26,4 µs, mit eingeschaltetem Endpunkt 20,0 bis 26,7 µs. Der Unterschied liegt innerhalb der Schwankung zwischen den Durchläufen; alle 600.000 Anfragen jedes Durchlaufs wurden beantwortet, und keine Statistik-Aktualisierung wurde verworfen.
+- Ein Abruf dauert wenige Millisekunden und liefert etwa 26 KB (auf Wunsch gzip-komprimiert); eine Formatprüfung der Ausgabe (ein TYPE je Familie, gruppierte Werte, keine doppelten Zeitreihen, kumulative Histogramm-Buckets mit passendem `_count`) wurde bestanden.
+
+### Weitere Änderungen
+- Einstellungsdatei der Weboberfläche im Format Version 7. Ältere Versionen von ZenitiumDNS können sie nicht lesen. Bestehende Einstellungen werden übernommen, der Metrik-Endpunkt ist dabei ausgeschaltet.
+- Die Prometheus-Metriken von Technitium (`api/dashboard/metrics/text`, in Paket 15.5.1-3 entfernt) kehren nicht zurück; die JSON-Metriken unter `api/dashboard/metrics/json` bleiben unverändert.
+
 ## ZenitiumDNS 15.5.1 (Paket 15.5.1-9)
 Veröffentlicht: 28. September 2026
 

@@ -96,6 +96,7 @@ ZenitiumDNS ist ein Fork von [Technitium DNS Server](https://github.com/Techniti
 - Weboberfläche zur Konfiguration im Browser, auf Deutsch oder Englisch, mit Dunkelmodus.
 - Mehrbenutzerbetrieb mit Rollen, Zwei-Faktor-Authentifizierung (2FA) per TOTP, Single Sign-On mit OpenID Connect und Anmeldung über LDAP.
 - Eingebauter DNS-Client zum Testen von Auflösungen.
+- Optionaler Prometheus-Endpunkt `/metrics` mit ausführlichen Kennzahlen (Histogramme, Protokolle, Abfragetypen, Antwortcodes, Extended DNS Errors, Anfragen an Nameserver, Prozess), geschützt durch ACL und Bearer-Token, siehe [Prometheus-Metriken](docs/Metrics.de.md).
 - Läuft unter Linux (Debian-Paket) und überall, wo .NET 10 verfügbar ist.
 - Quelloffene, plattformübergreifende Umsetzung mit .NET 10.
 
@@ -116,7 +117,7 @@ ZenitiumDNS ist ein Fork von [Technitium DNS Server](https://github.com/Techniti
 Fertige Debian-13-Pakete für amd64 und arm64 gibt es unter [Releases](https://github.com/DNSBunker/ZenitiumDNS/releases):
 
 ```
-sudo apt install ./zenitiumdns_15.5.1-9_amd64.deb
+sudo apt install ./zenitiumdns_15.5.1-10_amd64.deb
 ```
 
 Das Container-Image für amd64 und arm64 läuft mit Podman und Docker, siehe [Container-Image](docs/Container.de.md):
@@ -157,6 +158,7 @@ fehlende Übersetzungen an und prüfen, ob Markup und Platzhalter übereinstimme
 - [Debian-Paket](setup/debian/README.Debian.de.md)
 - [Container-Image](docs/Container.de.md)
 - [Umgebungsvariablen](docs/EnvironmentVariables.de.md)
+- [Prometheus-Metriken](docs/Metrics.de.md)
 - [Unterstützte RFCs](docs/SupportedRFCs.de.md)
 - [Änderungsprotokoll](CHANGELOG.de.md)
 - [Unterschiede zum Original-Build](CHANGELOG-ZenitiumDNS.de.md)

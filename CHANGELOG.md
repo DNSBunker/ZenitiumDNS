@@ -2,6 +2,23 @@
 
 [Deutsche Version](CHANGELOG.de.md)
 
+## ZenitiumDNS 15.5.1 (package 15.5.1-10)
+Released: 28 September 2026
+
+### New
+- Prometheus metrics: the optional endpoint `/metrics` on the web interface port serves detailed metrics in the Prometheus text format. It is switched on under Settings > Web interface > Prometheus metrics and is off by default. It contains queries per transport protocol and client address family, query type, flag, response code and origin of the answer, Extended DNS Errors (RFC 8914), unanswered queries, histograms of the response time (local, cache, recursive, blocked) and of the query and response sizes per protocol, queries to name servers and forwarders per protocol and address family with response codes, timeouts, network errors, truncated responses and a histogram of the round trip time, the cache, the aggressive NSEC cache, block lists, request filter, client block lists, rate limiting and internal queues, as well as CPU, memory, garbage collection, thread pool and file descriptors of the process. The metrics contain neither client addresses nor domain names; unknown query types and response codes are counted as `other`. All metrics are described in [docs/Metrics.md](docs/Metrics.md).
+- Access to `/metrics` is limited by an ACL (by default loopback and private networks) and optionally by a bearer token. Behind a reverse proxy the client address from the client IP header counts. Scrapes that come through a proxy without a usable client IP header are refused unless a token is set. Sessions of the web interface do not grant access. The settings page generates random tokens and shows a ready-made entry for `prometheus.yml`.
+- The detailed counters are only collected while the endpoint is switched on: queries on the statistics thread, queries to name servers with atomic counters where they are sent.
+
+### Measurements
+Development machine (20 cores), cache hits over UDP at 20,000 queries/s from 50,000 client addresses, after a warm-up three alternating runs of 30 seconds each:
+- CPU time per query without the endpoint 22.2 to 26.4 µs, with the endpoint switched on 20.0 to 26.7 µs. The difference lies within the variation between runs; all 600,000 queries of every run were answered, and no statistics update was discarded.
+- A scrape takes a few milliseconds and returns about 26 KB (gzip-compressed on request); a format check of the output (one TYPE per family, grouped samples, no duplicate series, cumulative histogram buckets with matching `_count`) passed.
+
+### Other changes
+- Web service settings file format version 7. Older versions of ZenitiumDNS cannot read it. Existing settings are taken over, with the metrics endpoint switched off.
+- The Prometheus metrics of Technitium (`api/dashboard/metrics/text`, removed in package 15.5.1-3) do not come back; the JSON metrics under `api/dashboard/metrics/json` stay unchanged.
+
 ## ZenitiumDNS 15.5.1 (package 15.5.1-9)
 Released: 28 September 2026
 

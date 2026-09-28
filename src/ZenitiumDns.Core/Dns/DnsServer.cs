@@ -2132,10 +2132,12 @@ namespace ZenitiumDns.Core.Dns
                     response.WriteTo(sendBufferStream);
                 }
 
-                udpListener.SendTo(sendBufferStream.GetBuffer(), 0, (int)sendBufferStream.Position, SocketFlags.None, returnEP);
+                int responseSize = (int)sendBufferStream.Position;
+
+                udpListener.SendTo(sendBufferStream.GetBuffer(), 0, responseSize, SocketFlags.None, returnEP);
 
                 _queryLog?.Write(remoteEP, protocol, request, response);
-                _statsManager.QueueUpdate(request, remoteEP, protocol, response, false, Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds);
+                _statsManager.QueueUpdate(request, remoteEP, protocol, response, false, Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds, responseSize);
             }
             catch (ObjectDisposedException)
             {
@@ -2379,12 +2381,15 @@ namespace ZenitiumDns.Core.Dns
                 if (protocol == DnsTransportProtocol.Tls)
                     response = ApplyEDnsPadding(request, response);
 
+                int responseSize = -1;
+
                 await ZenitiumLibrary.TaskExtensions.TimeoutAsync(async delegate (CancellationToken cancellationToken1)
                 {
                     await writeSemaphore.WaitAsync(cancellationToken1);
                     try
                     {
                         await response.WriteToTcpAsync(stream, writeBuffer, cancellationToken1);
+                        responseSize = (int)(writeBuffer.Length - 2);
                         await stream.FlushAsync(cancellationToken1);
                     }
                     finally
@@ -2394,7 +2399,7 @@ namespace ZenitiumDns.Core.Dns
                 }, _tcpSendTimeout);
 
                 _queryLog?.Write(remoteEP, protocol, request, response);
-                _statsManager.QueueUpdate(request, remoteEP, protocol, response, false, Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds);
+                _statsManager.QueueUpdate(request, remoteEP, protocol, response, false, Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds, responseSize);
             }
             catch (ObjectDisposedException)
             {
@@ -2542,7 +2547,7 @@ namespace ZenitiumDns.Core.Dns
                 await response.WriteToTcpAsync(quicStream, sharedBuffer);
 
                 _queryLog?.Write(remoteEP, DnsTransportProtocol.Quic, request, response);
-                _statsManager.QueueUpdate(request, remoteEP, DnsTransportProtocol.Quic, response, false, Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds);
+                _statsManager.QueueUpdate(request, remoteEP, DnsTransportProtocol.Quic, response, false, Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds, (int)(sharedBuffer.Length - 2));
             }
             catch (IOException)
             {
@@ -2759,11 +2764,12 @@ namespace ZenitiumDns.Core.Dns
                 dnsResponse = ApplyEDnsPadding(dnsRequest, dnsResponse);
 
                 _queryLog?.Write(remoteEP, DnsTransportProtocol.Https, dnsRequest, dnsResponse);
-                _statsManager.QueueUpdate(dnsRequest, remoteEP, DnsTransportProtocol.Https, dnsResponse, false, Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds);
 
                 using (MemoryStream mS = new MemoryStream(512))
                 {
                     dnsResponse.WriteTo(mS);
+
+                    _statsManager.QueueUpdate(dnsRequest, remoteEP, DnsTransportProtocol.Https, dnsResponse, false, Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds, (int)mS.Length);
 
                     mS.Position = 0;
                     response.ContentType = "application/dns-message";

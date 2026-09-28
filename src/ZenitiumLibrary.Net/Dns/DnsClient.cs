@@ -4557,7 +4557,20 @@ namespace ZenitiumLibrary.Net.Dns
                                         }
                                     }
 
-                                    DnsDatagram response = await connection.QueryAsync(queryRequest, _timeout, _retries, cancellationToken);
+                                    DnsClientMetrics.RecordQuery(server);
+
+                                    DnsDatagram response;
+
+                                    try
+                                    {
+                                        response = await connection.QueryAsync(queryRequest, _timeout, _retries, cancellationToken);
+                                    }
+                                    catch (Exception ex) when (DnsClientMetrics.RecordFailure(ex))
+                                    {
+                                        throw;
+                                    }
+
+                                    DnsClientMetrics.RecordResponse(server, response);
 
                                     if ((proxy is null) && (server.IPEndPoint is not null) && (server.IPEndPoint.AddressFamily == AddressFamily.InterNetworkV6))
                                         IPv6Reachability.RecordSuccess();

@@ -79,6 +79,7 @@ namespace ZenitiumDns.Core.Dns
 
         readonly ConcurrentQueue<StatsQueueItem> _queue = new ConcurrentQueue<StatsQueueItem>();
         int _queueLength;
+        long _queueDropped;
         readonly Thread _consumerThread;
         volatile bool _consumerStopping;
         const int CONSUMER_INTERVAL = 5;
@@ -89,6 +90,8 @@ namespace ZenitiumDns.Core.Dns
 
         bool _enableInMemoryStats;
         int _maxStatFileDays;
+
+        volatile ServerMetrics _detailedMetrics;
 
         #endregion
 
@@ -273,6 +276,7 @@ namespace ZenitiumDns.Core.Dns
                 responseType = (DnsServerResponseType)item._response.Tag;
 
             UpdateLifetimeCounters(responseCode, responseType, item._remoteEP.Address);
+            _detailedMetrics?.Record(item._request, item._response, item._protocol, item._remoteEP.Address, responseType, item._rateLimited, item._responseTime, item._responseSize);
             _shortTermStats.Record(item._timestamp, responseCode, responseType, item._remoteEP.Address);
 
             if (item._response is not null)
@@ -723,15 +727,16 @@ namespace ZenitiumDns.Core.Dns
             Flush();
         }
 
-        public void QueueUpdate(DnsDatagram request, IPEndPoint remoteEP, DnsTransportProtocol protocol, DnsDatagram response, bool rateLimited, double responseTime = -1)
+        public void QueueUpdate(DnsDatagram request, IPEndPoint remoteEP, DnsTransportProtocol protocol, DnsDatagram response, bool rateLimited, double responseTime = -1, int responseSize = -1)
         {
             if (Interlocked.Increment(ref _queueLength) > MAX_QUEUE_LENGTH)
             {
                 Interlocked.Decrement(ref _queueLength);
+                Interlocked.Increment(ref _queueDropped);
                 return;
             }
 
-            _queue.Enqueue(new StatsQueueItem(request, remoteEP, protocol, response, rateLimited, responseTime));
+            _queue.Enqueue(new StatsQueueItem(request, remoteEP, protocol, response, rateLimited, responseTime, responseSize));
         }
 
         public DashboardStats GetLastHourMinuteWiseStats(bool utcFormat)
@@ -1720,6 +1725,29 @@ namespace ZenitiumDns.Core.Dns
 
         internal int QueueLength
         { get { return Math.Max(0, Volatile.Read(ref _queueLength)); } }
+
+        internal long QueueDropped
+        { get { return Interlocked.Read(ref _queueDropped); } }
+
+        internal ServerMetrics DetailedMetrics
+        { get { return _detailedMetrics; } }
+
+        internal bool EnableDetailedMetrics
+        {
+            get { return _detailedMetrics is not null; }
+            set
+            {
+                if (value)
+                {
+                    if (_detailedMetrics is null)
+                        _detailedMetrics = new ServerMetrics();
+                }
+                else
+                {
+                    _detailedMetrics = null;
+                }
+            }
+        }
 
         internal int DropQueuedItems()
         {
@@ -3006,12 +3034,13 @@ namespace ZenitiumDns.Core.Dns
             public readonly DnsDatagram _response;
             public readonly bool _rateLimited;
             public readonly double _responseTime;
+            public readonly int _responseSize;
 
             #endregion
 
             #region constructor
 
-            public StatsQueueItem(DnsDatagram request, IPEndPoint remoteEP, DnsTransportProtocol protocol, DnsDatagram response, bool rateLimited, double responseTime)
+            public StatsQueueItem(DnsDatagram request, IPEndPoint remoteEP, DnsTransportProtocol protocol, DnsDatagram response, bool rateLimited, double responseTime, int responseSize)
             {
                 _timestamp = DateTime.UtcNow;
 
@@ -3021,6 +3050,7 @@ namespace ZenitiumDns.Core.Dns
                 _response = response;
                 _rateLimited = rateLimited;
                 _responseTime = responseTime;
+                _responseSize = responseSize;
             }
 
             #endregion

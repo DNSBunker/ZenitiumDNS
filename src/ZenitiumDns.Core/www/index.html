@@ -2653,6 +2653,48 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
                                     <div class="col-sm-offset-3 col-sm-8 help-block-text">Wert des Content-Security-Policy-Headers <code>frame-ancestors</code>. Bestimmt, welche Seiten die Weboberfläche einbetten dürfen.</div>
                                 </div>
                                 </div>
+
+                                <div class="well well-sm form-horizontal settings-section">
+                                    <h4 class="settings-section-title">Prometheus-Metriken</h4>
+                                    <p class="settings-section-desc">Stellt ausführliche Kennzahlen im Textformat von Prometheus unter <code>/metrics</code> bereit: Anfragen nach Protokoll, Typ und Antwortcode, Antwortzeiten und -größen als Histogramme, Extended DNS Errors, Anfragen an Nameserver, Cache, Blockierung sowie Speicher- und CPU-Werte des Prozesses. Die Kennzahlen enthalten weder Client-Adressen noch Domainnamen.</p>
+
+                                <div class="form-group">
+                                    <label class="col-sm-3 control-label">Endpunkt</label>
+                                    <div class="col-sm-8">
+                                        <div class="checkbox">
+                                            <label><input id="chkMetricsEnabled" type="checkbox" onchange="updateMetricsOptions();"> Metriken bereitstellen</label>
+                                        </div>
+                                        <div class="option-help">Standardmäßig aus. Die ausführliche Erfassung läuft nur, solange der Endpunkt eingeschaltet ist; beim Einschalten beginnen die Zähler bei null.</div>
+                                    </div>
+                                </div>
+
+                                <div class="form-group">
+                                    <label for="txtMetricsAllowedNetworks" class="col-sm-3 control-label">Erlaubte Netze (ACL)</label>
+                                    <div class="col-sm-6">
+                                        <textarea id="txtMetricsAllowedNetworks" class="form-control" rows="4" spellcheck="false"></textarea>
+                                    </div>
+                                    <div class="col-sm-offset-3 col-sm-8 help-block-text">Nur Abrufe von diesen Adressen werden beantwortet. Eine IP-Adresse oder ein Netz pro Zeile, ein vorangestelltes <code>!</code> verweigert den Zugriff. Die Liste wird von oben nach unten ausgewertet; ist sie leer oder trifft kein Eintrag zu, wird der Zugriff verweigert. Hinter einem Reverse Proxy zählt die Adresse aus dem Header mit Client-IP.</div>
+                                </div>
+
+                                <div class="form-group">
+                                    <label for="txtMetricsToken" class="col-sm-3 control-label">Bearer-Token</label>
+                                    <div class="col-sm-6">
+                                        <input type="text" class="form-control" id="txtMetricsToken" placeholder="optional" maxlength="255" spellcheck="false" autocomplete="off" oninput="updateMetricsScrapeConfig();">
+                                    </div>
+                                    <div class="col-sm-2">
+                                        <button id="btnGenerateMetricsToken" type="button" class="btn btn-default" onclick="generateMetricsToken();">Erzeugen</button>
+                                    </div>
+                                    <div class="col-sm-offset-3 col-sm-8 help-block-text">Ist ein Token gesetzt, muss jeder Abruf den Header <code>Authorization: Bearer &lt;Token&gt;</code> senden. Ohne Token werden Abrufe abgelehnt, die über einen Proxy kommen, der keinen Header mit Client-IP setzt. 16 bis 255 sichtbare ASCII-Zeichen.</div>
+                                </div>
+
+                                <div class="form-group">
+                                    <label class="col-sm-3 control-label">Beispiel für Prometheus</label>
+                                    <div class="col-sm-8">
+                                        <pre id="preMetricsScrapeConfig" class="metrics-scrape-config" translate="no"></pre>
+                                    </div>
+                                    <div class="col-sm-offset-3 col-sm-8 help-block-text">Eintrag für <code>scrape_configs</code> in <code>prometheus.yml</code>. Beschreibung aller Kennzahlen in <code>docs/Metrics.md</code>.</div>
+                                </div>
+                                </div>
                                 </div>
                                 <div id="settingsTabPaneLogging" role="tabpanel" class="tab-pane">
                                 <div class="well well-sm form-horizontal settings-section">

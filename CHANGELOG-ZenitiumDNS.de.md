@@ -49,7 +49,8 @@ Dieses Dokument listet ausschließlich die Unterschiede zwischen dem Original-Bu
 | Protokollierung von Client-Adressen | immer | abschaltbar |
 | Prefetch | höchstens in den letzten 9 Sekunden der TTL | ab einem einstellbaren Anteil der Rest-TTL, Standard 10 % |
 | Prüfung der Systemzeit | nicht vorhanden | Selbsttest gegen den Date-Header von IANA und NTP-Status des Kernels |
-| Prometheus-Metriken, API-Tokens | vorhanden | entfernt |
+| Prometheus-Metriken | einfache Zähler unter `api/dashboard/metrics/text`, Zugriff mit API-Token | optionaler Endpunkt `/metrics` mit ACL und Bearer-Token, Histogramme, je Protokoll, Typ und Antwortcode, Extended DNS Errors, Anfragen an Nameserver, Prozess und Laufzeit ([docs/Metrics.de.md](docs/Metrics.de.md)) |
+| API-Tokens | vorhanden | entfernt |
 
 ## Messwerte
 
@@ -90,7 +91,7 @@ Funktionstests im isolierten Netz-Namespace mit nachgebauter DNS-Hierarchie:
 ### Anfragefilter
 - Regeln nach dem Vorbild von dnsdist, standardmäßig aktiv: nicht lesbar oder unter 12 Byte, über 1232 Byte, Opcode ungleich QUERY, Klasse ungleich IN, ANY, AXFR/IXFR, ohne RD-Flag, EDNS-Version größer 0.
 - UDP-Treffer werden verworfen, über TCP, DoT, DoH und DoQ gibt es `REFUSED` mit EDE „Prohibited“. Loopback ist ausgenommen.
-- Trefferzähler je Regel in Einstellungen, JSON-Metriken und Prometheus (`request_filter_matches_total`).
+- Trefferzähler je Regel in Einstellungen, JSON-Metriken und Prometheus (`zenitiumdns_request_filter_matches_total`).
 
 ### DNSSEC
 - Validierung von ML-DSA-44 (Algorithmus 18) und Schutz vor Downgrades auf klassische Algorithmen, wenn der DS-Datensatz einen Post-Quantum-Algorithmus ankündigt.
@@ -199,7 +200,7 @@ Funktionstests im isolierten Netz-Namespace mit nachgebauter DNS-Hierarchie:
 - **Konfiguration:** Einstellungen, Benutzer, Conditional-Forwarder-Zonen, Blocklisten, erlaubte und blockierte Domains, Statistiken und Sicherungen von Technitium DNS Server 15.5 können übernommen werden. ZenitiumDNS speichert die DNS-Einstellungen im Format Version 14 und die Einstellungen der Weboberfläche im Format Version 6 und Zonendateien mit Zoneninformationen Version 15. Diese Dateien kann das Original nicht mehr lesen.
 - **Entfernte Zonentypen:** Zonendateien von Primary-, Secondary-, Stub-, Secondary-Forwarder- und Catalog-Zonen bleiben im Ordner `zones` liegen, werden aber beim Start übersprungen und protokolliert. Sie lassen sich bei Bedarf mit dem Original weiterverwenden.
 - **DHCP und Cluster:** DHCP-Bereichsdateien und die Cluster-Konfiguration werden ignoriert. Berechtigungen für den Bereich DHCP werden beim Laden verworfen. Eine vorhandene Gruppe „DHCP Administrators“ bleibt als gewöhnliche Gruppe ohne Sonderrechte bestehen und kann gelöscht werden.
-- **HTTP-API:** Die API dient nur noch der Weboberfläche. Die Aufrufe für DNSSEC, Catalog-Zonen, Zonenkonvertierung, Resync, TSIG, DHCP und Clustering, der App-Store, das Installieren und Deinstallieren von Apps, API-Tokens und die Prometheus-Metriken sowie der Parameter `node` entfallen. `api/zones/create` akzeptiert nur noch den Typ `Forwarder`.
+- **HTTP-API:** Die API dient nur noch der Weboberfläche. Die Aufrufe für DNSSEC, Catalog-Zonen, Zonenkonvertierung, Resync, TSIG, DHCP und Clustering, der App-Store, das Installieren und Deinstallieren von Apps, API-Tokens und die Prometheus-Metriken unter `api/dashboard/metrics/text` sowie der Parameter `node` entfallen; Prometheus-Metriken gibt es stattdessen unter `/metrics`. `api/zones/create` akzeptiert nur noch den Typ `Forwarder`.
 - **Cache-Datei:** ZenitiumDNS speichert die Nameserver-Statistik in `cache.bin` in einem erweiterten Format (Version 2). Wird eine solche Cache-Datei mit dem Original geladen, verwirft das Original den Cache. Die Konfiguration ist davon nicht betroffen.
 - **DNS-Apps:** Die Namensräume wurden umbenannt (`ZenitiumDns.*`, `ZenitiumLibrary.*`). Für Technitium kompilierte Apps müssen gegen `ZenitiumDns.ApplicationCommon` neu kompiliert werden. Alle mitgelieferten Apps sind bereits angepasst.
 - **Syslog-Export:** Durch die Korrektur der doppelten Formatierung ändert sich das Format der Syslog-Nachrichten der Log Exporter App. Die Metadaten stehen jetzt als echte strukturierte Daten nach RFC 5424 in der Nachricht.

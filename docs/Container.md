@@ -6,7 +6,7 @@ ZenitiumDNS is available as an OCI container image for amd64 and arm64. It is bu
 
 ```
 ghcr.io/dnsbunker/zenitiumdns:latest
-ghcr.io/dnsbunker/zenitiumdns:15.5.1-9
+ghcr.io/dnsbunker/zenitiumdns:15.5.1-10
 ```
 
 The image is based on Alpine Linux and contains the self-contained server, the bundled apps and `libmsquic` for DNS-over-QUIC and HTTP/3. The server runs as the unprivileged user `zenitiumdns` (uid and gid 1053).

@@ -1285,6 +1285,11 @@ function loadDnsSettings(responseJSON) {
 
     $("#txtWebServiceCspFrameAncestorsHeader").val(responseJSON.response.webServiceCspFrameAncestorsHeader);
 
+    $("#chkMetricsEnabled").prop("checked", responseJSON.response.metricsEnabled);
+    $("#txtMetricsAllowedNetworks").val(getArrayAsString(responseJSON.response.metricsAllowedNetworks));
+    $("#txtMetricsToken").val(responseJSON.response.metricsToken == null ? "" : responseJSON.response.metricsToken);
+    updateMetricsOptions();
+
     $("#txtWebServiceTlsCertificatePath").prop("disabled", !responseJSON.response.webServiceEnableTls && !responseJSON.response.webServiceEnableTlsUnixSocket);
     $("#txtWebServiceTlsCertificatePassword").prop("disabled", !responseJSON.response.webServiceEnableTls && !responseJSON.response.webServiceEnableTlsUnixSocket);
     $("#txtWebServiceTlsCertificateKeyPath").prop("disabled", !responseJSON.response.webServiceEnableTls && !responseJSON.response.webServiceEnableTlsUnixSocket);
@@ -1666,6 +1671,53 @@ function loadDnsSettings(responseJSON) {
     $("#txtMaxStatFileDays").val(responseJSON.response.maxStatFileDays);
 }
 
+function updateMetricsOptions() {
+    var metricsEnabled = $("#chkMetricsEnabled").prop("checked");
+
+    $("#txtMetricsAllowedNetworks").prop("disabled", !metricsEnabled);
+    $("#txtMetricsToken").prop("disabled", !metricsEnabled);
+    $("#btnGenerateMetricsToken").prop("disabled", !metricsEnabled);
+
+    updateMetricsScrapeConfig();
+}
+
+function generateMetricsToken() {
+    var bytes = new Uint8Array(24);
+    window.crypto.getRandomValues(bytes);
+
+    var token = btoa(String.fromCharCode.apply(null, bytes)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+
+    $("#txtMetricsToken").val(token);
+    updateMetricsScrapeConfig();
+}
+
+function updateMetricsScrapeConfig() {
+    var scheme = window.location.protocol === "https:" ? "https" : "http";
+    var port = window.location.port;
+
+    if ((port == null) || (port === ""))
+        port = scheme === "https" ? "443" : "80";
+
+    var token = $("#txtMetricsToken").val();
+    token = token == null ? "" : token.trim();
+
+    var lines = [
+        "- job_name: zenitiumdns",
+        "  scheme: " + scheme,
+        "  metrics_path: /metrics"
+    ];
+
+    if (token.length > 0) {
+        lines.push("  authorization:");
+        lines.push("    credentials: " + token);
+    }
+
+    lines.push("  static_configs:");
+    lines.push("    - targets: [\"" + window.location.hostname.replace(/^([0-9a-f:]*:[0-9a-f:]*)$/i, "[$1]") + ":" + port + "\"]");
+
+    $("#preMetricsScrapeConfig").text(lines.join("\n"));
+}
+
 function saveDnsSettings(objBtn) {
     var formData = "";
 
@@ -1901,11 +1953,29 @@ function saveDnsSettings(objBtn) {
     var webServiceRealIpHeader = $("#txtWebServiceRealIpHeader").val();
     var webServiceCspFrameAncestorsHeader = $("#txtWebServiceCspFrameAncestorsHeader").val();
 
+    var metricsEnabled = $("#chkMetricsEnabled").prop("checked");
+    var metricsAllowedNetworks = cleanTextList($("#txtMetricsAllowedNetworks").val());
+
+    if ((metricsAllowedNetworks.length === 0) || (metricsAllowedNetworks === ","))
+        metricsAllowedNetworks = false;
+    else
+        $("#txtMetricsAllowedNetworks").val(metricsAllowedNetworks.replace(/,/g, "\n"));
+
+    var metricsToken = $("#txtMetricsToken").val().trim();
+
+    if ((metricsToken.length > 0) && ((metricsToken.length < 16) || (metricsToken.length > 255) || !/^[\x21-\x7e]+$/.test(metricsToken))) {
+        showAlert("warning", tr("Ungültige Angabe"), tr("Das Metrik-Token muss aus 16 bis 255 sichtbaren ASCII-Zeichen ohne Leerzeichen bestehen."));
+        $("#settingsTabListWebService a").tab("show");
+        $("#txtMetricsToken").trigger("focus");
+        return;
+    }
+
     var webServiceTlsCertificatePath = $("#txtWebServiceTlsCertificatePath").val();
     var webServiceTlsCertificatePassword = $("#txtWebServiceTlsCertificatePassword").val();
     var webServiceTlsCertificateKeyPath = $("#txtWebServiceTlsCertificateKeyPath").val();
 
     formData += "&webServiceLocalAddresses=" + encodeURIComponent(webServiceLocalAddresses) + "&webServiceHttpPort=" + webServiceHttpPort + "&webServiceEnableHttpUnixSocket=" + webServiceEnableHttpUnixSocket + "&webServiceHttpUnixSocket=" + encodeURIComponent(webServiceHttpUnixSocket) + "&webServiceEnableTlsUnixSocket=" + webServiceEnableTlsUnixSocket + "&webServiceTlsUnixSocket=" + encodeURIComponent(webServiceTlsUnixSocket) + "&webServiceEnableTls=" + webServiceEnableTls + "&webServiceEnableHttp3=" + webServiceEnableHttp3 + "&webServiceHttpToTlsRedirect=" + webServiceHttpToTlsRedirect + "&webServiceUseSelfSignedTlsCertificate=" + webServiceUseSelfSignedTlsCertificate + "&webServiceTlsPort=" + webServiceTlsPort + "&webServiceReverseProxyAddresses=" + encodeURIComponent(webServiceReverseProxyAddresses) + "&webServiceRealIpHeader=" + encodeURIComponent(webServiceRealIpHeader) + "&webServiceCspFrameAncestorsHeader=" + encodeURIComponent(webServiceCspFrameAncestorsHeader) + "&webServiceTlsCertificatePath=" + encodeURIComponent(webServiceTlsCertificatePath) + "&webServiceTlsCertificatePassword=" + encodeURIComponent(webServiceTlsCertificatePassword) + "&webServiceTlsCertificateKeyPath=" + encodeURIComponent(webServiceTlsCertificateKeyPath);
+    formData += "&metricsEnabled=" + metricsEnabled + "&metricsAllowedNetworks=" + encodeURIComponent(metricsAllowedNetworks) + "&metricsToken=" + encodeURIComponent(metricsToken);
 
     var enableEDnsClientSubnetSourceAddress = $("#chkEnableEDnsClientSubnetSourceAddress").prop("checked");
     var enableDnsOverUdpProxy = $("#chkEnableDnsOverUdpProxy").prop("checked");

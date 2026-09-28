@@ -86,6 +86,7 @@ namespace ZenitiumDns.Core
 
         readonly WebServiceApi _api;
         readonly WebServiceDashboardApi _dashboardApi;
+        readonly WebServiceMetricsApi _metricsApi;
         readonly WebServiceSelfTestApi _selfTestApi;
         readonly WebServiceZonesApi _zonesApi;
         readonly WebServiceOtherZonesApi _otherZonesApi;
@@ -134,6 +135,10 @@ namespace ZenitiumDns.Core
         string _webServiceRealIpHeader = "X-Real-IP";
         string _webServiceCspFrameAncestorsHeader = "'none'";
         internal string _webServiceLanguage;
+
+        bool _metricsEnabled;
+        IReadOnlyCollection<NetworkAccessControl> _metricsAllowedNetworks = GetDefaultMetricsAllowedNetworks();
+        string _metricsToken;
 
         string _wwwFolderPath;
         readonly Lock _languageScriptLock = new Lock();
@@ -195,6 +200,7 @@ namespace ZenitiumDns.Core
 
             _api = new WebServiceApi(this, updateCheckUri);
             _dashboardApi = new WebServiceDashboardApi(this);
+            _metricsApi = new WebServiceMetricsApi(this);
             _selfTestApi = new WebServiceSelfTestApi(this);
             _zonesApi = new WebServiceZonesApi(this);
             _otherZonesApi = new WebServiceOtherZonesApi(this);
@@ -426,7 +432,7 @@ namespace ZenitiumDns.Core
             BinaryReader bR = new BinaryReader(s);
 
             int version = bR.ReadByte();
-            if (version > 6)
+            if (version > 7)
                 throw new InvalidDataException("Web Service config version not supported.");
 
             _webServiceHttpPort = bR.ReadInt32();
@@ -538,6 +544,23 @@ namespace ZenitiumDns.Core
                 SetLanguage(Lang.German);
             }
 
+            if (version >= 7)
+            {
+                _metricsEnabled = bR.ReadBoolean();
+                _metricsAllowedNetworks = AuthZoneInfo.ReadNetworkACLFrom(bR);
+
+                string metricsToken = s.ReadShortString();
+                _metricsToken = metricsToken.Length == 0 ? null : metricsToken;
+            }
+            else
+            {
+                _metricsEnabled = false;
+                _metricsAllowedNetworks = GetDefaultMetricsAllowedNetworks();
+                _metricsToken = null;
+            }
+
+            ApplyMetricsEnabled();
+
             if (_webServiceTlsCertificatePath is null)
             {
                 StopTlsCertificateUpdateTimer();
@@ -566,7 +589,7 @@ namespace ZenitiumDns.Core
             BinaryWriter bW = new BinaryWriter(s);
 
             bW.Write(Encoding.ASCII.GetBytes("WC"));
-            bW.Write((byte)6);
+            bW.Write((byte)7);
 
             bW.Write(_webServiceHttpPort);
             bW.Write(_webServiceTlsPort);
@@ -605,6 +628,31 @@ namespace ZenitiumDns.Core
             s.WriteShortString(_webServiceCspFrameAncestorsHeader);
             s.WriteShortString(_webServiceTlsCertificateKeyPath ?? string.Empty);
             s.WriteShortString(_webServiceLanguage ?? string.Empty);
+
+            bW.Write(_metricsEnabled);
+            AuthZoneInfo.WriteNetworkACLTo(_metricsAllowedNetworks, bW);
+            s.WriteShortString(_metricsToken ?? string.Empty);
+        }
+
+        internal static IReadOnlyCollection<NetworkAccessControl> GetDefaultMetricsAllowedNetworks()
+        {
+            return
+                [
+                    new NetworkAccessControl(IPAddress.Parse("127.0.0.0"), 8),
+                    new NetworkAccessControl(IPAddress.IPv6Loopback, 128),
+                    new NetworkAccessControl(IPAddress.Parse("10.0.0.0"), 8),
+                    new NetworkAccessControl(IPAddress.Parse("172.16.0.0"), 12),
+                    new NetworkAccessControl(IPAddress.Parse("192.168.0.0"), 16),
+                    new NetworkAccessControl(IPAddress.Parse("fc00::"), 7)
+                ];
+        }
+
+        internal void ApplyMetricsEnabled()
+        {
+            if (_dnsServer?.StatsManager is not null)
+                _dnsServer.StatsManager.EnableDetailedMetrics = _metricsEnabled;
+
+            DnsClientMetrics.Enabled = _metricsEnabled;
         }
 
         internal void SetLanguage(string language)
@@ -1855,6 +1903,10 @@ namespace ZenitiumDns.Core
 
                 case "/lang.js":
                     await WriteLanguageScriptAsync(context);
+                    return;
+
+                case "/metrics":
+                    await _metricsApi.WriteMetricsAsync(context);
                     return;
 
                 case "/api/user/session/get":

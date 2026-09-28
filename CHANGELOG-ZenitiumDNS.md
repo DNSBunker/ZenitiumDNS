@@ -49,7 +49,8 @@ This document only lists the differences between the original build **Technitium
 | Logging of client addresses | always | can be turned off |
 | Prefetch | at most within the last 9 seconds of the TTL | from an adjustable share of the remaining TTL, 10 % by default |
 | Check of the system time | not available | self-test against the Date header of IANA and the NTP status of the kernel |
-| Prometheus metrics, API tokens | available | removed |
+| Prometheus metrics | basic counters under `api/dashboard/metrics/text`, access with API token | optional endpoint `/metrics` with ACL and bearer token, histograms, per protocol, type and response code, Extended DNS Errors, name server queries, process and runtime ([docs/Metrics.md](docs/Metrics.md)) |
+| API tokens | available | removed |
 
 ## Measurements
 
@@ -90,7 +91,7 @@ Functional tests in an isolated network namespace with a simulated DNS hierarchy
 ### Request filter
 - Rules modeled after dnsdist, active by default: unreadable or under 12 bytes, over 1232 bytes, opcode other than QUERY, class other than IN, ANY, AXFR/IXFR, without RD flag, EDNS version greater than 0.
 - UDP matches are dropped; over TCP, DoT, DoH and DoQ the answer is `REFUSED` with the EDE "Prohibited". Loopback is exempt.
-- Match counters per rule in the settings, the JSON metrics and Prometheus (`request_filter_matches_total`).
+- Match counters per rule in the settings, the JSON metrics and Prometheus (`zenitiumdns_request_filter_matches_total`).
 
 ### DNSSEC
 - Validation of ML-DSA-44 (algorithm 18) and protection against downgrades to classic algorithms when the DS record set announces a post-quantum algorithm.
@@ -199,7 +200,7 @@ Functional tests in an isolated network namespace with a simulated DNS hierarchy
 - **Configuration:** Settings, users, conditional forwarder zones, block lists, allowed and blocked domains, statistics and backups of Technitium DNS Server 15.5 can be taken over. ZenitiumDNS saves the DNS settings in format version 14, the web interface settings in format version 6 and zone files with zone information version 15. The original can no longer read these files.
 - **Removed zone types:** Zone files of primary, secondary, stub, secondary forwarder and catalog zones stay in the `zones` folder but are skipped and logged at startup. They can be used further with the original if needed.
 - **DHCP and cluster:** DHCP scope files and the cluster configuration are ignored. Permissions for the DHCP section are discarded on load. An existing "DHCP Administrators" group remains as an ordinary group without special rights and can be deleted.
-- **HTTP API:** The API only serves the web interface. The calls for DNSSEC, catalog zones, zone conversion, resync, TSIG, DHCP and clustering, the app store, installing and uninstalling apps, API tokens and the Prometheus metrics as well as the `node` parameter are gone. `api/zones/create` only accepts the type `Forwarder`.
+- **HTTP API:** The API only serves the web interface. The calls for DNSSEC, catalog zones, zone conversion, resync, TSIG, DHCP and clustering, the app store, installing and uninstalling apps, API tokens and the Prometheus metrics under `api/dashboard/metrics/text` as well as the `node` parameter are gone; Prometheus metrics are available at `/metrics` instead. `api/zones/create` only accepts the type `Forwarder`.
 - **Cache file:** ZenitiumDNS saves the name server statistics in `cache.bin` in an extended format (version 2). If such a cache file is loaded by the original, the original discards the cache. The configuration is not affected.
 - **DNS apps:** The namespaces were renamed (`ZenitiumDns.*`, `ZenitiumLibrary.*`). Apps compiled for Technitium must be recompiled against `ZenitiumDns.ApplicationCommon`. All bundled apps are already adapted.
 - **Syslog export:** Because the double formatting was fixed, the format of the syslog messages of the Log Exporter app changes. The metadata is now contained in the message as real structured data according to RFC 5424.
