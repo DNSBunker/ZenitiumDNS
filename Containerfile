@@ -27,7 +27,7 @@ LABEL org.opencontainers.image.title="ZenitiumDNS" \
       org.opencontainers.image.source="https://github.com/DNSBunker/ZenitiumDNS" \
       org.opencontainers.image.licenses="GPL-3.0-or-later" \
       org.opencontainers.image.version="$VERSION"
-RUN apk add --no-cache icu-libs icu-data-full libgcc libstdc++ libssl3 libmsquic tzdata ca-certificates libcap-setcap \
+RUN apk add --no-cache icu-libs icu-data-full libgcc libstdc++ libssl3 libmsquic tzdata ca-certificates su-exec libcap-setcap \
     && addgroup -S -g 1053 zenitiumdns \
     && adduser -S -D -H -u 1053 -G zenitiumdns -h /etc/zenitiumdns -s /sbin/nologin zenitiumdns
 COPY --from=build /out/ /
@@ -39,7 +39,6 @@ RUN setcap cap_net_bind_service=+ep /opt/zenitiumdns/ZenitiumDns \
     && chmod 0750 /etc/zenitiumdns /var/log/zenitiumdns
 ENV OPENSSL_ENABLE_SHA1_SIGNATURES=1 \
     DNS_SERVER_ADMIN_PASSWORD_FILE=/etc/zenitiumdns/admin.password
-USER zenitiumdns
 WORKDIR /opt/zenitiumdns
 VOLUME ["/etc/zenitiumdns", "/var/log/zenitiumdns"]
 EXPOSE 53/udp 53/tcp 5380/tcp 53443/tcp 853/tcp 853/udp 443/tcp 443/udp

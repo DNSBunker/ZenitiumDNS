@@ -2,6 +2,25 @@
 
 [Deutsche Version](CHANGELOG.de.md)
 
+## ZenitiumDNS 15.5.1 (package 15.5.1-8)
+Released: 28 September 2026
+
+### Fixed
+- Container image: with directories mounted from the host, the container did not start and restarted over and over with `can't create /etc/zenitiumdns/admin.password: Permission denied`. It ran as uid 1053 from the start and could not write to a directory owned by root. The container now starts as root, hands the configuration and log directories to uid 1053 and then starts the server as that user with `su-exec`. If the container runs with a fixed user (`--user` or `user:` in Compose) and a directory is not writable, it stops with a message that names the directory and the `chown` command.
+- Watchdog: when today's log file reached 512 MB, all file logging was paused until midnight, including errors, watchdog events and actions of administrators. Now only the logging of queries is paused, and everything else is still logged. Only if the file still grows to 1 GB is file logging paused completely. The rule for low disk space is unchanged.
+- Deleting the current log file in the web interface did not resume logging that the watchdog had paused. Logging now resumes immediately.
+- Under Settings > Network > Connections & timeouts the listen backlog showed 100 as its default, but new installations have used 1024 since package 15.5.1-3. Installations from before that keep 100; in the stress test below, a backlog of 100 dropped 905 connection attempts with 5,000 simultaneous TCP connections. Raise the value there if it is still 100.
+
+### Stress test
+Measured on the test server (Intel Core i7-4790S, 4 cores / 8 threads, LXC container that shares the CPU with other services, 6 GB RAM, logging of all queries switched on):
+- Cache hits over UDP: about 93,000 answered queries/s at 5.2 CPU cores; above that the kernel drops packets and a probe query on the server itself still gets its answer within 0 to 9 ms. 40,000 queries/s need 2.7 cores.
+- Cache hits over TCP: 142,000 queries/s with 200 connections, 45,000 queries/s with 2,000 connections.
+- Nonexistent top-level domains, answered from the local root zone: 36,000 queries/s with 1.1 million unique names, memory stayed at 260 to 320 MB.
+- 10 minutes at 15,000 queries/s (70 % cache hits, 30 % nonexistent names): 8.4 million queries, 15 without an answer, memory 260 to 370 MB without growth.
+- 600,000 malformed UDP packets and 1,264 TCP connections with malformed messages at the same time as normal traffic: no exception, and normal queries were answered as without them.
+- 5,000 TCP connections held open: idle connections are closed after 10 s at the latest, and TCP and UDP queries were still answered.
+- Recursive resolution behind NAT: at 500 new names per second the whole test network lost internet access for about eight minutes, most likely because the router or the provider's carrier-grade NAT ran out of connection state (every upstream query uses its own source port). ZenitiumDNS recovered on its own afterwards. A resolver behind a home router or carrier-grade NAT should not be flooded with cache misses; test with names that are answered locally.
+
 ## ZenitiumDNS 15.5.1 (package 15.5.1-7)
 Released: 28 September 2026
 

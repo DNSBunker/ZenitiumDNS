@@ -199,7 +199,7 @@ namespace ZenitiumDns.Core.Dns
         int _tcpReceiveTimeout = 10000;
         int _quicIdleTimeout = 60000;
         int _quicMaxInboundStreams = 100;
-        int _listenBacklog = 100;
+        int _listenBacklog = 1024;
         int _udpSendBufferSizeKB = 2048;
         int _udpReceiveBufferSizeKB = 2048;
 

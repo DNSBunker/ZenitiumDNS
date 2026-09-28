@@ -2,6 +2,25 @@
 
 [English version](CHANGELOG.md)
 
+## ZenitiumDNS 15.5.1 (Paket 15.5.1-8)
+Veröffentlicht: 28. September 2026
+
+### Behoben
+- Container-Image: Mit vom Host eingebundenen Ordnern startete der Container nicht und startete ständig neu mit `can't create /etc/zenitiumdns/admin.password: Permission denied`. Er lief von Anfang an als UID 1053 und konnte nicht in einen Ordner schreiben, der root gehört. Der Container startet jetzt als root, übergibt Konfigurations- und Protokollordner an UID 1053 und startet den Server dann mit `su-exec` als dieser Benutzer. Läuft der Container mit festem Benutzer (`--user` oder `user:` in Compose) und ist ein Ordner nicht beschreibbar, beendet er sich mit einer Meldung, die den Ordner und den `chown`-Befehl nennt.
+- Wächter: Erreichte die heutige Protokolldatei 512 MB, war das gesamte Datei-Protokoll bis Mitternacht pausiert, auch Fehler, Meldungen des Wächters und Aktionen der Administratoren. Jetzt wird nur das Protokollieren der Anfragen pausiert, alles andere wird weiter protokolliert. Erst wenn die Datei trotzdem 1 GB erreicht, wird das Datei-Protokoll vollständig pausiert. Die Regel bei knappem Speicherplatz bleibt unverändert.
+- Das Löschen der aktuellen Protokolldatei in der Weboberfläche nahm ein vom Wächter pausiertes Protokoll nicht wieder auf. Das Protokoll läuft jetzt sofort weiter.
+- Unter Einstellungen > Netzwerk > Verbindungen & Zeitlimits zeigte das Listen-Backlog 100 als Standard an, neue Installationen nutzen aber seit Paket 15.5.1-3 den Wert 1024. Ältere Installationen behalten 100; im Lasttest unten verwarf ein Backlog von 100 bei 5.000 gleichzeitigen TCP-Verbindungen 905 Verbindungsversuche. Steht dort noch 100, den Wert erhöhen.
+
+### Lasttest
+Gemessen auf dem Testserver (Intel Core i7-4790S, 4 Kerne / 8 Threads, LXC-Container, der sich die CPU mit anderen Diensten teilt, 6 GB RAM, Protokollieren aller Anfragen eingeschaltet):
+- Cache-Treffer über UDP: etwa 93.000 beantwortete Anfragen/s bei 5,2 CPU-Kernen; darüber verwirft der Kernel Pakete, und eine Testanfrage auf dem Server selbst bekommt ihre Antwort weiterhin in 0 bis 9 ms. 40.000 Anfragen/s brauchen 2,7 Kerne.
+- Cache-Treffer über TCP: 142.000 Anfragen/s mit 200 Verbindungen, 45.000 Anfragen/s mit 2.000 Verbindungen.
+- Nicht existierende Top-Level-Domains, beantwortet aus der lokalen Root-Zone: 36.000 Anfragen/s mit 1,1 Millionen einmaligen Namen, der Speicher blieb bei 260 bis 320 MB.
+- 10 Minuten mit 15.000 Anfragen/s (70 % Cache-Treffer, 30 % nicht existierende Namen): 8,4 Millionen Anfragen, 15 ohne Antwort, Speicher 260 bis 370 MB ohne Wachstum.
+- 600.000 fehlerhafte UDP-Pakete und 1.264 TCP-Verbindungen mit fehlerhaften Nachrichten gleichzeitig mit normalem Verkehr: keine Exception, normale Anfragen wurden beantwortet wie ohne sie.
+- 5.000 offen gehaltene TCP-Verbindungen: untätige Verbindungen werden spätestens nach 10 s geschlossen, TCP- und UDP-Anfragen wurden weiter beantwortet.
+- Rekursive Auflösung hinter NAT: Bei 500 neuen Namen pro Sekunde verlor das ganze Testnetz für etwa acht Minuten den Internetzugang, sehr wahrscheinlich, weil dem Router oder dem Carrier-Grade-NAT des Providers die Verbindungszustände ausgingen (jede Upstream-Anfrage nutzt einen eigenen Quellport). ZenitiumDNS erholte sich danach von selbst. Einen Resolver hinter einem Heimrouter oder Carrier-Grade-NAT nicht mit Cache-Misses fluten; für Lasttests Namen verwenden, die lokal beantwortet werden.
+
 ## ZenitiumDNS 15.5.1 (Paket 15.5.1-7)
 Veröffentlicht: 28. September 2026
 

@@ -35,6 +35,7 @@ namespace ZenitiumDns.Core.Dns
 
         const long DISK_CRITICAL_BYTES = 256L * 1024 * 1024;
         const long LOG_FILE_MAX_BYTES = 512L * 1024 * 1024;
+        const long LOG_FILE_HARD_MAX_BYTES = 1024L * 1024 * 1024;
         const double MEMORY_LOAD_CRITICAL = 0.92;
         const double CACHE_TRIM_RATIO = 0.3;
         const int STATS_QUEUE_MAX = StatsManager.MAX_QUEUE_LENGTH;
@@ -206,12 +207,24 @@ namespace ZenitiumDns.Core.Dns
                 return;
 
             long size = log.CurrentLogFileSize;
-            if (size < LOG_FILE_MAX_BYTES)
+
+            if (!log.IsQueryLoggingSuspended)
+            {
+                if (size < LOG_FILE_MAX_BYTES)
+                    return;
+
+                log.SuspendQueryLoggingForToday("today's log file reached " + FormatMegabytes(size));
+
+                AddEvent(WatchdogSeverity.Warning, Lang.L("Protokoll", "Log"), Lang.L("Die heutige Protokolldatei hat " + FormatMegabytes(size, Lang.German) + " erreicht. Das Protokollieren der Anfragen ist bis Mitternacht pausiert, damit die Platte nicht vollläuft. Fehler und Ereignisse werden weiter protokolliert. Häufig ist das Protokollieren aller Anfragen eingeschaltet.", "Today's log file reached " + FormatMegabytes(size, Lang.English) + ". Query logging is paused until midnight so that the disk does not fill up. Errors and events are still logged. Often logging of all queries is turned on."), "today's log file reached " + FormatMegabytes(size) + "; query logging suspended until midnight.");
+                return;
+            }
+
+            if (size < LOG_FILE_HARD_MAX_BYTES)
                 return;
 
-            log.SuspendFileLoggingForToday("today's log file reached " + FormatMegabytes(size));
+            log.SuspendFileLoggingForToday("today's log file reached " + FormatMegabytes(size) + " although query logging is suspended");
 
-            AddEvent(WatchdogSeverity.Warning, Lang.L("Protokoll", "Log"), Lang.L("Die heutige Protokolldatei hat " + FormatMegabytes(size, Lang.German) + " erreicht. Das Datei-Protokoll ist bis Mitternacht pausiert, damit die Platte nicht vollläuft. Häufig ist das Protokollieren aller Anfragen eingeschaltet.", "Today's log file reached " + FormatMegabytes(size, Lang.English) + ". File logging is paused until midnight so that the disk does not fill up. Often logging of all queries is turned on."), "today's log file reached " + FormatMegabytes(size) + "; file logging suspended until midnight.");
+            AddEvent(WatchdogSeverity.Warning, Lang.L("Protokoll", "Log"), Lang.L("Die heutige Protokolldatei hat " + FormatMegabytes(size, Lang.German) + " erreicht, obwohl das Protokollieren der Anfragen pausiert ist. Das Datei-Protokoll ist bis Mitternacht vollständig pausiert.", "Today's log file reached " + FormatMegabytes(size, Lang.English) + " although query logging is paused. File logging is paused completely until midnight."), "today's log file reached " + FormatMegabytes(size) + "; file logging suspended until midnight.");
         }
 
         private void CheckMemory(DateTime utcNow)

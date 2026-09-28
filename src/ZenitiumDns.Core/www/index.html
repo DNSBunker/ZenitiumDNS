@@ -1250,7 +1250,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
                                         <div class="checkbox">
                                             <label><input id="chkEnableWatchdog" type="checkbox"> Bei schweren Problemen automatisch eingreifen</label>
                                         </div>
-                                        <div class="option-help">Prüft alle 10 Sekunden. Wird der Speicherplatz knapp oder wächst die heutige Protokolldatei über 512 MB, pausiert er das Datei-Protokoll bis Mitternacht und löscht bei Platzmangel ältere Protokolldateien. Bei Speichermangel kürzt er den Cache, eine überlaufende Statistik-Warteschlange leert er, einem ausgehungerten Threadpool gibt er mehr Threads, und fehlen DNS-Dienste, startet er sie bis zu dreimal neu. Jeder Eingriff steht im Protokoll und im Selbsttest.</div>
+                                        <div class="option-help">Prüft alle 10 Sekunden. Wächst die heutige Protokolldatei über 512 MB, pausiert er bis Mitternacht das Protokollieren der Anfragen, Fehler und Ereignisse werden weiter protokolliert. Wird der Speicherplatz knapp, pausiert er das Datei-Protokoll bis Mitternacht und löscht ältere Protokolldateien. Bei Speichermangel kürzt er den Cache, eine überlaufende Statistik-Warteschlange leert er, einem ausgehungerten Threadpool gibt er mehr Threads, und fehlen DNS-Dienste, startet er sie bis zu dreimal neu. Jeder Eingriff steht im Protokoll und im Selbsttest.</div>
                                     </div>
                                 </div>
                                 </div>
@@ -1428,7 +1428,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
                                 <div class="form-group">
                                     <label for="txtListenBacklog" class="col-sm-3 control-label">Listen-Backlog</label>
                                     <div class="col-sm-8">
-                                        <input type="number" class="form-control" id="txtListenBacklog" placeholder="100" style="width: 100px; display: inline;"> <span class="unit">(Standard 100)</span>
+                                        <input type="number" class="form-control" id="txtListenBacklog" placeholder="1024" style="width: 100px; display: inline;"> <span class="unit">(Standard 1024)</span>
                                     </div>
                                     <div class="col-sm-offset-3 col-sm-8 help-block-text">Maximale Anzahl wartender eingehender Verbindungen für TCP, TLS, TCP-PROXY und QUIC.</div>
                                 </div>

@@ -6,7 +6,7 @@ ZenitiumDNS gibt es als OCI-Container-Image für amd64 und arm64. Es wird für j
 
 ```
 ghcr.io/dnsbunker/zenitiumdns:latest
-ghcr.io/dnsbunker/zenitiumdns:15.5.1-7
+ghcr.io/dnsbunker/zenitiumdns:15.5.1-8
 ```
 
 Das Image basiert auf Alpine Linux und enthält den eigenständigen Server, die mitgelieferten Apps und `libmsquic` für DNS-over-QUIC und HTTP/3. Der Server läuft als unprivilegierter Benutzer `zenitiumdns` (UID und GID 1053).
@@ -60,7 +60,7 @@ Nur die Ports der eingeschalteten Dienste veröffentlichen. Zertifikate für die
 | `/etc/zenitiumdns` | Einstellungen, Benutzer, Statistik, Cache, heruntergeladene Blocklisten und installierte Apps |
 | `/var/log/zenitiumdns` | Protokolldateien |
 
-Benannte Volumes erhalten automatisch den richtigen Besitzer. Vom Host eingebundene Ordner müssen für UID 1053 beschreibbar sein:
+Der Container startet als root, übergibt Konfigurations- und Protokollordner an UID 1053, auch vom Host eingebundene Ordner, und startet den Server dann als dieser Benutzer. Läuft der Container mit festem Benutzer (`--user` oder `user:` in Compose), kann er den Besitzer nicht selbst ändern; eingebundene Ordner müssen dann für diesen Benutzer beschreibbar sein, sonst beendet sich der Container mit einer Meldung, die den Ordner nennt:
 
 ```
 sudo mkdir -p /srv/zenitiumdns/config /srv/zenitiumdns/logs

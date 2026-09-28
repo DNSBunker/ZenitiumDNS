@@ -116,7 +116,7 @@ ZenitiumDNS is a fork of [Technitium DNS Server](https://github.com/TechnitiumSo
 Ready-made Debian 13 packages for amd64 and arm64 are available under [Releases](https://github.com/DNSBunker/ZenitiumDNS/releases):
 
 ```
-sudo apt install ./zenitiumdns_15.5.1-7_amd64.deb
+sudo apt install ./zenitiumdns_15.5.1-8_amd64.deb
 ```
 
 The container image for amd64 and arm64 runs with Podman and Docker, see [Container image](docs/Container.md):

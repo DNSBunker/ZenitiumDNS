@@ -70,6 +70,7 @@ namespace ZenitiumDns.Core
         StreamWriter _logWriter;
         DateTime _logDate;
         bool _fileLoggingSuspended;
+        volatile bool _queryLoggingSuspended;
         readonly Lock _logFileLock = new Lock();
 
         Channel<LogQueueItem> _channel;
@@ -434,9 +435,10 @@ namespace ZenitiumDns.Core
                                 {
                                     StartNewLogFile();
                                     _fileLoggingSuspended = false;
+                                    _queryLoggingSuspended = false;
                                 }
 
-                                if (!_fileLoggingSuspended)
+                                if (!_fileLoggingSuspended && !(item._isQuery && _queryLoggingSuspended))
                                     WriteLogEntry(logEntry);
                             }
                         }
@@ -736,6 +738,23 @@ namespace ZenitiumDns.Core
             }
         }
 
+        internal bool IsQueryLoggingSuspended
+        {
+            get { return _queryLoggingSuspended; }
+        }
+
+        internal void SuspendQueryLoggingForToday(string reason)
+        {
+            lock (_logFileLock)
+            {
+                if (_fileLoggingSuspended || _queryLoggingSuspended)
+                    return;
+
+                WriteLogEntry(GetLogEntry(_useLocalTime ? DateTime.Now : DateTime.UtcNow, "Watchdog suspended query logging until the end of the day: " + reason + "; errors and events are still logged."));
+                _queryLoggingSuspended = true;
+            }
+        }
+
         internal void SuspendFileLoggingForToday(string reason)
         {
             lock (_logFileLock)
@@ -900,6 +919,9 @@ namespace ZenitiumDns.Core
 
         public void Write(EndPoint ep, DnsTransportProtocol protocol, DnsDatagram request, DnsDatagram response)
         {
+            if (_queryLoggingSuspended && !_loggingType.HasFlag(LoggingType.Console))
+                return;
+
             DnsQuestionRecord q = null;
 
             if (request.Question.Count > 0)
@@ -995,7 +1017,8 @@ namespace ZenitiumDns.Core
                 responseInfo += "; ANSWER: " + answer;
             }
 
-            Write(ep, protocol, requestInfo + responseInfo);
+            if (_loggingType != LoggingType.None)
+                _channelWriter?.TryWrite(new LogQueueItem(GetIpInfo(ep) + "[" + protocol.ToString().ToUpperInvariant() + "] " + requestInfo + responseInfo, true));
         }
 
         public void Write(EndPoint ep, DnsTransportProtocol protocol, string message)
@@ -1021,7 +1044,7 @@ namespace ZenitiumDns.Core
         public void Write(string message)
         {
             if (_loggingType != LoggingType.None)
-                _channelWriter?.TryWrite(new LogQueueItem(message));
+                _channelWriter?.TryWrite(new LogQueueItem(message, false));
         }
 
         public void DeleteCurrentLogFile()
@@ -1031,6 +1054,9 @@ namespace ZenitiumDns.Core
                 CloseCurrentLogFile();
 
                 File.Delete(_logFile);
+
+                _fileLoggingSuspended = false;
+                _queryLoggingSuspended = false;
 
                 if (_loggingType.HasFlag(LoggingType.File))
                     StartNewLogFile();
@@ -1129,15 +1155,17 @@ namespace ZenitiumDns.Core
 
             public readonly DateTime _dateTime;
             public readonly string _message;
+            public readonly bool _isQuery;
 
             #endregion
 
             #region constructor
 
-            public LogQueueItem(string message)
+            public LogQueueItem(string message, bool isQuery)
             {
                 _dateTime = DateTime.UtcNow;
                 _message = message;
+                _isQuery = isQuery;
             }
 
             #endregion
