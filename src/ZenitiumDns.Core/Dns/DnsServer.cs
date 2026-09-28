@@ -162,6 +162,8 @@ namespace ZenitiumDns.Core.Dns
 
         readonly ResolverDnsCache _dnsCache;
         readonly ResolverDnsCache _dnsCacheSkipDnsApps;
+        readonly ResolverDnsCache _forwarderDnsCache;
+        readonly ResolverDnsCache _forwarderDnsCacheSkipDnsApps;
         readonly StatsManager _statsManager;
 
 
@@ -378,6 +380,8 @@ namespace ZenitiumDns.Core.Dns
 
             _dnsCache = new ResolverDnsCache(this, false);
             _dnsCacheSkipDnsApps = new ResolverDnsCache(this, true);
+            _forwarderDnsCache = new ResolverDnsCache(this, false, false, false);
+            _forwarderDnsCacheSkipDnsApps = new ResolverDnsCache(this, true, false, false);
 
             _statsManager = new StatsManager(this);
             _clientBlockListManager = new ClientBlockListManager(this);
@@ -631,7 +635,7 @@ namespace ZenitiumDns.Core.Dns
             BinaryReader bR = new BinaryReader(s);
 
             int version = bR.ReadByte();
-            if ((version < 1) || (version > 13))
+            if ((version < 1) || (version > 14))
                 throw new InvalidDataException("DNS Server config version not supported.");
 
             string serverDomain = s.ReadShortString();
@@ -1208,6 +1212,11 @@ namespace ZenitiumDns.Core.Dns
             else
                 _cachePrefetchTriggerPercent = 10;
 
+            if (version >= 14)
+                _cacheZoneManager.AggressiveNsec = bR.ReadBoolean();
+            else
+                _cacheZoneManager.AggressiveNsec = true;
+
             if (_dnsTlsCertificatePath is null)
             {
                 StopTlsCertificateUpdateTimer();
@@ -1239,7 +1248,7 @@ namespace ZenitiumDns.Core.Dns
             BinaryWriter bW = new BinaryWriter(s);
 
             bW.Write(Encoding.ASCII.GetBytes("DC"));
-            bW.Write((byte)13);
+            bW.Write((byte)14);
 
             s.WriteShortString(_serverDomain);
 
@@ -1506,6 +1515,7 @@ namespace ZenitiumDns.Core.Dns
             bW.Write(_ddrProxyDohPort);
             bW.Write(_ddrProxyDohHttp3);
             bW.Write((byte)_cachePrefetchTriggerPercent);
+            bW.Write(_cacheZoneManager.AggressiveNsec);
         }
 
         #endregion
@@ -4189,7 +4199,7 @@ namespace ZenitiumDns.Core.Dns
 
             if (!cachePrefetchOperation)
             {
-                DnsDatagram cacheResponse = QueryCache(request, false, false);
+                DnsDatagram cacheResponse = QueryCache(request, false, false, conditionalForwarders is null);
                 if (cacheResponse is not null)
                 {
                     if (_cachePrefetchTrigger > 0)
@@ -4253,7 +4263,7 @@ namespace ZenitiumDns.Core.Dns
                 }
                 else
                 {
-                    DnsDatagram staleResponse = QueryCache(request, true, false);
+                    DnsDatagram staleResponse = QueryCache(request, true, false, conditionalForwarders is null);
                     if (staleResponse is not null)
                         return staleResponse;
 
@@ -4302,13 +4312,14 @@ namespace ZenitiumDns.Core.Dns
             try
             {
                 IDnsCache dnsCache;
+                bool aggressiveNsec = conditionalForwarders is null;
 
                 if (cachePrefetchOperation)
-                    dnsCache = new ResolverPrefetchDnsCache(this, skipDnsAppAuthoritativeRequestHandlers, question);
+                    dnsCache = new ResolverPrefetchDnsCache(this, skipDnsAppAuthoritativeRequestHandlers, question, aggressiveNsec);
                 else if (skipDnsAppAuthoritativeRequestHandlers || advancedForwardingClientSubnet)
-                    dnsCache = _dnsCacheSkipDnsApps;
+                    dnsCache = aggressiveNsec ? _dnsCacheSkipDnsApps : _forwarderDnsCacheSkipDnsApps;
                 else
-                    dnsCache = _dnsCache;
+                    dnsCache = aggressiveNsec ? _dnsCache : _forwarderDnsCache;
 
                 DnsDatagram response;
 
@@ -4386,7 +4397,7 @@ namespace ZenitiumDns.Core.Dns
                 }
 
                 DnsDatagram cacheRequest = new DnsDatagram(0, false, DnsOpcode.StandardQuery, false, false, true, false, false, dnssecValidation, DnsResponseCode.NoError, [question], null, null, null, _udpPayloadSize, dnssecValidation ? EDnsHeaderFlags.DNSSEC_OK : EDnsHeaderFlags.None, EDnsClientSubnetOptionData.GetEDnsClientSubnetOption(eDnsClientSubnet));
-                DnsDatagram cacheResponse = QueryCache(cacheRequest, _serveStale, _serveStale);
+                DnsDatagram cacheResponse = QueryCache(cacheRequest, _serveStale, _serveStale, conditionalForwarders is null);
                 if (cacheResponse is not null)
                 {
                     if (!dnssecValidation || cacheResponse.AuthenticData)
@@ -4628,7 +4639,7 @@ namespace ZenitiumDns.Core.Dns
                         }
 
                         if (dnsCache is not ResolverPrefetchDnsCache)
-                            dnsCache = new ResolverPrefetchDnsCache(this, skipDnsAppAuthoritativeRequestHandlers, question);
+                            dnsCache = new ResolverPrefetchDnsCache(this, skipDnsAppAuthoritativeRequestHandlers, question, dnsCache is not ResolverDnsCache resolverDnsCache || resolverDnsCache.AggressiveNsec);
                     }
 
                     if (lastResponse is not null)
@@ -4800,7 +4811,7 @@ namespace ZenitiumDns.Core.Dns
                     }
 
                     if (dnsCache is not ResolverPrefetchDnsCache)
-                        dnsCache = new ResolverPrefetchDnsCache(this, skipDnsAppAuthoritativeRequestHandlers, question);
+                        dnsCache = new ResolverPrefetchDnsCache(this, skipDnsAppAuthoritativeRequestHandlers, question, false);
                 }
 
                 if (lastResponse is not null)
@@ -5104,9 +5115,9 @@ namespace ZenitiumDns.Core.Dns
             return question.ToString() + " " + eDnsClientSubnet.ToString();
         }
 
-        private DnsDatagram QueryCache(DnsDatagram request, bool serveStale, bool resetExpiry)
+        private DnsDatagram QueryCache(DnsDatagram request, bool serveStale, bool resetExpiry, bool aggressiveNsec)
         {
-            DnsDatagram cacheResponse = _cacheZoneManager.Query(request, serveStale, false, resetExpiry);
+            DnsDatagram cacheResponse = _cacheZoneManager.Query(request, serveStale, false, resetExpiry, aggressiveNsec);
             if (cacheResponse is not null)
             {
                 if ((cacheResponse.RCODE != DnsResponseCode.NoError) || (cacheResponse.Answer.Count > 0) || (cacheResponse.Authority.Count == 0) || cacheResponse.IsFirstAuthoritySOA())

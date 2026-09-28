@@ -537,6 +537,10 @@ $(function () {
         $("#txtLogFolderPath").prop("disabled", !enableLogging);
     });
 
+    $("#chkDnssecValidation").on("click", function () {
+        $("#chkDnssecAggressiveNsec").prop("disabled", !$("#chkDnssecValidation").prop("checked"));
+    });
+
     $("#chkServeStale").on("click", function () {
         var serveStale = $("#chkServeStale").prop("checked");
         $("#txtServeStaleTtl").prop("disabled", !serveStale);
@@ -1202,6 +1206,8 @@ function loadDnsSettings(responseJSON) {
     $("#txtEdnsUdpPayloadSize").val(responseJSON.response.udpPayloadSize);
     $("#chkDnssecValidation").prop("checked", responseJSON.response.dnssecValidation);
     $("#chkDnssecPostQuantumDowngradeProtection").prop("checked", responseJSON.response.dnssecPostQuantumDowngradeProtection !== false);
+    $("#chkDnssecAggressiveNsec").prop("checked", responseJSON.response.dnssecAggressiveNsec !== false);
+    $("#chkDnssecAggressiveNsec").prop("disabled", !responseJSON.response.dnssecValidation);
 
     $("#chkEDnsClientSubnet").prop("checked", responseJSON.response.eDnsClientSubnet);
     $("#txtEDnsClientSubnetIPv4PrefixLength").prop("disabled", !responseJSON.response.eDnsClientSubnet);
@@ -1735,6 +1741,7 @@ function saveDnsSettings(objBtn) {
     var udpPayloadSize = $("#txtEdnsUdpPayloadSize").val();
     var dnssecValidation = $("#chkDnssecValidation").prop("checked");
     var dnssecPostQuantumDowngradeProtection = $("#chkDnssecPostQuantumDowngradeProtection").prop("checked");
+    var dnssecAggressiveNsec = $("#chkDnssecAggressiveNsec").prop("checked");
 
     var eDnsClientSubnet = $("#chkEDnsClientSubnet").prop("checked");
 
@@ -1855,7 +1862,7 @@ function saveDnsSettings(objBtn) {
         return;
     }
 
-    formData += "&udpPayloadSize=" + udpPayloadSize + "&dnssecValidation=" + dnssecValidation + "&dnssecPostQuantumDowngradeProtection=" + dnssecPostQuantumDowngradeProtection;
+    formData += "&udpPayloadSize=" + udpPayloadSize + "&dnssecValidation=" + dnssecValidation + "&dnssecPostQuantumDowngradeProtection=" + dnssecPostQuantumDowngradeProtection + "&dnssecAggressiveNsec=" + dnssecAggressiveNsec;
     formData += "&eDnsClientSubnet=" + eDnsClientSubnet + "&eDnsClientSubnetIPv4PrefixLength=" + eDnsClientSubnetIPv4PrefixLength + "&eDnsClientSubnetIPv6PrefixLength=" + eDnsClientSubnetIPv6PrefixLength + "&eDnsClientSubnetIpv4Override=" + encodeURIComponent(eDnsClientSubnetIpv4Override) + "&eDnsClientSubnetIpv6Override=" + encodeURIComponent(eDnsClientSubnetIpv6Override);
     formData += "&qpsPrefixLimitsIPv4=" + encodeURIComponent(qpsPrefixLimitsIPv4) + "&qpsPrefixLimitsIPv6=" + encodeURIComponent(qpsPrefixLimitsIPv6) + "&rateLimitBurstSeconds=" + rateLimitBurstSeconds + "&rateLimitUdpTruncationPercentage=" + rateLimitUdpTruncationPercentage + "&rateLimitBypassList=" + encodeURIComponent(rateLimitBypassList);
     formData += "&clientTimeout=" + clientTimeout + "&tcpSendTimeout=" + tcpSendTimeout + "&tcpReceiveTimeout=" + tcpReceiveTimeout + "&quicIdleTimeout=" + quicIdleTimeout + "&quicMaxInboundStreams=" + quicMaxInboundStreams + "&listenBacklog=" + listenBacklog + "&udpSendBufferSizeKB=" + udpSendBufferSizeKB + "&udpReceiveBufferSizeKB=" + udpReceiveBufferSizeKB + "&maxConcurrentResolutionsPerCore=" + maxConcurrentResolutionsPerCore;

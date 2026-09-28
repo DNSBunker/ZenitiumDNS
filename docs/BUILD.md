@@ -45,7 +45,7 @@ To uninstall, run `sudo sh /opt/zenitiumdns/uninstall.sh`.
 
 ## Debian package
 
-A standalone Debian package for Debian 13 (trixie) that needs no separately installed .NET runtime can be built on any Linux distribution with the .NET 10 SDK. The bundled DNS apps are included as ZIP files.
+A standalone Debian package for Debian 13 (trixie) that needs no separately installed .NET runtime can be built on any Linux distribution with the .NET 10 SDK. The bundled DNS apps are included as ZIP files, and `libmsquic` for DNS-over-QUIC and HTTP/3 is included as well; the script downloads it from Microsoft's package repository and needs `curl` for that.
 
 ```
 setup/debian/build-deb.sh --arch amd64

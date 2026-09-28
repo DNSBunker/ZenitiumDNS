@@ -12,6 +12,14 @@ Files: opt/zenitiumdns/Microsoft.* opt/zenitiumdns/System.* opt/zenitiumdns/msco
 Copyright: .NET Foundation and Contributors
 License: MIT
 
+Files: opt/zenitiumdns/libmsquic.so.2
+Copyright: Microsoft Corporation
+           The OpenSSL Project Authors
+License: MIT and Apache-2.0
+Comment: MsQuic 2.6.1 from https://packages.microsoft.com/debian/13/prod, which
+ contains a statically linked copy of quictls (https://github.com/quictls/openssl)
+ under the Apache License 2.0.
+
 Files: opt/zenitiumdns/BouncyCastle.Cryptography.dll
 Copyright: The Legion of the Bouncy Castle Inc.
 License: MIT
@@ -28,6 +36,10 @@ License: GPL-3+
  .
  On Debian systems, the complete text of the GNU General Public License
  version 3 can be found in /usr/share/common-licenses/GPL-3.
+
+License: Apache-2.0
+ On Debian systems, the complete text of the Apache License 2.0 can be found
+ in /usr/share/common-licenses/Apache-2.0.
 
 License: MIT
  Permission is hereby granted, free of charge, to any person obtaining a copy

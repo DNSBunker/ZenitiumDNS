@@ -17,6 +17,10 @@ Der Name „Technitium“ wird hier nur verwendet, um die Herkunft dieses Werks 
 
 Die Weboberfläche enthält die Schriften **Red Hat Text**, **Red Hat Display** und **Red Hat Mono**, Copyright 2024 The Red Hat Project Authors (https://github.com/RedHatOfficial/RedHatFont). Sie stehen unter der SIL Open Font License 1.1, deren Text in `src/ZenitiumDns.Core/www/fonts/RedHatFont-OFL.txt` liegt.
 
+## Mitgelieferte Bibliotheken
+
+Das Debian-Paket enthält **MsQuic** 2.6.1 (`libmsquic.so.2`), Copyright (c) Microsoft Corporation (https://github.com/microsoft/msquic), lizenziert unter der MIT-Lizenz. Die Bibliothek enthält **quictls**, eine Abspaltung von OpenSSL, Copyright (c) The OpenSSL Project Authors (https://github.com/quictls/openssl), lizenziert unter der Apache License 2.0.
+
 ## Änderungen
 
 Die folgenden Änderungen wurden im September 2026 vorgenommen:

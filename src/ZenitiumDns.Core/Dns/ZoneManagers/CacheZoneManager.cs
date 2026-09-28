@@ -55,6 +55,9 @@ namespace ZenitiumDns.Core.Dns.ZoneManagers
 
         readonly CacheZoneTree _root = new CacheZoneTree();
 
+        readonly AggressiveNsecCache _aggressiveNsecCache = new AggressiveNsecCache();
+        bool _aggressiveNsec = true;
+
         uint _serveStaleResetTtl = SERVE_STALE_RESET_TTL;
         long _maximumEntries;
         long _totalEntries;
@@ -290,6 +293,24 @@ namespace ZenitiumDns.Core.Dns.ZoneManagers
 
                 if (addedEntries > 0)
                     Interlocked.Add(ref _totalEntries, addedEntries);
+            }
+        }
+
+        protected override void CacheDenialOfExistence(DnsDatagram response, NetworkAddress eDnsClientSubnet)
+        {
+            if (!_aggressiveNsec || !_dnsServer.DnssecValidation)
+                return;
+
+            if ((eDnsClientSubnet is not null) && (eDnsClientSubnet.PrefixLength > 0))
+                return;
+
+            try
+            {
+                _aggressiveNsecCache.Add(response, MaximumNegativeRecordTtl);
+            }
+            catch (Exception ex)
+            {
+                _dnsServer.LogManager.Write(ex);
             }
         }
 
@@ -624,6 +645,24 @@ namespace ZenitiumDns.Core.Dns.ZoneManagers
             }
         }
 
+        private DnsDatagram QueryAggressiveNsec(DnsDatagram request, bool dnssecOk)
+        {
+            AuthZoneManager authZoneManager = _dnsServer.AuthZoneManager;
+
+            if ((authZoneManager is not null) && (authZoneManager.TotalZones > 0) && (authZoneManager.FindApexZone(request.Question[0].Name) is not null))
+                return null;
+
+            try
+            {
+                return _aggressiveNsecCache.Query(request, dnssecOk, _dnsServer.UdpPayloadSize);
+            }
+            catch (Exception ex)
+            {
+                _dnsServer.LogManager.Write(ex);
+                return null;
+            }
+        }
+
         private int RemoveZoneIfEmpty(CacheZone zone)
         {
             if (!zone.IsEmpty || !_root.TryRemove(zone.Name, out CacheZone removedZone) || removedZone.IsEmpty)
@@ -692,6 +731,8 @@ namespace ZenitiumDns.Core.Dns.ZoneManagers
             bool serveStale = _dnsServer.ServeStale;
 
             int totalRemovedEntries = RemoveExpiredRecordsInternal(serveStale, 0);
+
+            _aggressiveNsecCache.RemoveExpired();
 
             if (_maximumEntries < 1)
                 return totalRemovedEntries;
@@ -774,11 +815,15 @@ namespace ZenitiumDns.Core.Dns.ZoneManagers
             if (totalEntries < 0)
                 Interlocked.Add(ref _totalEntries, -totalEntries);
 
+            _aggressiveNsecCache.Flush();
+
             DnsClient.ClearRootHintsMisconfiguredMarks();
         }
 
         public bool DeleteZone(string domain)
         {
+            _aggressiveNsecCache.RemoveTree(domain);
+
             if (_root.TryRemoveTree(domain, out _, out int removedEntries))
             {
                 if (removedEntries > 0)
@@ -871,7 +916,7 @@ namespace ZenitiumDns.Core.Dns.ZoneManagers
             return Task.FromResult(Query(request, serveStale, findClosestNameServers, resetExpiry));
         }
 
-        public DnsDatagram Query(DnsDatagram request, bool serveStale = false, bool findClosestNameServers = false, bool resetExpiry = false)
+        public DnsDatagram Query(DnsDatagram request, bool serveStale = false, bool findClosestNameServers = false, bool resetExpiry = false, bool aggressiveNsec = false)
         {
             DnsQuestionRecord question = request.Question[0];
 
@@ -1182,6 +1227,13 @@ namespace ZenitiumDns.Core.Dns.ZoneManagers
                 }
             }
 
+            if (aggressiveNsec && _aggressiveNsec && _dnsServer.DnssecValidation)
+            {
+                DnsDatagram synthesizedResponse = QueryAggressiveNsec(request, dnssecOk);
+                if (synthesizedResponse is not null)
+                    return synthesizedResponse;
+            }
+
         beforeFindClosestNameServers:
 
             if (findClosestNameServers && (delegation is not null))
@@ -1267,6 +1319,27 @@ namespace ZenitiumDns.Core.Dns.ZoneManagers
 
         public long TotalEntries
         { get { return _totalEntries; } }
+
+        public bool AggressiveNsec
+        {
+            get { return _aggressiveNsec; }
+            set
+            {
+                if (_aggressiveNsec != value)
+                {
+                    _aggressiveNsec = value;
+
+                    if (!value)
+                        _aggressiveNsecCache.Flush();
+                }
+            }
+        }
+
+        public long AggressiveNsecEntries
+        { get { return _aggressiveNsecCache.TotalEntries; } }
+
+        public long AggressiveNsecSynthesizedResponses
+        { get { return _aggressiveNsecCache.SynthesizedResponses; } }
 
         #endregion
     }

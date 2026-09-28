@@ -56,7 +56,7 @@ ZenitiumDNS is a fork of [Technitium DNS Server](https://github.com/TechnitiumSo
 - Public resolvers such as Cloudflare, Google, Quad9 or AdGuard can be used as forwarders over [DNS-over-TLS](https://www.rfc-editor.org/rfc/rfc7858.html), [DNS-over-HTTPS](https://www.rfc-editor.org/rfc/rfc8484.html) or [DNS-over-QUIC](https://www.ietf.org/rfc/rfc9250.html).
 - Latency-based name server selection with parallel queries. Response time and error rate are tracked separately for IPv4 and IPv6.
 - Automatic IPv6 fallback when IPv6 connectivity is broken, with background checks and a manual check in the web interface.
-- DNSSEC validation with RSA, ECDSA, EdDSA and ML-DSA-44 for the recursive resolver, forwarders and forwarder zones, with NSEC and NSEC3.
+- DNSSEC validation with RSA, ECDSA, EdDSA and ML-DSA-44 for the recursive resolver, forwarders and forwarder zones, with NSEC and NSEC3. Validated NSEC and NSEC3 records are used aggressively according to RFC 8198: queries for names and types that do not exist in signed zones are answered from the cache, which also slows down attacks with random subdomains.
 - QNAME minimization ([RFC 9156](https://www.rfc-editor.org/rfc/rfc9156.html)).
 - Random letter case of the QNAME over UDP ([draft-vixie-dnsext-dns0x20-00](https://datatracker.ietf.org/doc/html/draft-vixie-dnsext-dns0x20-00)). Mismatching answers are treated as spoofing attempts and immediately retried over TCP.
 - EDNS(0) ([RFC 6891](https://datatracker.ietf.org/doc/html/rfc6891)), EDNS Client Subnet ([RFC 7871](https://datatracker.ietf.org/doc/html/rfc7871)) and Extended DNS Errors ([RFC 8914](https://datatracker.ietf.org/doc/html/rfc8914)).
@@ -116,7 +116,7 @@ ZenitiumDNS is a fork of [Technitium DNS Server](https://github.com/TechnitiumSo
 Ready-made Debian 13 packages for amd64 and arm64 are available under [Releases](https://github.com/DNSBunker/ZenitiumDNS/releases):
 
 ```
-sudo apt install ./zenitiumdns_15.5.1-8_amd64.deb
+sudo apt install ./zenitiumdns_15.5.1-9_amd64.deb
 ```
 
 The container image for amd64 and arm64 runs with Podman and Docker, see [Container image](docs/Container.md):

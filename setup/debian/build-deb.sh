@@ -10,11 +10,14 @@ outDir="$scriptDir/dist"
 revision="1"
 maintainer="ZenitiumDNS contributors <zenitiumdns@localhost>"
 withApps="yes"
+withMsquic="yes"
 readyToRun="true"
+msquicVersion="2.6.1"
+msquicCacheDir="${XDG_CACHE_HOME:-$HOME/.cache}/zenitiumdns-build"
 
 usage()
 {
-    echo "Aufruf: $0 [--arch amd64|arm64] [--output ORDNER] [--revision N] [--maintainer 'Name <E-Mail>'] [--no-apps] [--no-ready-to-run]"
+    echo "Aufruf: $0 [--arch amd64|arm64] [--output ORDNER] [--revision N] [--maintainer 'Name <E-Mail>'] [--no-apps] [--no-msquic] [--no-ready-to-run]"
 }
 
 fail()
@@ -31,6 +34,7 @@ do
         --revision) revision="${2:?}"; shift 2 ;;
         --maintainer) maintainer="${2:?}"; shift 2 ;;
         --no-apps) withApps="no"; shift ;;
+        --no-msquic) withMsquic="no"; shift ;;
         --no-ready-to-run) readyToRun="false"; shift ;;
         -h|--help) usage; exit 0 ;;
         *) usage >&2; exit 1 ;;
@@ -47,8 +51,16 @@ then
 fi
 
 case "$arch" in
-    amd64) rid="linux-x64" ;;
-    arm64) rid="linux-arm64" ;;
+    amd64)
+        rid="linux-x64"
+        msquicTriplet="x86_64-linux-gnu"
+        msquicSha256="8c6fc9982f796b7e4fe554bef6f0cf0e0a6a237d5f00dafcf804a304530f810b"
+        ;;
+    arm64)
+        rid="linux-arm64"
+        msquicTriplet="aarch64-linux-gnu"
+        msquicSha256="092a89372863f19c8bbb540cb0db663a67a47219c5c291bd296697c32a09c219"
+        ;;
     *) fail "Architektur '$arch' wird nicht unterstützt" ;;
 esac
 
@@ -60,6 +72,14 @@ done
 if [ "$withApps" = "yes" ]
 then
     command -v zip >/dev/null 2>&1 || fail "'zip' wurde nicht gefunden, bitte installieren oder --no-apps verwenden"
+fi
+
+if [ "$withMsquic" = "yes" ]
+then
+    for tool in curl sha256sum
+    do
+        command -v "$tool" >/dev/null 2>&1 || fail "'$tool' wurde nicht gefunden, bitte installieren oder --no-msquic verwenden"
+    done
 fi
 
 version="$(sed -n 's:.*<ZenitiumDnsVersion>\(.*\)</ZenitiumDnsVersion>.*:\1:p' "$rootDir/Directory.Build.props")"
@@ -86,6 +106,38 @@ echo "Veröffentliche ZenitiumDNS $version für $rid ..."
 [ -x "$installDir/ZenitiumDns" ] || fail "Die Veröffentlichung hat keine ausführbare Datei 'ZenitiumDns' erzeugt"
 
 rm -f "$installDir/install.sh" "$installDir/uninstall.sh" "$installDir/start.sh" "$installDir/openrc.service" "$installDir/systemd.service"
+
+extraDepends=""
+suggests="libmsquic, dnsutils"
+bundledText="the .NET runtime"
+
+if [ "$withMsquic" = "yes" ]
+then
+    msquicDeb="$msquicCacheDir/libmsquic_${msquicVersion}_${arch}.deb"
+
+    if [ ! -f "$msquicDeb" ] || ! echo "$msquicSha256  $msquicDeb" | sha256sum -c --status
+    then
+        echo "Lade libmsquic $msquicVersion für $arch ..."
+        mkdir -p "$msquicCacheDir"
+        curl -fsSL --retry 3 -o "$msquicDeb.part" "https://packages.microsoft.com/debian/13/prod/pool/main/libm/libmsquic/libmsquic_${msquicVersion}_${arch}.deb"
+        mv "$msquicDeb.part" "$msquicDeb"
+    fi
+
+    echo "$msquicSha256  $msquicDeb" | sha256sum -c --status || fail "Die Prüfsumme von $msquicDeb stimmt nicht"
+
+    mkdir -p "$workDir/msquic"
+    (cd "$workDir/msquic" && ar x "$msquicDeb" && tar -xf data.tar.*)
+
+    msquicLibrary="$workDir/msquic/usr/lib/$msquicTriplet/libmsquic.so.$msquicVersion"
+    [ -f "$msquicLibrary" ] || fail "libmsquic.so.$msquicVersion wurde im Paket libmsquic nicht gefunden"
+
+    install -m 0644 "$msquicLibrary" "$installDir/libmsquic.so.2"
+
+    extraDepends=", libnuma1"
+    suggests="dnsutils"
+    bundledText="the .NET runtime and libmsquic for DNS-over-QUIC
+ and HTTP/3"
+fi
 
 if [ "$withApps" = "yes" ]
 then
@@ -130,9 +182,9 @@ Priority: optional
 Architecture: $arch
 Maintainer: $maintainer
 Installed-Size: $installedSize
-Depends: libc6 (>= 2.34), libgcc-s1, libstdc++6, libssl3t64 | libssl3, libicu76 | libicu78 | libicu74 | libicu72, ca-certificates, tzdata, passwd
+Depends: libc6 (>= 2.34), libgcc-s1, libstdc++6, libssl3t64 | libssl3, libicu76 | libicu78 | libicu74 | libicu72, ca-certificates, tzdata, passwd$extraDepends
 Recommends: iproute2
-Suggests: libmsquic, dnsutils
+Suggests: $suggests
 Provides: dns-server
 Homepage: https://github.com/DNSBunker/ZenitiumDNS
 Description: Recursive DNS resolver with web interface
@@ -140,7 +192,8 @@ Description: Recursive DNS resolver with web interface
  with a web interface in English and German. Features include:
   - recursive resolution via the root servers or forwarding over
     DNS-over-TLS, DNS-over-HTTPS and DNS-over-QUIC,
-  - DNSSEC validation with NSEC and NSEC3,
+  - DNSSEC validation with NSEC and NSEC3, including aggressive use
+    of cached NSEC and NSEC3 records according to RFC 8198,
   - local, verified copy of the root zone according to RFC 8806,
   - its own DoT, DoH and DoQ services and the PROXY protocol,
   - ad and malware blocking with block lists,
@@ -151,7 +204,7 @@ Description: Recursive DNS resolver with web interface
   - rate limiting, SSO, LDAP and two-factor authentication,
   - DNS apps for advanced filtering, DNS64 and log export.
  .
- The package contains the .NET runtime and needs no separate .NET
+ The package contains $bundledText and needs no separate .NET
  installation. The service runs as its own system user and gets a
  random admin password on the first installation. The interface
  language is chosen after the first sign-in. The bundled DNS apps are

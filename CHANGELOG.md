@@ -2,6 +2,25 @@
 
 [Deutsche Version](CHANGELOG.de.md)
 
+## ZenitiumDNS 15.5.1 (package 15.5.1-9)
+Released: 28 September 2026
+
+### New
+- Aggressive use of the DNSSEC-validated cache (RFC 8198): the resolver keeps validated NSEC and NSEC3 records of signed zones and answers queries for names and types that do not exist there itself with `NXDOMAIN` or `NODATA`, without asking the authoritative servers again. This speeds up negative answers and takes the load of attacks with random subdomains (random subdomain or water torture attacks) off the resolver and the attacked zone. Synthesized answers carry Extended DNS Error 29 (Synthesized). With the DO bit they contain the SOA, the NSEC or NSEC3 records that prove the answer and their signatures, so validating clients can check them; without the DO bit only the SOA. The option is under Settings > Resolver > DNSSEC, is switched on by default and only works with DNSSEC validation enabled.
+- Nothing is synthesized for NSEC3 ranges with opt-out, names covered by a wildcard, names below delegations and DNAME records, names at or below conditional forwarder zones and queries resolved through conditional forwarders (including the Advanced Forwarding app), so split-horizon setups keep working. NSEC3 records with more than 50 iterations are not used. The TTL of a synthesized answer is the lowest of the TTLs of the records used, the SOA minimum and the maximum negative TTL of the cache (RFC 9077). Up to 50,000 NSEC and NSEC3 records are kept, at most 4,096 per zone; they stay in memory only and are not written to `cache.bin`. Flushing the cache or deleting a cache zone also removes them.
+- Debian package: `libmsquic` 2.6.1 from Microsoft's Debian 13 repository is included as `/opt/zenitiumdns/libmsquic.so.2`, so DNS-over-QUIC and DNS-over-HTTPS with HTTP/3 work without adding Microsoft's package repository. The server loads this copy before a `libmsquic` installed on the system. The package now depends on `libnuma1`. `build-deb.sh` downloads the library once, checks its SHA-256 checksum and caches it in `~/.cache/zenitiumdns-build`; `--no-msquic` builds a package without it.
+
+### Measurements
+Test network with signed zones (Knot DNS as authoritative server for the root, a TLD with NSEC3 opt-out and zones with NSEC and NSEC3, all on one machine), 20,000 random names below a signed zone at 2,000 queries/s:
+- Without aggressive use: every name went to the authoritative server (20,000 queries), about 3.5 ms CPU time per query, 99th percentile of the response time 8 to 11 ms.
+- With aggressive use and an empty cache: 30 to 48 queries to the authoritative server in total, about 0.1 ms CPU time per query, 99th percentile 0.6 to 0.7 ms.
+- 35 functional tests passed: `NXDOMAIN` and `NODATA` from NSEC and NSEC3, empty non-terminals, wildcards, CNAME, DS at signed and unsigned delegations, names in unsigned subzones, NSEC3 opt-out, a conditional forwarder zone for a name that does not exist in the public zone, switching the option off and on, and validation of synthesized answers with `delv`.
+- DNS-over-QUIC with the bundled library: `kdig +quic` gets its answer over QUICv1 with TLS 1.3; without the library DoQ cannot be switched on.
+
+### Other changes
+- DNS settings file format version 14. Older versions of ZenitiumDNS cannot read it. Existing settings are taken over, with the new option switched on.
+- Supported RFCs: RFC 8198 and RFC 9077 added.
+
 ## ZenitiumDNS 15.5.1 (package 15.5.1-8)
 Released: 28 September 2026
 

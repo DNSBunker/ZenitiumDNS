@@ -1542,6 +1542,10 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
                                             <label><input id="chkDnssecPostQuantumDowngradeProtection" type="checkbox" checked> Post-Quanten-Signaturen verbindlich machen</label>
                                         </div>
                                         <div class="option-help">Unterstützt werden auch post-quanten-sichere Signaturen mit ML-DSA-44 (Algorithmus 18). Kündigt die Elternzone per DS-Eintrag ML-DSA-44 an, muss die Zone über ML-DSA-44 gültig signiert sein; eine zusätzliche klassische Signatur allein genügt dann nicht mehr. Das verhindert, dass ein Angreifer mit einem gebrochenen RSA- oder ECDSA-Schlüssel die stärkere Signatur umgeht.</div>
+                                        <div class="checkbox">
+                                            <label><input id="chkDnssecAggressiveNsec" type="checkbox" checked> NSEC-Nachweise aggressiv nutzen (RFC 8198)</label>
+                                        </div>
+                                        <div class="option-help">Der Resolver merkt sich validierte NSEC- und NSEC3-Einträge signierter Zonen und beantwortet damit Anfragen nach Namen oder Typen, die es dort nicht gibt, selbst mit <code>NXDOMAIN</code> bzw. <code>NODATA</code>, ohne die autoritativen Server erneut zu fragen. Das beschleunigt negative Antworten und bremst Angriffe mit zufälligen Subdomains aus. Solche Antworten tragen den Extended DNS Error 29 (Synthesized). NSEC3 mit Opt-out, Wildcards und Namen unter Weiterleitungszonen sind ausgenommen. Wirkt nur bei aktiver DNSSEC-Validierung.</div>
                                     </div>
                                 </div>
 

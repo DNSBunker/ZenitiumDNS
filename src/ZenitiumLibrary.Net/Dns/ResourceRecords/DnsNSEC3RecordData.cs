@@ -307,7 +307,7 @@ namespace ZenitiumLibrary.Net.Dns.ResourceRecords
             return string.Empty;
         }
 
-        internal static byte[] ComputeHashedOwnerName(string ownerName, DnssecNSEC3HashAlgorithm hashAlgorithm, ushort iterations, byte[] salt)
+        public static byte[] ComputeHashedOwnerName(string ownerName, DnssecNSEC3HashAlgorithm hashAlgorithm, ushort iterations, byte[] salt)
         {
             switch (hashAlgorithm)
             {

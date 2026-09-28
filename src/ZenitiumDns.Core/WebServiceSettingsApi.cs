@@ -188,6 +188,7 @@ namespace ZenitiumDns.Core
 
                 jsonWriter.WriteBoolean("dnssecValidation", _dnsWebService._dnsServer.DnssecValidation);
                 jsonWriter.WriteBoolean("dnssecPostQuantumDowngradeProtection", _dnsWebService._dnsServer.DnssecPostQuantumDowngradeProtection);
+                jsonWriter.WriteBoolean("dnssecAggressiveNsec", _dnsWebService._dnsServer.CacheZoneManager.AggressiveNsec);
 
                 jsonWriter.WriteBoolean("eDnsClientSubnet", _dnsWebService._dnsServer.EDnsClientSubnet);
                 jsonWriter.WriteNumber("eDnsClientSubnetIPv4PrefixLength", _dnsWebService._dnsServer.EDnsClientSubnetIPv4PrefixLength);
@@ -719,6 +720,9 @@ namespace ZenitiumDns.Core
 
                         if (request.TryGetQueryOrForm("dnssecPostQuantumDowngradeProtection", bool.Parse, out bool dnssecPostQuantumDowngradeProtection))
                             _dnsWebService._dnsServer.DnssecPostQuantumDowngradeProtection = dnssecPostQuantumDowngradeProtection;
+
+                        if (request.TryGetQueryOrForm("dnssecAggressiveNsec", bool.Parse, out bool dnssecAggressiveNsec))
+                            _dnsWebService._dnsServer.CacheZoneManager.AggressiveNsec = dnssecAggressiveNsec;
 
                         if (request.TryGetQueryOrForm("dnssecValidation", bool.Parse, out bool dnssecValidation))
                         {

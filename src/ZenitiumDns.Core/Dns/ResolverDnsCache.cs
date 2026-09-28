@@ -37,16 +37,18 @@ namespace ZenitiumDns.Core.Dns
         readonly DnsServer _dnsServer;
         readonly bool _skipDnsAppAuthoritativeRequestHandlers;
         readonly bool _skipConditionalForwardingResolution;
+        readonly bool _aggressiveNsec;
 
         #endregion
 
         #region constructor
 
-        public ResolverDnsCache(DnsServer dnsServer, bool skipDnsAppAuthoritativeRequestHandlers, bool skipConditionalForwardingResolution = false)
+        public ResolverDnsCache(DnsServer dnsServer, bool skipDnsAppAuthoritativeRequestHandlers, bool skipConditionalForwardingResolution = false, bool aggressiveNsec = true)
         {
             _dnsServer = dnsServer;
             _skipDnsAppAuthoritativeRequestHandlers = skipDnsAppAuthoritativeRequestHandlers;
             _skipConditionalForwardingResolution = skipConditionalForwardingResolution;
+            _aggressiveNsec = aggressiveNsec;
         }
 
         #endregion
@@ -147,7 +149,7 @@ namespace ZenitiumDns.Core.Dns
                 advancedForwardingClientSubnet = requestECS.AdvancedForwardingClientSubnet;
             }
 
-            ResolverDnsCache dnsCache = new ResolverDnsCache(_dnsServer, _skipDnsAppAuthoritativeRequestHandlers, true);
+            ResolverDnsCache dnsCache = new ResolverDnsCache(_dnsServer, _skipDnsAppAuthoritativeRequestHandlers, true, false);
 
             return _dnsServer.PriorityConditionalForwarderResolveAsync(question, eDnsClientSubnet, advancedForwardingClientSubnet, dnsCache, _skipDnsAppAuthoritativeRequestHandlers, conditionalForwarders, new DnsClient.ResolverContext());
         }
@@ -198,7 +200,7 @@ namespace ZenitiumDns.Core.Dns
                     return authResponse;
             }
 
-            DnsDatagram cacheResponse = _dnsServer.CacheZoneManager.Query(request, serveStale, findClosestNameServers, resetExpiry);
+            DnsDatagram cacheResponse = _dnsServer.CacheZoneManager.Query(request, serveStale, findClosestNameServers, resetExpiry, _aggressiveNsec && ((authResponse is null) || (authResponse.Authority.Count == 0)));
             if (cacheResponse is not null)
             {
                 if ((cacheResponse.RCODE != DnsResponseCode.NoError) || (cacheResponse.Answer.Count > 0) || (cacheResponse.Authority.Count == 0) || cacheResponse.IsFirstAuthoritySOA())
@@ -235,6 +237,13 @@ namespace ZenitiumDns.Core.Dns
         {
             _dnsServer.CacheZoneManager.CacheResponse(response, isDnssecBadCache, zoneCut);
         }
+
+        #endregion
+
+        #region properties
+
+        public bool AggressiveNsec
+        { get { return _aggressiveNsec; } }
 
         #endregion
     }

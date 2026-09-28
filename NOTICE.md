@@ -17,6 +17,10 @@ The name "Technitium" is only used here to state the origin of this work. Zeniti
 
 The web interface contains the fonts **Red Hat Text**, **Red Hat Display** and **Red Hat Mono**, Copyright 2024 The Red Hat Project Authors (https://github.com/RedHatOfficial/RedHatFont). They are licensed under the SIL Open Font License 1.1, whose text is in `src/ZenitiumDns.Core/www/fonts/RedHatFont-OFL.txt`.
 
+## Bundled libraries
+
+The Debian package contains **MsQuic** 2.6.1 (`libmsquic.so.2`), Copyright (c) Microsoft Corporation (https://github.com/microsoft/msquic), licensed under the MIT license. The library contains **quictls**, a fork of OpenSSL, Copyright (c) The OpenSSL Project Authors (https://github.com/quictls/openssl), licensed under the Apache License 2.0.
+
 ## Changes
 
 The following changes were made in September 2026:

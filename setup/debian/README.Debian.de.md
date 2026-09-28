@@ -51,7 +51,9 @@ Nach einer Änderung `sudo systemctl restart zenitiumdns` ausführen.
 
 ## DNS-over-QUIC und HTTP/3
 
-DNS-over-QUIC und DNS-over-HTTPS mit HTTP/3 benötigen `libmsquic` aus dem Paket-Repository von Microsoft:
+Das Paket enthält `libmsquic` 2.6.1 aus dem Debian-13-Repository von Microsoft als `/opt/zenitiumdns/libmsquic.so.2`, DNS-over-QUIC und DNS-over-HTTPS mit HTTP/3 funktionieren also ohne weitere Pakete. Der Server lädt diese Kopie vor einer im System installierten `libmsquic`. Sie benötigt glibc 2.38 oder neuer und `libnuma1`, das vom Paket mitinstalliert wird.
+
+Ein mit `build-deb.sh --no-msquic` gebautes Paket enthält die Bibliothek nicht. Dafür `libmsquic` aus dem Paket-Repository von Microsoft installieren:
 
 ```
 wget https://packages.microsoft.com/config/debian/13/packages-microsoft-prod.deb
@@ -136,6 +138,7 @@ Optionen:
 | `--revision N` | Debian-Paketrevision, standardmäßig `1`. |
 | `--maintainer 'Name <E-Mail>'` | Wert des Feldes `Maintainer`. |
 | `--no-apps` | Die DNS-Apps nicht mitliefern. |
+| `--no-msquic` | `libmsquic` nicht mitliefern. Sonst lädt das Skript `libmsquic` 2.6.1 für die Zielarchitektur einmalig aus dem Debian-13-Repository von Microsoft, prüft die SHA-256-Prüfsumme und legt es in `~/.cache/zenitiumdns-build` ab. |
 | `--no-ready-to-run` | ReadyToRun-Vorkompilierung abschalten (kleineres Paket, langsamerer Start). |
 
 Liegt `dotnet` nicht im `PATH`, den Pfad über die Umgebungsvariable `DOTNET` angeben.

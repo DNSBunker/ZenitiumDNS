@@ -33,8 +33,8 @@ namespace ZenitiumDns.Core.Dns
 
         #region constructor
 
-        public ResolverPrefetchDnsCache(DnsServer dnsServer, bool skipDnsAppAuthoritativeRequestHandlers, DnsQuestionRecord prefetchQuestion)
-            : base(dnsServer, skipDnsAppAuthoritativeRequestHandlers)
+        public ResolverPrefetchDnsCache(DnsServer dnsServer, bool skipDnsAppAuthoritativeRequestHandlers, DnsQuestionRecord prefetchQuestion, bool aggressiveNsec = true)
+            : base(dnsServer, skipDnsAppAuthoritativeRequestHandlers, false, aggressiveNsec)
         {
             _prefetchQuestion = prefetchQuestion;
         }

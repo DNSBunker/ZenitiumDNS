@@ -54,6 +54,7 @@ The following list contains the RFCs that ZenitiumDNS implements.
 | RFC 7858 | Specification for DNS over Transport Layer Security (TLS)
 | RFC 8080 | Edwards-Curve Digital Security Algorithm (EdDSA) for DNSSEC
 | RFC 8109 | Initializing a DNS Resolver with Priming Queries
+| RFC 8198 | Aggressive Use of DNSSEC-Validated Cache
 | RFC 8375 | Special-Use Domain 'home.arpa.'
 | RFC 8467 | Padding Policies for Extension Mechanisms for DNS (EDNS(0))
 | RFC 8484 | DNS Queries over HTTPS (DoH)
@@ -62,6 +63,7 @@ The following list contains the RFCs that ZenitiumDNS implements.
 | RFC 8806 | Running a Root Server Local to a Resolver
 | RFC 8914 | Extended DNS Errors
 | RFC 8976 | Message Digest for DNS Zones
+| RFC 9077 | NSEC and NSEC3: TTLs and Aggressive Use
 | RFC 9156 | DNS Query Name Minimisation to Improve Privacy
 | RFC 9250 | DNS over Dedicated QUIC Connections 
 | RFC 9276 | Guidance for NSEC3 Parameter Settings

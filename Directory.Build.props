@@ -8,7 +8,7 @@
 		<Product>ZenitiumDNS</Product>
 		<Authors>ZenitiumDNS contributors, Shreyas Zare</Authors>
 		<ZenitiumDnsVersion>15.5.1</ZenitiumDnsVersion>
-		<ZenitiumDnsRevision>8</ZenitiumDnsRevision>
+		<ZenitiumDnsRevision>9</ZenitiumDnsRevision>
 		<TechnitiumVersion>15.5.1</TechnitiumVersion>
 	</PropertyGroup>
 

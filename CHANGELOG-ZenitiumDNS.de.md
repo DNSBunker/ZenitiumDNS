@@ -11,7 +11,7 @@ Dieses Dokument listet ausschließlich die Unterschiede zwischen dem Original-Bu
 | Name, Pfade, Dienst | Technitium, `/etc/dns`, Dienst `dns` | ZenitiumDNS, `/etc/zenitiumdns`, Dienst `zenitiumdns` |
 | Einsatzzweck | autoritativer und rekursiver DNS-Server, DHCP-Server, Clustering | öffentlicher rekursiver Resolver; autoritative Zonen, Zonentransfers, DHCP, Clustering und Windows-Komponenten entfernt |
 | Update-Prüfung und App-Store | fest auf Technitium-Server | Update-Prüfung gegen die GitHub-Releases von ZenitiumDNS mit Changelog, App-Store entfernt |
-| Installation unter Debian 13 | Skript lädt Binärdateien und .NET aus dem Internet | eigenständiges `.deb`-Paket mit eingebauter .NET-Laufzeit |
+| Installation unter Debian 13 | Skript lädt Binärdateien und .NET aus dem Internet | eigenständiges `.deb`-Paket mit eingebauter .NET-Laufzeit und `libmsquic` für DNS-over-QUIC |
 | Erstes Admin-Passwort | `admin` | zufällig erzeugt |
 | Sprache der Weboberfläche und Doku | Englisch | Deutsch oder Englisch, nach der Installation wählbar und jederzeit umstellbar |
 | CNAME-Ketten über viele Zonen (z. B. `www.bbc.com`, `x.com`) | `SERVFAIL` durch zu niedrige Resolver-Limits | werden vollständig aufgelöst |
@@ -25,6 +25,7 @@ Dieses Dokument listet ausschließlich die Unterschiede zwischen dem Original-Bu
 | Weboberfläche | Bootstrap-Standardoptik, feste Mindestbreite 970 px, Einstellungen in einer langen Seite je Tab | eigenes Design mit Seitenleiste und Messwertleiste, mobil nutzbar, thematische Einstellungsbereiche mit Erklärungen |
 | Anfragen vom Typ ANY, AXFR/IXFR, ohne RD-Flag, fremde Opcodes oder Klassen | werden verarbeitet | per Anfragefilter über UDP verworfen, über TCP/DoT/DoH/DoQ mit `REFUSED` abgewiesen |
 | DNSSEC mit ML-DSA-44 (Post-Quantum) | unbekannter Algorithmus, Zone gilt als unsigniert | wird validiert, mit Downgrade-Schutz |
+| Aggressive Nutzung von NSEC und NSEC3 (RFC 8198) | nicht vorhanden | `NXDOMAIN` und `NODATA` für signierte Zonen aus validierten NSEC/NSEC3-Einträgen im Cache, standardmäßig eingeschaltet; 20.000 zufällige Subdomains lösten 30 bis 48 statt 20.000 Upstream-Anfragen aus |
 | Mitgelieferte Apps | müssen einzeln installiert werden, sind danach sofort aktiv | vorinstalliert, standardmäßig deaktiviert, einzeln aktivierbar |
 | Container | Docker-Image und Compose-Datei | eigenes OCI-Image für amd64 und arm64 (Alpine Linux, unprivilegierter Benutzer, zufälliges Admin-Passwort), keine Compose-Datei |
 | Ratenbegrenzung | Durchschnitt der Anfragen pro Minute über ein Stichprobenfenster | Token-Bucket in Anfragen pro Sekunde mit Burst |
@@ -94,6 +95,7 @@ Funktionstests im isolierten Netz-Namespace mit nachgebauter DNS-Hierarchie:
 ### DNSSEC
 - Validierung von ML-DSA-44 (Algorithmus 18) und Schutz vor Downgrades auf klassische Algorithmen, wenn der DS-Datensatz einen Post-Quantum-Algorithmus ankündigt.
 - Der DNS-Client erklärt, warum die DNSSEC-Prüfung gegen diesen Server scheitert, wenn dessen Validierung ausgeschaltet ist.
+- Aggressive Nutzung des DNSSEC-validierten Caches (RFC 8198, RFC 9077): Validierte NSEC- und NSEC3-Einträge beantworten Anfragen nach nicht existierenden Namen und Typen in signierten Zonen mit `NXDOMAIN` bzw. `NODATA` und dem Extended DNS Error 29 (Synthesized). Ausgenommen sind NSEC3-Opt-out, Wildcards, Namen unterhalb von Delegationen und DNAME-Einträgen, Weiterleitungszonen und bedingte Weiterleitung. Schaltbar unter Einstellungen > Resolver > DNSSEC, standardmäßig eingeschaltet.
 
 ### Apps
 - Mitgelieferte Apps werden beim ersten Start deaktiviert installiert und bei Paket-Updates aktualisiert. Deinstallierte Apps bleiben entfernt.
@@ -187,13 +189,14 @@ Funktionstests im isolierten Netz-Namespace mit nachgebauter DNS-Hierarchie:
   - gehärteter systemd-Dienst,
   - zufälliges Admin-Passwort,
   - automatische Anpassung von systemd-resolved,
-  - mitgelieferte DNS-Apps.
+  - mitgelieferte DNS-Apps,
+  - mitgeliefertes `libmsquic` für DNS-over-QUIC und HTTP/3.
 - Docker-Image, Compose-Datei und die Umgebungsvariablen zur Erstkonfiguration des Originals wurden entfernt; ein eigenes Container-Image (`Containerfile`, `ghcr.io/dnsbunker/zenitiumdns`) ersetzt das Image.
 - Update-Prüfung und App-Store sind standardmäßig deaktiviert: `DNS_SERVER_UPDATE_CHECK_URL`, `DNS_SERVER_APP_STORE_URL`.
 
 ## Kompatibilität
 
-- **Konfiguration:** Einstellungen, Benutzer, Conditional-Forwarder-Zonen, Blocklisten, erlaubte und blockierte Domains, Statistiken und Sicherungen von Technitium DNS Server 15.5 können übernommen werden. ZenitiumDNS speichert die DNS-Einstellungen im Format Version 10 und die Einstellungen der Weboberfläche im Format Version 5 und Zonendateien mit Zoneninformationen Version 15. Diese Dateien kann das Original nicht mehr lesen.
+- **Konfiguration:** Einstellungen, Benutzer, Conditional-Forwarder-Zonen, Blocklisten, erlaubte und blockierte Domains, Statistiken und Sicherungen von Technitium DNS Server 15.5 können übernommen werden. ZenitiumDNS speichert die DNS-Einstellungen im Format Version 14 und die Einstellungen der Weboberfläche im Format Version 6 und Zonendateien mit Zoneninformationen Version 15. Diese Dateien kann das Original nicht mehr lesen.
 - **Entfernte Zonentypen:** Zonendateien von Primary-, Secondary-, Stub-, Secondary-Forwarder- und Catalog-Zonen bleiben im Ordner `zones` liegen, werden aber beim Start übersprungen und protokolliert. Sie lassen sich bei Bedarf mit dem Original weiterverwenden.
 - **DHCP und Cluster:** DHCP-Bereichsdateien und die Cluster-Konfiguration werden ignoriert. Berechtigungen für den Bereich DHCP werden beim Laden verworfen. Eine vorhandene Gruppe „DHCP Administrators“ bleibt als gewöhnliche Gruppe ohne Sonderrechte bestehen und kann gelöscht werden.
 - **HTTP-API:** Die API dient nur noch der Weboberfläche. Die Aufrufe für DNSSEC, Catalog-Zonen, Zonenkonvertierung, Resync, TSIG, DHCP und Clustering, der App-Store, das Installieren und Deinstallieren von Apps, API-Tokens und die Prometheus-Metriken sowie der Parameter `node` entfallen. `api/zones/create` akzeptiert nur noch den Typ `Forwarder`.

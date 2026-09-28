@@ -56,7 +56,7 @@ ZenitiumDNS ist ein Fork von [Technitium DNS Server](https://github.com/Techniti
 - Öffentliche Resolver wie Cloudflare, Google, Quad9 oder AdGuard lassen sich über [DNS-over-TLS](https://www.rfc-editor.org/rfc/rfc7858.html), [DNS-over-HTTPS](https://www.rfc-editor.org/rfc/rfc8484.html) oder [DNS-over-QUIC](https://www.ietf.org/rfc/rfc9250.html) als Forwarder nutzen.
 - Latenzbasierte Auswahl der Nameserver mit paralleler Abfrage. Antwortzeit und Fehlerrate werden getrennt für IPv4 und IPv6 geführt.
 - Automatischer IPv6-Rückfall bei gestörter IPv6-Anbindung mit Hintergrundprüfung und manueller Prüfung in der Weboberfläche.
-- DNSSEC-Validierung mit RSA, ECDSA, EdDSA und ML-DSA-44 für rekursiven Resolver, Forwarder und Weiterleitungszonen, mit NSEC und NSEC3.
+- DNSSEC-Validierung mit RSA, ECDSA, EdDSA und ML-DSA-44 für rekursiven Resolver, Forwarder und Weiterleitungszonen, mit NSEC und NSEC3. Validierte NSEC- und NSEC3-Einträge werden nach RFC 8198 aggressiv genutzt: Anfragen nach Namen und Typen, die es in signierten Zonen nicht gibt, beantwortet der Cache selbst, was auch Angriffe mit zufälligen Subdomains ausbremst.
 - QNAME-Minimierung ([RFC 9156](https://www.rfc-editor.org/rfc/rfc9156.html)).
 - Zufällige Groß-/Kleinschreibung des QNAME bei UDP ([draft-vixie-dnsext-dns0x20-00](https://datatracker.ietf.org/doc/html/draft-vixie-dnsext-dns0x20-00)). Abweichende Antworten gelten als Spoofing-Versuch und werden sofort über TCP wiederholt.
 - EDNS(0) ([RFC 6891](https://datatracker.ietf.org/doc/html/rfc6891)), EDNS Client Subnet ([RFC 7871](https://datatracker.ietf.org/doc/html/rfc7871)) und Extended DNS Errors ([RFC 8914](https://datatracker.ietf.org/doc/html/rfc8914)).
@@ -116,7 +116,7 @@ ZenitiumDNS ist ein Fork von [Technitium DNS Server](https://github.com/Techniti
 Fertige Debian-13-Pakete für amd64 und arm64 gibt es unter [Releases](https://github.com/DNSBunker/ZenitiumDNS/releases):
 
 ```
-sudo apt install ./zenitiumdns_15.5.1-8_amd64.deb
+sudo apt install ./zenitiumdns_15.5.1-9_amd64.deb
 ```
 
 Das Container-Image für amd64 und arm64 läuft mit Podman und Docker, siehe [Container-Image](docs/Container.de.md):

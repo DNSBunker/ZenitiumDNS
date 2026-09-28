@@ -11,7 +11,7 @@ This document only lists the differences between the original build **Technitium
 | Name, paths, service | Technitium, `/etc/dns`, service `dns` | ZenitiumDNS, `/etc/zenitiumdns`, service `zenitiumdns` |
 | Purpose | authoritative and recursive DNS server, DHCP server, clustering | public recursive resolver; authoritative zones, zone transfers, DHCP, clustering and Windows components removed |
 | Update check and app store | hard-wired to Technitium servers | update check against the GitHub releases of ZenitiumDNS with changelog, app store removed |
-| Installation on Debian 13 | script downloads binaries and .NET from the internet | self-contained `.deb` package with built-in .NET runtime |
+| Installation on Debian 13 | script downloads binaries and .NET from the internet | self-contained `.deb` package with built-in .NET runtime and `libmsquic` for DNS-over-QUIC |
 | Initial admin password | `admin` | randomly generated |
 | Language of web interface and docs | English | German or English, selectable after installation and switchable at any time |
 | CNAME chains across many zones (e.g. `www.bbc.com`, `x.com`) | `SERVFAIL` because of resolver limits that are too low | resolved completely |
@@ -25,6 +25,7 @@ This document only lists the differences between the original build **Technitium
 | Web interface | Bootstrap default look, fixed minimum width of 970 px, settings in one long page per tab | own design with sidebar and readout band, usable on mobile, settings in topic sections with explanations |
 | Queries of type ANY, AXFR/IXFR, without RD flag, foreign opcodes or classes | are processed | dropped over UDP by the request filter, refused with `REFUSED` over TCP/DoT/DoH/DoQ |
 | DNSSEC with ML-DSA-44 (post-quantum) | unknown algorithm, zone is treated as unsigned | validated, with downgrade protection |
+| Aggressive use of NSEC and NSEC3 (RFC 8198) | not available | `NXDOMAIN` and `NODATA` for signed zones from validated NSEC/NSEC3 records in the cache, switched on by default; 20,000 random subdomains caused 30 to 48 instead of 20,000 upstream queries |
 | Bundled apps | must be installed one by one and are active right away | preinstalled, disabled by default, can be enabled individually |
 | Container | Docker image and compose file | own OCI image for amd64 and arm64 (Alpine Linux, unprivileged user, random admin password), no compose file |
 | Rate limiting | average queries per minute over a sampling window | token bucket in queries per second with burst |
@@ -94,6 +95,7 @@ Functional tests in an isolated network namespace with a simulated DNS hierarchy
 ### DNSSEC
 - Validation of ML-DSA-44 (algorithm 18) and protection against downgrades to classic algorithms when the DS record set announces a post-quantum algorithm.
 - The DNS client explains why the DNSSEC check against this server fails when its validation is turned off.
+- Aggressive use of the DNSSEC-validated cache (RFC 8198, RFC 9077): validated NSEC and NSEC3 records answer queries for nonexistent names and types in signed zones with `NXDOMAIN` or `NODATA` and Extended DNS Error 29 (Synthesized). Excluded are NSEC3 opt-out, wildcards, names below delegations and DNAME records, forwarder zones and conditional forwarding. Switchable under Settings > Resolver > DNSSEC, on by default.
 
 ### Apps
 - Bundled apps are installed disabled on the first start and updated on package updates. Uninstalled apps stay removed.
@@ -187,13 +189,14 @@ Functional tests in an isolated network namespace with a simulated DNS hierarchy
   - hardened systemd service,
   - random admin password,
   - automatic adjustment of systemd-resolved,
-  - bundled DNS apps.
+  - bundled DNS apps,
+  - bundled `libmsquic` for DNS-over-QUIC and HTTP/3.
 - The Docker image, compose file and the environment variables for initial configuration of the original were removed; an own container image (`Containerfile`, `ghcr.io/dnsbunker/zenitiumdns`) replaces the image.
 - Update check and app store are disabled by default: `DNS_SERVER_UPDATE_CHECK_URL`, `DNS_SERVER_APP_STORE_URL`.
 
 ## Compatibility
 
-- **Configuration:** Settings, users, conditional forwarder zones, block lists, allowed and blocked domains, statistics and backups of Technitium DNS Server 15.5 can be taken over. ZenitiumDNS saves the DNS settings in format version 10, the web interface settings in format version 5 and zone files with zone information version 15. The original can no longer read these files.
+- **Configuration:** Settings, users, conditional forwarder zones, block lists, allowed and blocked domains, statistics and backups of Technitium DNS Server 15.5 can be taken over. ZenitiumDNS saves the DNS settings in format version 14, the web interface settings in format version 6 and zone files with zone information version 15. The original can no longer read these files.
 - **Removed zone types:** Zone files of primary, secondary, stub, secondary forwarder and catalog zones stay in the `zones` folder but are skipped and logged at startup. They can be used further with the original if needed.
 - **DHCP and cluster:** DHCP scope files and the cluster configuration are ignored. Permissions for the DHCP section are discarded on load. An existing "DHCP Administrators" group remains as an ordinary group without special rights and can be deleted.
 - **HTTP API:** The API only serves the web interface. The calls for DNSSEC, catalog zones, zone conversion, resync, TSIG, DHCP and clustering, the app store, installing and uninstalling apps, API tokens and the Prometheus metrics as well as the `node` parameter are gone. `api/zones/create` only accepts the type `Forwarder`.

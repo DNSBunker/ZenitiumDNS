@@ -126,6 +126,9 @@ namespace ZenitiumLibrary.Net.Dns
             }
         }
 
+        protected virtual void CacheDenialOfExistence(DnsDatagram response, NetworkAddress eDnsClientSubnet)
+        { }
+
         protected static DnsResourceRecordInfo GetRecordInfo(DnsResourceRecord record)
         {
             if (record.Tag is not DnsResourceRecordInfo recordInfo)
@@ -607,6 +610,8 @@ namespace ZenitiumLibrary.Net.Dns
 
                     return;
             }
+
+            CacheDenialOfExistence(response, eDnsClientSubnet);
 
             {
                 foreach (DnsResourceRecord rrsigRecord in response.Answer)
