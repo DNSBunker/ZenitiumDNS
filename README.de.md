@@ -108,6 +108,7 @@ ZenitiumDNS ist ein Fork von [Technitium DNS Server](https://github.com/Techniti
 | `src/ZenitiumLibrary*` | Gemeinsame Bibliothek für DNS-Protokoll, Netzwerk, Ein-/Ausgabe und Sicherheit. |
 | `apps` | Mitgelieferte DNS-Apps. |
 | `setup/debian` | Build-Skript für das Debian-Paket, systemd-Dienst und Maintainer-Skripte. |
+| `Containerfile`, `setup/container` | Container-Image und sein Startskript; `.github/workflows/container.yml` baut das Image für jedes Release. |
 | `tools` | Hilfsskripte, etwa `i18n.py` zum Prüfen des englischen Wörterbuchs der Weboberfläche. |
 | `docs` | Build-Anleitung, API-Dokumentation und Übersicht der Umgebungsvariablen. |
 
@@ -115,7 +116,13 @@ ZenitiumDNS ist ein Fork von [Technitium DNS Server](https://github.com/Techniti
 Fertige Debian-13-Pakete für amd64 und arm64 gibt es unter [Releases](https://github.com/DNSBunker/ZenitiumDNS/releases):
 
 ```
-sudo apt install ./zenitiumdns_15.5.1-6_amd64.deb
+sudo apt install ./zenitiumdns_15.5.1-7_amd64.deb
+```
+
+Das Container-Image für amd64 und arm64 läuft mit Podman und Docker, siehe [Container-Image](docs/Container.de.md):
+
+```
+podman run -d --name zenitiumdns -p 53:53/udp -p 53:53/tcp -p 5380:5380/tcp -v zenitiumdns-config:/etc/zenitiumdns ghcr.io/dnsbunker/zenitiumdns:latest
 ```
 
 Server mit dem [.NET 10 SDK](https://dotnet.microsoft.com/download) bauen und starten:
@@ -148,6 +155,7 @@ fehlende Übersetzungen an und prüfen, ob Markup und Platzhalter übereinstimme
 - [Quellcode und Releases](https://github.com/DNSBunker/ZenitiumDNS)
 - [Build-Anleitung](docs/BUILD.de.md)
 - [Debian-Paket](setup/debian/README.Debian.de.md)
+- [Container-Image](docs/Container.de.md)
 - [Umgebungsvariablen](docs/EnvironmentVariables.de.md)
 - [Unterstützte RFCs](docs/SupportedRFCs.de.md)
 - [Änderungsprotokoll](CHANGELOG.de.md)

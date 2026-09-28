@@ -108,6 +108,7 @@ ZenitiumDNS is a fork of [Technitium DNS Server](https://github.com/TechnitiumSo
 | `src/ZenitiumLibrary*` | Shared library for the DNS protocol, networking, I/O and security. |
 | `apps` | Bundled DNS apps. |
 | `setup/debian` | Build script for the Debian package, systemd service and maintainer scripts. |
+| `Containerfile`, `setup/container` | Container image and its entry point; `.github/workflows/container.yml` builds the image for every release. |
 | `tools` | Helper scripts, e.g. `i18n.py` to check the English dictionary of the web interface. |
 | `docs` | Build instructions, API documentation and overview of the environment variables. |
 
@@ -115,7 +116,13 @@ ZenitiumDNS is a fork of [Technitium DNS Server](https://github.com/TechnitiumSo
 Ready-made Debian 13 packages for amd64 and arm64 are available under [Releases](https://github.com/DNSBunker/ZenitiumDNS/releases):
 
 ```
-sudo apt install ./zenitiumdns_15.5.1-6_amd64.deb
+sudo apt install ./zenitiumdns_15.5.1-7_amd64.deb
+```
+
+The container image for amd64 and arm64 runs with Podman and Docker, see [Container image](docs/Container.md):
+
+```
+podman run -d --name zenitiumdns -p 53:53/udp -p 53:53/tcp -p 5380:5380/tcp -v zenitiumdns-config:/etc/zenitiumdns ghcr.io/dnsbunker/zenitiumdns:latest
 ```
 
 Build and start the server with the [.NET 10 SDK](https://dotnet.microsoft.com/download):
@@ -148,6 +155,7 @@ to list missing translations and to verify that markup and placeholders match. `
 - [Source code and releases](https://github.com/DNSBunker/ZenitiumDNS)
 - [Build instructions](docs/BUILD.md)
 - [Debian package](setup/debian/README.Debian.md)
+- [Container image](docs/Container.md)
 - [Environment variables](docs/EnvironmentVariables.md)
 - [Supported RFCs](docs/SupportedRFCs.md)
 - [Changelog](CHANGELOG.md)

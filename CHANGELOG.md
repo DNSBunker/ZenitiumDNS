@@ -22,6 +22,7 @@ Released: 28 September 2026
 - The Debian package requires glibc 2.34 or later, which the SQLite library of the query log app needs (upstream issue #2178), and also installs the German README, NOTICE and changelog.
 - All documents are available in English and German: English under the usual file name, German as `.de.md`. New are the English CHANGELOG, CHANGELOG-ZenitiumDNS and NOTICE and German versions of all app READMEs. The app READMEs describe installation without the app store, and the PostgreSQL example uses the PostgreSQL port.
 - README.Debian explains where local block lists (`file://`) must be stored so that the hardened service can read them, and how memory can be reduced further.
+- Container image for amd64 and arm64 (`ghcr.io/dnsbunker/zenitiumdns`): based on Alpine Linux, runs as an unprivileged user and creates a random admin password on the first start. GitHub Actions builds it for every release from the `Containerfile` in the repository. Details in [docs/Container.md](docs/Container.md) (GitHub issue #1).
 - The upstream issues of Technitium DNS Server up to 27 September 2026 were reviewed: #2175 is fixed as described, #2162, #2173 and #2174 were already fixed, and #2178 is covered by the package dependency; the remaining reports concern features that ZenitiumDNS does not contain or the reporter's network.
 
 ## ZenitiumDNS 15.5.1 (package 15.5.1-6)

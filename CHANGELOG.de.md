@@ -22,6 +22,7 @@ Veröffentlicht: 28. September 2026
 - Das Debian-Paket setzt glibc 2.34 oder neuer voraus, das die SQLite-Bibliothek der Anfrageprotokoll-App braucht (Upstream-Issue #2178), und installiert zusätzlich die deutsche README, NOTICE und das deutsche Änderungsprotokoll.
 - Alle Dokumente gibt es auf Englisch und Deutsch: Englisch unter dem üblichen Dateinamen, Deutsch als `.de.md`. Neu sind englische Fassungen von CHANGELOG, CHANGELOG-ZenitiumDNS und NOTICE sowie deutsche Fassungen aller App-READMEs. Die App-READMEs beschreiben die Installation ohne App-Store, das PostgreSQL-Beispiel nutzt den PostgreSQL-Port.
 - README.Debian erklärt, wo lokale Blocklisten (`file://`) liegen müssen, damit der gehärtete Dienst sie lesen kann, und wie sich der Speicherbedarf weiter senken lässt.
+- Container-Image für amd64 und arm64 (`ghcr.io/dnsbunker/zenitiumdns`): auf Basis von Alpine Linux, läuft als unprivilegierter Benutzer und erzeugt beim ersten Start ein zufälliges Admin-Passwort. GitHub Actions baut es für jedes Release aus dem `Containerfile` im Repository. Details in [docs/Container.de.md](docs/Container.de.md) (GitHub-Issue #1).
 - Die Upstream-Issues von Technitium DNS Server bis zum 27. September 2026 wurden geprüft: #2175 ist wie beschrieben behoben, #2162, #2173 und #2174 waren schon behoben, #2178 deckt die Paketabhängigkeit ab; die übrigen Meldungen betreffen Funktionen, die ZenitiumDNS nicht enthält, oder das Netz der Meldenden.
 
 ## ZenitiumDNS 15.5.1 (Paket 15.5.1-6)

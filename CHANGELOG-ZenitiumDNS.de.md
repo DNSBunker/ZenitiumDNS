@@ -26,7 +26,7 @@ Dieses Dokument listet ausschließlich die Unterschiede zwischen dem Original-Bu
 | Anfragen vom Typ ANY, AXFR/IXFR, ohne RD-Flag, fremde Opcodes oder Klassen | werden verarbeitet | per Anfragefilter über UDP verworfen, über TCP/DoT/DoH/DoQ mit `REFUSED` abgewiesen |
 | DNSSEC mit ML-DSA-44 (Post-Quantum) | unbekannter Algorithmus, Zone gilt als unsigniert | wird validiert, mit Downgrade-Schutz |
 | Mitgelieferte Apps | müssen einzeln installiert werden, sind danach sofort aktiv | vorinstalliert, standardmäßig deaktiviert, einzeln aktivierbar |
-| Docker | Image und Compose-Datei | entfernt |
+| Container | Docker-Image und Compose-Datei | eigenes OCI-Image für amd64 und arm64 (Alpine Linux, unprivilegierter Benutzer, zufälliges Admin-Passwort), keine Compose-Datei |
 | Ratenbegrenzung | Durchschnitt der Anfragen pro Minute über ein Stichprobenfenster | Token-Bucket in Anfragen pro Sekunde mit Burst |
 | Client-IP-Sperrlisten | nicht vorhanden | IPsum, Spamhaus DROP u. a., Verwerfen vor dem Auswerten der Anfrage |
 | TLS-Zertifikate | nur PKCS#12 (`.pfx`) | zusätzlich PEM (`fullchain.pem`, `privkey.pem`) |
@@ -188,7 +188,7 @@ Funktionstests im isolierten Netz-Namespace mit nachgebauter DNS-Hierarchie:
   - zufälliges Admin-Passwort,
   - automatische Anpassung von systemd-resolved,
   - mitgelieferte DNS-Apps.
-- Docker-Image, Compose-Datei und die Umgebungsvariablen zur Erstkonfiguration wurden entfernt.
+- Docker-Image, Compose-Datei und die Umgebungsvariablen zur Erstkonfiguration des Originals wurden entfernt; ein eigenes Container-Image (`Containerfile`, `ghcr.io/dnsbunker/zenitiumdns`) ersetzt das Image.
 - Update-Prüfung und App-Store sind standardmäßig deaktiviert: `DNS_SERVER_UPDATE_CHECK_URL`, `DNS_SERVER_APP_STORE_URL`.
 
 ## Kompatibilität

@@ -1,0 +1,6 @@
+.git
+.github
+**/bin
+**/obj
+setup/debian/dist
+*.log

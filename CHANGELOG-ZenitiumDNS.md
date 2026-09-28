@@ -26,7 +26,7 @@ This document only lists the differences between the original build **Technitium
 | Queries of type ANY, AXFR/IXFR, without RD flag, foreign opcodes or classes | are processed | dropped over UDP by the request filter, refused with `REFUSED` over TCP/DoT/DoH/DoQ |
 | DNSSEC with ML-DSA-44 (post-quantum) | unknown algorithm, zone is treated as unsigned | validated, with downgrade protection |
 | Bundled apps | must be installed one by one and are active right away | preinstalled, disabled by default, can be enabled individually |
-| Docker | image and compose file | removed |
+| Container | Docker image and compose file | own OCI image for amd64 and arm64 (Alpine Linux, unprivileged user, random admin password), no compose file |
 | Rate limiting | average queries per minute over a sampling window | token bucket in queries per second with burst |
 | Client IP block lists | not available | IPsum, Spamhaus DROP and others, dropped before the query is evaluated |
 | TLS certificates | PKCS#12 (`.pfx`) only | PEM as well (`fullchain.pem`, `privkey.pem`) |
@@ -188,7 +188,7 @@ Functional tests in an isolated network namespace with a simulated DNS hierarchy
   - random admin password,
   - automatic adjustment of systemd-resolved,
   - bundled DNS apps.
-- Docker image, compose file and the environment variables for initial configuration were removed.
+- The Docker image, compose file and the environment variables for initial configuration of the original were removed; an own container image (`Containerfile`, `ghcr.io/dnsbunker/zenitiumdns`) replaces the image.
 - Update check and app store are disabled by default: `DNS_SERVER_UPDATE_CHECK_URL`, `DNS_SERVER_APP_STORE_URL`.
 
 ## Compatibility

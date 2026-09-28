@@ -31,6 +31,6 @@ The following changes were made in September 2026:
 - Statistics and monitoring were extended with response times (median, percentiles, cache/recursive), live key figures and additional metrics. The web interface was reorganized and extended with settings for IPv6 fallback, UDP receive threads and a pipelining limit.
 - The web interface and documentation were translated into German. In addition, there is a complete English version; the language can be chosen after installation.
 - The web interface got a new design. The GIF loading animations and the stylesheets for the dark and amber modes were replaced by a shared stylesheet.
-- Added were a request filter for public operation, DNSSEC validation of ML-DSA-44 and enabling and disabling individual apps. The Docker image was removed.
+- Added were a request filter for public operation, DNSSEC validation of ML-DSA-44 and enabling and disabling individual apps. The original Docker image was replaced by an own container image based on Alpine Linux.
 - Comments were removed from the source code. The copyright and license headers of the source files were kept.
 - Numerous bugs, security issues and performance bottlenecks were fixed. The complete list is in [CHANGELOG-ZenitiumDNS.md](CHANGELOG-ZenitiumDNS.md).
