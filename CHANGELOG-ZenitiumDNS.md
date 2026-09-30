@@ -2,7 +2,7 @@
 
 [Deutsche Version](CHANGELOG-ZenitiumDNS.de.md)
 
-This document only lists the differences between the original build **Technitium DNS Server 15.5** (released on 19 September 2026) and the build **ZenitiumDNS 15.5.1** (as of 28 September 2026). ZenitiumDNS 15.5.1 also contains all fixes from Technitium DNS Server 15.5.1; which of them ZenitiumDNS already had before is listed at the end. The complete version history is in [CHANGELOG.md](CHANGELOG.md).
+This document only lists the differences between the original build **Technitium DNS Server 15.5** (released on 19 September 2026) and the build **ZenitiumDNS 15.5.1** (as of 30 September 2026). ZenitiumDNS 15.5.1 also contains all fixes from Technitium DNS Server 15.5.1; which of them ZenitiumDNS already had before is listed at the end. The complete version history is in [CHANGELOG.md](CHANGELOG.md).
 
 ## Overview
 
@@ -51,6 +51,13 @@ This document only lists the differences between the original build **Technitium
 | Check of the system time | not available | self-test against the Date header of IANA and the NTP status of the kernel |
 | Prometheus metrics | basic counters under `api/dashboard/metrics/text`, access with API token | optional endpoint `/metrics` with ACL and bearer token, histograms, per protocol, type and response code, Extended DNS Errors, name server queries, process and runtime ([docs/Metrics.md](docs/Metrics.md)) |
 | API tokens | available | removed |
+| Block list formats | hosts files, plain domains, wildcard lists, Adblock domain rules | additionally the rule syntax of AdGuard Home and Adblock (exceptions, wildcards, regular expressions, `$important`, `$badfilter`, `$dnstype`, `$denyallow`, `$client`), Pi-hole regex lists and blocking by the IP address in the answer ([docs/BlockLists.md](docs/BlockLists.md)) |
+| Different lists per device | only via the Advanced Blocking app | client profiles by IP address, network or ClientID (DoH path, DoT/DoQ server name), with own lists, without default lists or without blocking |
+| DNS cookies (RFC 7873, RFC 9018) | not available | towards clients and name servers, clients with a valid cookie are let through by the rate limiting |
+| Name servers that mishandle QNAME minimization | resolution fails or times out | automatic fallback to the full name, zone remembered for one hour |
+| Operation without a cache (e.g. in front of Unbound) | not available | cache, prefetch, serve stale and local root zone can be switched off together |
+| Memory for 1.2 million cached names | about 1.5 GB of live objects | about 0.8 GB, optional memory limit that trims the cache |
+| systemd sandbox (`systemd-analyze security`) | 3.6 | 1.9 with a system call filter |
 
 ## Measurements
 
@@ -106,7 +113,10 @@ Functional tests in an isolated network namespace with a simulated DNS hierarchy
 - Rate limiting in queries per second (GCRA token bucket per subnet, adjustable burst), migration of existing QPM values.
 - Client block lists with automatic updates, dropping before parsing, closing of stream connections.
 - Custom blocking text with placeholders, custom TTL for negative caching; the SOA MINIMUM survives a restart.
-- Block list quick selection only with HaGeZi lists from the build mirror, half the memory for block lists, allocation-free lookups.
+- Block list quick selection only with HaGeZi lists (Adblock format) from the build mirror, half the memory for block lists, allocation-free lookups.
+- Rule syntax of AdGuard Home and Adblock, Pi-hole regex lists and IP rules for answers in block lists; status per list with counts, errors and actions.
+- Client profiles with ClientID over DoH, DoT and DoQ; one shared rule set filtered per query.
+- DNS cookies towards clients and name servers, `BADCOOKIE` and `FORMERR` for wrong or malformed cookies, cookie-verified clients bypass the UDP rate limiting within the TCP limit.
 - PEM certificates with a separate key, built-in DDR, self-test.
 - Resolver: handling of name servers that only answer one query per TCP connection; QNAME fallback on timeouts; downloads with the effective IPv6 mode.
 
@@ -147,6 +157,8 @@ Functional tests in an isolated network namespace with a simulated DNS hierarchy
 - **Garbage collection:** The original ran a blocking full garbage collection in the cache maintenance every minute (upstream issue #2174). ZenitiumDNS uses a background garbage collection there and when reloading statistics, block lists and the Advanced Forwarding app.
 - **Race condition:** When empty cache zones were removed, entries added at the same time could get lost and the entry counter could count up incorrectly.
 - **LRU eviction:** For A/AAAA records with several addresses, the last-used time was never updated. Popular entries were therefore evicted first when the cache was full.
+- **Memory per entry:** compact record table per name instead of a concurrent dictionary, shared name server data in the response metadata, exactly sized child arrays in the domain tree, no second raw copy of A, AAAA and RRSIG data; about half the memory per entry.
+- **Memory limit:** optional limit for the used memory; the cache maintenance removes the least recently used entries and compacts the heap after large cuts.
 
 ### Performance
 - Dedicated UDP receive threads (automatically at most 8 per socket, adjustable up to 64) answer cache hits without switching threads.
@@ -173,6 +185,9 @@ Functional tests in an isolated network namespace with a simulated DNS hierarchy
 - DNS-over-HTTPS via POST: requests over 65,535 bytes are rejected with 413 and read with a limit.
 - DNS messages with implausible record counts are dropped before parsing.
 - Values in inline handlers of the web interface are escaped for JavaScript.
+- systemd service with system call filter, restricted address families and `ProtectProc=invisible`; the initial admin password file is deleted automatically after the password was changed.
+- Content security policy without `unsafe-eval`, at most 1 MB per request without a valid session, HSTS with HTTPS redirection, `nosniff` and `Referrer-Policy`.
+- Container image with actions and base images pinned by hash, SBOM, provenance and cosign signature.
 
 ### Web API and web interface
 - The record APIs honor `zone=.` for the root zone.

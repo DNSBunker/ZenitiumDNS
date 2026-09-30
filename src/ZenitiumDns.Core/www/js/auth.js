@@ -226,6 +226,8 @@ function applySessionData(responseJSON) {
     document.title = sessionData.info.dnsServerDomain + " – ZenitiumDNS";
     setAboutVersionInfo(sessionData.info);
     $("#lblDnsServerDomain").text(sessionData.info.dnsServerDomain);
+
+    loadUserPreferences();
 }
 
 function setUserDisplayName(displayName) {
@@ -337,10 +339,12 @@ function logout() {
         token: sessionData.token,
         success: function (responseJSON) {
             sessionData = null;
+            userPreferences = null;
             showPageLogin();
         },
         error: function () {
             sessionData = null;
+            userPreferences = null;
             showPageLogin();
         }
     });

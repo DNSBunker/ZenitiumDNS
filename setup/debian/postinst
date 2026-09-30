@@ -8,21 +8,6 @@ serviceName="zenitiumdns"
 serviceUser="zenitiumdns"
 resolvedDropIn="/etc/systemd/resolved.conf.d/zenitiumdns.conf"
 
-case "${LC_ALL:-${LC_MESSAGES:-${LANG:-}}}" in
-    de*) german="yes" ;;
-    *) german="no" ;;
-esac
-
-say()
-{
-    if [ "$german" = "yes" ]
-    then
-        echo "$1"
-    else
-        echo "$2"
-    fi
-}
-
 createUser()
 {
     if getent passwd "$serviceUser" >/dev/null
@@ -85,7 +70,7 @@ warnPortInUse()
     users="$(ss -Hlnup 'sport = :53' 2>/dev/null | grep -v '"ZenitiumDns"' || true)"
     if [ -n "$users" ]
     then
-        say "Warnung: Port 53 wird bereits von einem anderen Prozess verwendet. ZenitiumDNS kann erst DNS-Anfragen beantworten, wenn dieser beendet ist:" "Warning: port 53 is already in use by another process. ZenitiumDNS can only answer DNS queries once it has been stopped:"
+        echo "Warning: port 53 is already in use by another process. ZenitiumDNS can only answer DNS queries once it has been stopped:"
         echo "$users"
     fi
 }
@@ -93,15 +78,15 @@ warnPortInUse()
 printInstallInfo()
 {
     echo ""
-    say "ZenitiumDNS wurde erfolgreich installiert." "ZenitiumDNS was installed successfully."
-    say "Weboberfläche: http://$(hostname -f 2>/dev/null || hostname):5380/" "Web interface: http://$(hostname -f 2>/dev/null || hostname):5380/"
+    echo "ZenitiumDNS was installed successfully."
+    echo "Web interface: http://$(hostname -f 2>/dev/null || hostname):5380/"
 
     if [ -f "$dnsConfig/admin.password" ]
     then
-        say "Benutzer: admin" "Username: admin"
-        say "Passwort: $(cat "$dnsConfig/admin.password")" "Password: $(cat "$dnsConfig/admin.password")"
-        say "Das Passwort steht auch in $dnsConfig/admin.password. Ändere es nach der ersten Anmeldung und lösche die Datei." "The password is also stored in $dnsConfig/admin.password. Change it after the first sign-in and delete the file."
-        say "Nach der ersten Anmeldung wählst du die Sprache der Oberfläche (Deutsch oder Englisch)." "After the first sign-in you choose the interface language (English or German)."
+        echo "Username: admin"
+        echo "Password: $(cat "$dnsConfig/admin.password")"
+        echo "The password is also stored in $dnsConfig/admin.password. Change it after the first sign-in; the file is then deleted automatically."
+        echo "After the first sign-in you choose the interface language (English or German)."
     fi
 
     echo ""

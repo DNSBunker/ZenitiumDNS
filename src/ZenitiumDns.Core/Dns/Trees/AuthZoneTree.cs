@@ -37,7 +37,7 @@ namespace ZenitiumDns.Core.Dns.Trees
             NodeValue currentValue = currentNode.Value;
             if (currentValue is null)
             {
-                if (currentNode.Children is null)
+                if (!currentNode.CanHaveChildren)
                 {
                     k = currentNode.K + 1;
                     currentNode = currentNode.Parent;
@@ -94,46 +94,40 @@ namespace ZenitiumDns.Core.Dns.Trees
 
             while ((currentNode is not null) && (currentNode.Depth >= baseDepth))
             {
-                Node[] children = currentNode.Children;
-                if (children is not null)
+                Node child = currentNode.GetNextChild(k);
+
+                while (child is not null)
                 {
-                    Node child = null;
-
-                    for (int i = k; i < children.Length; i++)
+                    NodeValue childValue = child.Value;
+                    if (childValue is not null)
                     {
-                        child = Volatile.Read(ref children[i]);
-                        if (child is not null)
+                        AuthZoneNode authZoneNode = childValue.Value;
+                        if (authZoneNode is not null)
                         {
-                            NodeValue childValue = child.Value;
-                            if (childValue is not null)
+                            if (authZoneNode.ParentSideZone is not null)
                             {
-                                AuthZoneNode authZoneNode = childValue.Value;
-                                if (authZoneNode is not null)
-                                {
-                                    if (authZoneNode.ParentSideZone is not null)
-                                    {
-                                        return child;
-                                    }
-
-                                    if (authZoneNode.ApexZone is not null)
-                                    {
-                                        child = null;
-                                        continue;
-                                    }
-                                }
+                                return child;
                             }
 
-                            if (child.Children is not null)
-                                break;
+                            if (authZoneNode.ApexZone is not null)
+                            {
+                                child = currentNode.GetNextChild(child.K + 1);
+                                continue;
+                            }
                         }
                     }
 
-                    if (child is not null)
-                    {
-                        k = 0;
-                        currentNode = child;
-                        continue;
-                    }
+                    if (child.CanHaveChildren)
+                        break;
+
+                    child = currentNode.GetNextChild(child.K + 1);
+                }
+
+                if (child is not null)
+                {
+                    k = 0;
+                    currentNode = child;
+                    continue;
                 }
 
                 k = currentNode.K + 1;
@@ -145,13 +139,8 @@ namespace ZenitiumDns.Core.Dns.Trees
 
         private static bool SubDomainExists(byte[] key, Node currentNode)
         {
-            Node[] children = currentNode.Children;
-            if (children is not null)
-            {
-                Node child = Volatile.Read(ref children[1]);
-                if (child is not null)
-                    return true;
-            }
+            if (currentNode.GetChild(1) is not null)
+                return true;
 
             Node nextSubDomain = GetNextSubDomainZoneNode(key, currentNode, currentNode.Depth);
             if (nextSubDomain is null)

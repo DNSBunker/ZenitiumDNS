@@ -42,7 +42,7 @@ namespace ZenitiumDns.Core.Dns
         public static readonly string[] ProtocolNames = ["udp", "tcp", "tls", "https", "quic", "udp_proxy", "tcp_proxy", "other"];
         public static readonly string[] FamilyNames = ["ipv4", "ipv6"];
         public static readonly string[] LatencyGroupNames = ["local", "cache", "recursive", "blocked"];
-        public static readonly string[] RequestFlagNames = ["rd", "cd", "do", "edns", "ecs"];
+        public static readonly string[] RequestFlagNames = ["rd", "cd", "do", "edns", "ecs", "cookie"];
         public static readonly string[] ResponseFlagNames = ["aa", "tc", "ad", "ra"];
         public static readonly string[] DropReasonNames = ["rate_limited", "no_response"];
 
@@ -278,6 +278,10 @@ namespace ZenitiumDns.Core.Dns
 
                     if (request.GetEDnsClientSubnetOption(true) is not null)
                         _requestFlags[4]++;
+
+                    DnsCookie.GetCookieOption(request, out int cookieCount);
+                    if (cookieCount > 0)
+                        _requestFlags[5]++;
                 }
             }
 

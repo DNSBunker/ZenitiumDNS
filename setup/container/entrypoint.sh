@@ -27,7 +27,7 @@ then
     password="$(head -c 18 /dev/urandom | base64 | tr -d '/+=\n')"
     (umask 0077 && printf '%s\n' "$password" > "$config/admin.password")
     echo "ZenitiumDNS: sign in to the web interface as admin with the password $password"
-    echo "ZenitiumDNS: the password is also stored in $config/admin.password; change it after the first sign-in and delete the file"
+    echo "ZenitiumDNS: the password is also stored in $config/admin.password; change it after the first sign-in and the file is deleted automatically"
 fi
 
 exec /opt/zenitiumdns/ZenitiumDns "$config"

@@ -2,7 +2,7 @@
 
 [English version](CHANGELOG-ZenitiumDNS.md)
 
-Dieses Dokument listet ausschließlich die Unterschiede zwischen dem Original-Build **Technitium DNS Server 15.5** (veröffentlicht am 19. September 2026) und dem Build **ZenitiumDNS 15.5.1** (Stand 28. September 2026) auf. ZenitiumDNS 15.5.1 enthält außerdem alle Korrekturen aus Technitium DNS Server 15.5.1; welche davon ZenitiumDNS schon vorher hatte, steht am Ende. Die vollständige Versionsgeschichte steht in [CHANGELOG.de.md](CHANGELOG.de.md).
+Dieses Dokument listet ausschließlich die Unterschiede zwischen dem Original-Build **Technitium DNS Server 15.5** (veröffentlicht am 19. September 2026) und dem Build **ZenitiumDNS 15.5.1** (Stand 30. September 2026) auf. ZenitiumDNS 15.5.1 enthält außerdem alle Korrekturen aus Technitium DNS Server 15.5.1; welche davon ZenitiumDNS schon vorher hatte, steht am Ende. Die vollständige Versionsgeschichte steht in [CHANGELOG.de.md](CHANGELOG.de.md).
 
 ## Überblick
 
@@ -51,6 +51,13 @@ Dieses Dokument listet ausschließlich die Unterschiede zwischen dem Original-Bu
 | Prüfung der Systemzeit | nicht vorhanden | Selbsttest gegen den Date-Header von IANA und NTP-Status des Kernels |
 | Prometheus-Metriken | einfache Zähler unter `api/dashboard/metrics/text`, Zugriff mit API-Token | optionaler Endpunkt `/metrics` mit ACL und Bearer-Token, Histogramme, je Protokoll, Typ und Antwortcode, Extended DNS Errors, Anfragen an Nameserver, Prozess und Laufzeit ([docs/Metrics.de.md](docs/Metrics.de.md)) |
 | API-Tokens | vorhanden | entfernt |
+| Formate von Blocklisten | hosts-Dateien, reine Domains, Wildcard-Listen, Adblock-Domainregeln | zusätzlich die Regelsyntax von AdGuard Home und Adblock (Ausnahmen, Platzhalter, reguläre Ausdrücke, `$important`, `$badfilter`, `$dnstype`, `$denyallow`, `$client`), Pi-hole-Regex-Listen und Blockierung über die IP-Adresse in der Antwort ([docs/BlockLists.de.md](docs/BlockLists.de.md)) |
+| Unterschiedliche Listen je Gerät | nur über die Advanced Blocking App | Clientprofile über IP-Adresse, Netz oder ClientID (DoH-Pfad, DoT/DoQ-Servername), mit eigenen Listen, ohne Standardlisten oder ohne Blockierung |
+| DNS-Cookies (RFC 7873, RFC 9018) | nicht vorhanden | gegenüber Clients und Nameservern, Clients mit gültigem Cookie lässt die Ratenbegrenzung durch |
+| Nameserver, die mit QNAME-Minimierung nicht zurechtkommen | Auflösung scheitert oder läuft in Zeitüberschreitungen | automatischer Rückfall auf den vollständigen Namen, Zone eine Stunde gemerkt |
+| Betrieb ohne Cache (etwa vor Unbound) | nicht vorhanden | Cache, Prefetch, Serve Stale und lokale Root-Zone lassen sich gemeinsam abschalten |
+| Speicher für 1,2 Millionen Namen im Cache | rund 1,5 GB lebende Objekte | rund 0,8 GB, optionale Speichergrenze, die den Cache verkleinert |
+| systemd-Sandbox (`systemd-analyze security`) | 3,6 | 1,9 mit Systemaufruf-Filter |
 
 ## Messwerte
 
@@ -106,7 +113,10 @@ Funktionstests im isolierten Netz-Namespace mit nachgebauter DNS-Hierarchie:
 - Ratenbegrenzung in Anfragen pro Sekunde (GCRA-Token-Bucket je Subnetz, Burst einstellbar), Migration bestehender QPM-Werte.
 - Client-Sperrlisten mit automatischer Aktualisierung, Verwerfen vor dem Parsen, Trennen von Stream-Verbindungen.
 - Eigener Blockierungstext mit Platzhaltern, eigene TTL für negatives Caching; das SOA-MINIMUM bleibt nach einem Neustart erhalten.
-- Blocklisten-Schnellauswahl nur mit HaGeZi-Listen vom Build-Mirror, halber Speicherbedarf der Blocklisten, allokationsfreie Suche.
+- Blocklisten-Schnellauswahl nur mit HaGeZi-Listen (Adblock-Format) vom Build-Mirror, halber Speicherbedarf der Blocklisten, allokationsfreie Suche.
+- Regelsyntax von AdGuard Home und Adblock, Pi-hole-Regex-Listen und IP-Regeln für Antworten in Blocklisten; Status je Liste mit Zählern, Fehlern und Aktionen.
+- Clientprofile mit ClientID über DoH, DoT und DoQ; ein gemeinsamer Regelsatz, der je Anfrage gefiltert wird.
+- DNS-Cookies gegenüber Clients und Nameservern, `BADCOOKIE` und `FORMERR` bei falschen oder fehlerhaften Cookies, Clients mit geprüftem Cookie umgehen die UDP-Ratenbegrenzung innerhalb der TCP-Grenze.
 - PEM-Zertifikate mit separatem Schlüssel, eingebautes DDR, Selbsttest.
 - Resolver: Umgang mit Nameservern, die nur eine Anfrage pro TCP-Verbindung beantworten; QNAME-Rückfall bei Timeouts; Downloads mit effektivem IPv6-Modus.
 
@@ -147,6 +157,8 @@ Funktionstests im isolierten Netz-Namespace mit nachgebauter DNS-Hierarchie:
 - **Garbage Collection:** Das Original führte in der minütlichen Cache-Wartung eine blockierende vollständige Garbage Collection aus (Upstream-Issue #2174). ZenitiumDNS nutzt dort und beim Neuladen von Statistiken, Blocklisten und der Advanced-Forwarding-App eine Garbage Collection im Hintergrund.
 - **Race Condition:** Beim Entfernen leerer Cache-Zonen konnten gleichzeitig hinzugefügte Einträge verloren gehen und der Eintragszähler falsch hochzählen.
 - **LRU-Verdrängung:** Bei A-/AAAA-Einträgen mit mehreren Adressen wurde der Zeitpunkt der letzten Nutzung nie aktualisiert. Beliebte Einträge wurden bei vollem Cache dadurch zuerst verdrängt.
+- **Speicher je Eintrag:** kompakte Eintragstabelle je Name statt eines nebenläufigen Dictionarys, geteilte Nameserver-Daten in den Metadaten der Antwort, passend große Kind-Arrays im Domainbaum, keine zweite Rohkopie von A-, AAAA- und RRSIG-Daten; rund halber Speicher je Eintrag.
+- **Speichergrenze:** optionale Grenze für den belegten Speicher; die Cache-Wartung entfernt die am längsten ungenutzten Einträge und kompaktiert den Heap nach großen Schnitten.
 
 ### Performance
 - Dedizierte UDP-Empfangs-Threads (automatisch höchstens 8 pro Socket, einstellbar bis 64) beantworten Cache-Treffer ohne Thread-Wechsel.
@@ -173,6 +185,9 @@ Funktionstests im isolierten Netz-Namespace mit nachgebauter DNS-Hierarchie:
 - DNS-over-HTTPS per POST: Anfragen über 65.535 Byte werden mit 413 abgewiesen und begrenzt gelesen.
 - DNS-Nachrichten mit unplausiblen Eintragszahlen werden vor dem Parsen verworfen.
 - Werte in Inline-Handlern der Weboberfläche werden für JavaScript maskiert.
+- systemd-Dienst mit Systemaufruf-Filter, beschränkten Adressfamilien und `ProtectProc=invisible`; die Datei mit dem Startpasswort wird nach der Passwortänderung automatisch gelöscht.
+- Content Security Policy ohne `unsafe-eval`, höchstens 1 MB je Anfrage ohne gültige Sitzung, HSTS bei HTTPS-Umleitung, `nosniff` und `Referrer-Policy`.
+- Container-Image mit per Hash festgelegten Actions und Basis-Images, SBOM, Provenienz und cosign-Signatur.
 
 ### Web-API und Weboberfläche
 - Die Eintrags-APIs beachten `zone=.` für die Root-Zone.

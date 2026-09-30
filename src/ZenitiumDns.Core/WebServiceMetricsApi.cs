@@ -362,6 +362,24 @@ namespace ZenitiumDns.Core
                 w.Header("zenitiumdns_upstream_truncated_total", "counter", "Truncated responses received from name servers and forwarders");
                 w.Sample("zenitiumdns_upstream_truncated_total", DnsClientMetrics.Truncated);
 
+                w.Header("zenitiumdns_qname_minimization_fallbacks_total", "counter", "Minimized queries that were repeated with a longer or the full name because the name server answered incorrectly or not at all");
+                w.Sample("zenitiumdns_qname_minimization_fallbacks_total", QnameMinimizationFallback.Fallbacks);
+
+                w.Header("zenitiumdns_qname_minimization_fallback_zones", "gauge", "Zones currently queried without QNAME minimization because their name servers mishandled it");
+                w.Sample("zenitiumdns_qname_minimization_fallback_zones", QnameMinimizationFallback.Zones);
+
+                w.Header("zenitiumdns_qname_minimization_skipped_total", "counter", "Resolutions that skipped QNAME minimization for a remembered zone");
+                w.Sample("zenitiumdns_qname_minimization_skipped_total", QnameMinimizationFallback.Skipped);
+
+                w.Header("zenitiumdns_upstream_cookies_sent_total", "counter", "Queries to name servers and forwarders that carried a DNS cookie since start");
+                w.Sample("zenitiumdns_upstream_cookies_sent_total", DnsCookie.ClientCookiesSent);
+
+                w.Header("zenitiumdns_upstream_cookie_errors_total", "counter", "Responses discarded because the DNS cookie was wrong or missing from a server that supports cookies");
+                w.Sample("zenitiumdns_upstream_cookie_errors_total", DnsCookie.ClientCookieMismatches);
+
+                w.Header("zenitiumdns_upstream_cookie_servers", "gauge", "Name servers whose server cookie is currently known");
+                w.Sample("zenitiumdns_upstream_cookie_servers", DnsCookie.KnownServers);
+
                 w.Header("zenitiumdns_upstream_response_time_seconds", "histogram", "Round trip time of responses from name servers and forwarders");
                 {
                     ReadOnlySpan<double> bounds = DnsClientMetrics.ResponseTimeBucketsMs;
@@ -430,11 +448,20 @@ namespace ZenitiumDns.Core
                 w.Header("zenitiumdns_ipv6_upstream_available", "gauge", "Whether queries to name servers over IPv6 are currently used (1) or suspended (0)");
                 w.Sample("zenitiumdns_ipv6_upstream_available", (dnsServer.IPv6Mode != IPv6Mode.Disabled) && !IPv6Reachability.IsUnavailable ? 1 : 0);
 
+                w.Header("zenitiumdns_cache_enabled", "gauge", "Whether the DNS cache is enabled (0 = every query is resolved without cached answers)");
+                w.Sample("zenitiumdns_cache_enabled", dnsServer.EnableCache ? 1 : 0);
+
                 w.Header("zenitiumdns_cache_entries", "gauge", "Records in the DNS cache");
                 w.Sample("zenitiumdns_cache_entries", dnsServer.CacheZoneManager.TotalEntries);
 
                 w.Header("zenitiumdns_cache_max_entries", "gauge", "Configured maximum number of records in the DNS cache (0 = unlimited)");
                 w.Sample("zenitiumdns_cache_max_entries", dnsServer.CacheZoneManager.MaximumEntries);
+
+                w.Header("zenitiumdns_cache_max_memory_bytes", "gauge", "Configured managed memory limit that triggers cache trimming (0 = unlimited)");
+                w.Sample("zenitiumdns_cache_max_memory_bytes", dnsServer.CacheZoneManager.MaximumMemoryMegabytes * 1024L * 1024L);
+
+                w.Header("zenitiumdns_cache_memory_trimmed_entries_total", "counter", "Cache records removed because the memory limit was exceeded");
+                w.Sample("zenitiumdns_cache_memory_trimmed_entries_total", dnsServer.CacheZoneManager.MemoryTrimmedEntries);
 
                 w.Header("zenitiumdns_aggressive_nsec_enabled", "gauge", "Whether aggressive use of DNSSEC-validated cache (RFC 8198) is enabled");
                 w.Sample("zenitiumdns_aggressive_nsec_enabled", dnsServer.CacheZoneManager.AggressiveNsec ? 1 : 0);
@@ -444,6 +471,9 @@ namespace ZenitiumDns.Core
 
                 w.Header("zenitiumdns_aggressive_nsec_synthesized_total", "counter", "Negative responses synthesized from cached NSEC or NSEC3 records");
                 w.Sample("zenitiumdns_aggressive_nsec_synthesized_total", dnsServer.CacheZoneManager.AggressiveNsecSynthesizedResponses);
+
+                w.Header("zenitiumdns_dns_cookies_enabled", "gauge", "Whether DNS cookies (RFC 7873, RFC 9018) are enabled");
+                w.Sample("zenitiumdns_dns_cookies_enabled", dnsServer.EnableDnsCookies ? 1 : 0);
 
                 w.Header("zenitiumdns_dnssec_validation_enabled", "gauge", "Whether DNSSEC validation is enabled");
                 w.Sample("zenitiumdns_dnssec_validation_enabled", dnsServer.DnssecValidation ? 1 : 0);

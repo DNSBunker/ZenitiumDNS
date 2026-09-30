@@ -23,11 +23,7 @@ Der Dienst läuft als unprivilegierter Systembenutzer `zenitiumdns` und wird nac
 
 ## Erste Anmeldung
 
-Bei der Erstinstallation wird ein zufälliges Passwort für den Benutzer `admin` erzeugt. Der Installer gibt es aus und speichert es in `/etc/zenitiumdns/admin.password`. Rufe `http://<IP-Adresse-des-Servers>:5380/` auf, melde dich an, wähle die Sprache der Oberfläche (Deutsch oder Englisch), ändere das Passwort und lösche anschließend die Datei:
-
-```
-sudo rm /etc/zenitiumdns/admin.password
-```
+Bei der Erstinstallation wird ein zufälliges Passwort für den Benutzer `admin` erzeugt. Der Installer gibt es aus und speichert es in `/etc/zenitiumdns/admin.password`. Rufe `http://<IP-Adresse-des-Servers>:5380/` auf, melde dich an, wähle die Sprache der Oberfläche (Deutsch oder Englisch) und ändere das Passwort im Kontomenü. Sobald das Passwort von `admin` nicht mehr mit dem in der Datei übereinstimmt, löscht der Server `/etc/zenitiumdns/admin.password` selbst, direkt nach der Änderung oder beim nächsten Start.
 
 Die Sprache gilt für alle Benutzer des Servers und lässt sich jederzeit unter Einstellungen > Server > Sprache ändern. Aktualisierte bestehende Installationen bleiben auf Deutsch.
 
@@ -99,6 +95,8 @@ Die Übersicht der Weboberfläche zeigt Anfragen pro Sekunde, Antwortzeiten, Cac
 ## Arbeitsspeicher
 
 Den meisten Arbeitsspeicher belegen die Blocklisten, der Cache und die Statistik der laufenden Stunde. Mit HaGeZi TIF und PRO (2,5 Millionen Domains, rund 80 MB) und dauerhaft 2.000 Anfragen/s ist rund 1 GB belegter Speicher normal; ein Teil davon ist freier Platz im Heap, den die Garbage Collection ohne Pausen für Anfragen wiederverwendet. Die Größe des Caches steht unter Einstellungen > Cache, bei Speichermangel kürzt der Wächter den Cache.
+
+Ein Cache-Eintrag belegt grob 600 bis 700 Byte plus seine Einträge; mit DNSSEC-Signaturen, Delegationen und negativen Antworten sind es oft 2 bis 4 KB. Bei sehr vielen oder unbegrenzt vielen Einträgen empfiehlt sich eine Speichergrenze unter Einstellungen > Cache (etwa ein Drittel des Arbeitsspeichers der Maschine). Wird sie überschritten, entfernt die Cache-Wartung jede Minute die am längsten ungenutzten Einträge und kompaktiert den Heap nach großen Schnitten.
 
 Ist der Speicher knapp, lässt sich die Garbage Collection in `/etc/default/zenitiumdns` anweisen, den Heap öfter zu verdichten:
 

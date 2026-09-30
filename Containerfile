@@ -1,4 +1,4 @@
-FROM --platform=$BUILDPLATFORM mcr.microsoft.com/dotnet/sdk:10.0 AS build
+FROM --platform=$BUILDPLATFORM mcr.microsoft.com/dotnet/sdk:10.0@sha256:35d40304542c8689331f8cab17c65926cdf48fe711e289321d71924b230a7d29 AS build
 ARG TARGETARCH
 RUN apt-get update \
     && apt-get install -y --no-install-recommends zip \
@@ -20,7 +20,7 @@ RUN case "$TARGETARCH" in \
     done
 COPY setup/container/entrypoint.sh /out/usr/local/bin/zenitiumdns-entrypoint
 
-FROM docker.io/library/alpine:3.22
+FROM docker.io/library/alpine:3.22@sha256:5291449c3df73caf6ed85e649dec1b9e818b39a5d8c871e97afc13e9cd5e8fa8
 ARG VERSION=dev
 LABEL org.opencontainers.image.title="ZenitiumDNS" \
       org.opencontainers.image.description="Recursive DNS resolver with blocking, DNS-over-TLS/HTTPS/QUIC and a web interface" \

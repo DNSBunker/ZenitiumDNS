@@ -23,6 +23,7 @@ using ZenitiumDns.Core.Dns.Trees;
 using ZenitiumDns.Core.Dns.Zones;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Text;
 using System.Threading;
@@ -67,6 +68,19 @@ namespace ZenitiumDns.Core.Dns.ZoneManagers
         const int CACHE_MAINTENANCE_TIMER_INITIAL_INTEVAL = 1 * 60 * 1000;
         const int CACHE_MAINTENANCE_TIMER_PERIODIC_INTERVAL = 1 * 60 * 1000;
         const int CACHE_MAINTENANCE_GC_COLLECTION_THRESHOLD = 10000;
+        const long MEMORY_TRIM_MINIMUM_ENTRIES = 10000;
+
+        const int MEMORY_COMPACTION_MINIMUM_INTERVAL_MINUTES = 15;
+
+        volatile bool _enabled = true;
+
+        int _maximumMemoryMegabytes;
+        long _lastEvaluatedFullGcIndex;
+        long _gcRequestIndex;
+        DateTime _gcRequestTime;
+        long _entriesAtGcRequest;
+        DateTime _lastMemoryCompaction;
+        long _memoryTrimmedEntries;
 
         #endregion
 
@@ -113,7 +127,7 @@ namespace ZenitiumDns.Core.Dns.ZoneManagers
         {
             string cacheZoneFile = Path.Combine(_dnsServer.ConfigFolder, "cache.bin");
 
-            if (!File.Exists(cacheZoneFile))
+            if (!_enabled || !File.Exists(cacheZoneFile))
                 return;
 
             _dnsServer.LogManager.Write("Loading DNS Cache from disk...");
@@ -135,7 +149,7 @@ namespace ZenitiumDns.Core.Dns.ZoneManagers
                         {
                             bool serveStale = _dnsServer.ServeStale;
 
-                            while (bR.BaseStream.Position < bR.BaseStream.Length)
+                            while ((bR.BaseStream.Position < bR.BaseStream.Length) && _enabled)
                             {
                                 CacheZone zone = CacheZone.ReadFrom(bR, serveStale);
                                 if (!zone.IsEmpty)
@@ -162,6 +176,9 @@ namespace ZenitiumDns.Core.Dns.ZoneManagers
 
         public void SaveCacheZoneFile()
         {
+            if (!_enabled)
+                return;
+
             _dnsServer.LogManager.Write("Saving DNS Cache to disk...");
 
             string cacheZoneFile = Path.Combine(_dnsServer.ConfigFolder, "cache.bin");
@@ -194,7 +211,12 @@ namespace ZenitiumDns.Core.Dns.ZoneManagers
 
         protected override void CacheRecords(IReadOnlyList<DnsResourceRecord> resourceRecords, NetworkAddress eDnsClientSubnet, DnsDatagramMetadata responseMetadata)
         {
+            if (!_enabled)
+                return;
+
             List<DnsResourceRecord> dnameRecords = null;
+
+            responseMetadata = CacheRecordInfo.InternMetadata(responseMetadata);
 
             foreach (DnsResourceRecord resourceRecord in resourceRecords)
             {
@@ -298,6 +320,9 @@ namespace ZenitiumDns.Core.Dns.ZoneManagers
 
         protected override void CacheDenialOfExistence(DnsDatagram response, NetworkAddress eDnsClientSubnet)
         {
+            if (!_enabled)
+                return;
+
             if (!_aggressiveNsec || !_dnsServer.DnssecValidation)
                 return;
 
@@ -323,6 +348,8 @@ namespace ZenitiumDns.Core.Dns.ZoneManagers
             try
             {
                 int totalRemovedEntries = RemoveExpiredRecords();
+                totalRemovedEntries += TrimToMemoryLimit();
+
                 if (totalRemovedEntries > CACHE_MAINTENANCE_GC_COLLECTION_THRESHOLD)
                     GC.Collect(GC.MaxGeneration, GCCollectionMode.Optimized, false);
             }
@@ -337,6 +364,89 @@ namespace ZenitiumDns.Core.Dns.ZoneManagers
                     _cacheMaintenanceTimer?.Change(CACHE_MAINTENANCE_TIMER_PERIODIC_INTERVAL, Timeout.Infinite);
                 }
             }
+        }
+
+        private static GCMemoryInfo GetLastFullGcInfo()
+        {
+            GCMemoryInfo blocking = GC.GetGCMemoryInfo(GCKind.FullBlocking);
+            GCMemoryInfo background = GC.GetGCMemoryInfo(GCKind.Background);
+
+            return background.Index > blocking.Index ? background : blocking;
+        }
+
+        private void RequestFullGc()
+        {
+            _gcRequestIndex = GC.GetGCMemoryInfo().Index;
+            _gcRequestTime = DateTime.UtcNow;
+            _entriesAtGcRequest = Volatile.Read(ref _totalEntries);
+
+            GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced, false);
+        }
+
+        private int TrimToMemoryLimit()
+        {
+            int maximumMemoryMegabytes = _maximumMemoryMegabytes;
+            if (maximumMemoryMegabytes < 1)
+                return 0;
+
+            long limit = maximumMemoryMegabytes * 1024L * 1024L;
+
+            GCMemoryInfo latest = GC.GetGCMemoryInfo();
+            if ((latest.HeapSizeBytes - latest.FragmentedBytes) <= limit)
+                return 0;
+
+            GCMemoryInfo info = GetLastFullGcInfo();
+
+            if ((info.Index <= _lastEvaluatedFullGcIndex) || (info.Index <= _gcRequestIndex))
+            {
+                if ((_gcRequestIndex == 0) || (DateTime.UtcNow > _gcRequestTime.AddMinutes(5)))
+                    RequestFullGc();
+
+                return 0;
+            }
+
+            _lastEvaluatedFullGcIndex = info.Index;
+
+            long totalEntries = Volatile.Read(ref _totalEntries);
+            long used = info.HeapSizeBytes - info.FragmentedBytes;
+            long entriesAtGc = _entriesAtGcRequest > 0 ? _entriesAtGcRequest : totalEntries;
+            double projected = entriesAtGc > 0 ? (double)used / entriesAtGc * totalEntries : used;
+
+            if ((projected <= limit) || (totalEntries <= MEMORY_TRIM_MINIMUM_ENTRIES))
+            {
+                _gcRequestIndex = 0;
+                return 0;
+            }
+
+            double fraction = Math.Clamp(1.0 - (limit * 0.9 / projected), 0.05, 0.9);
+            long entriesToRemove = Math.Min((long)(totalEntries * fraction), totalEntries - MEMORY_TRIM_MINIMUM_ENTRIES);
+
+            int removedEntries = TrimEntries(entriesToRemove);
+            Interlocked.Add(ref _memoryTrimmedEntries, removedEntries);
+
+            string compaction = "";
+            DateTime utcNow = DateTime.UtcNow;
+
+            if ((removedEntries >= totalEntries / 10) && (utcNow >= _lastMemoryCompaction.AddMinutes(MEMORY_COMPACTION_MINIMUM_INTERVAL_MINUTES)))
+            {
+                _lastMemoryCompaction = utcNow;
+
+                long start = Stopwatch.GetTimestamp();
+                GC.Collect(GC.MaxGeneration, GCCollectionMode.Aggressive, true, true);
+                compaction = " Memory was compacted in " + Stopwatch.GetElapsedTime(start).TotalMilliseconds.ToString("0") + " ms.";
+
+                _gcRequestIndex = GC.GetGCMemoryInfo().Index - 1;
+                _gcRequestTime = DateTime.UtcNow;
+                _entriesAtGcRequest = Volatile.Read(ref _totalEntries);
+            }
+            else
+            {
+                RequestFullGc();
+            }
+
+            _dnsServer.LogManager.Write("DNS Cache memory usage (about " + (long)(projected / 1024 / 1024) + " MB) exceeded the configured limit of " + maximumMemoryMegabytes + " MB; " + removedEntries + " least recently used cache entries were removed." + compaction);
+
+            return removedEntries;
         }
 
         private static IReadOnlyList<DnsResourceRecord> AddDSRecordsTo(CacheZone delegation, bool serveStale, IReadOnlyList<DnsResourceRecord> nsRecords, NetworkAddress eDnsClientSubnet, bool advancedForwardingClientSubnet)
@@ -852,6 +962,9 @@ namespace ZenitiumDns.Core.Dns.ZoneManagers
 
         public DnsDatagram QueryClosestDelegation(DnsDatagram request)
         {
+            if (!_enabled)
+                return null;
+
             DnsQuestionRecord question = request.Question[0];
             string domain = question.Name;
 
@@ -918,6 +1031,9 @@ namespace ZenitiumDns.Core.Dns.ZoneManagers
 
         public DnsDatagram Query(DnsDatagram request, bool serveStale = false, bool findClosestNameServers = false, bool resetExpiry = false, bool aggressiveNsec = false)
         {
+            if (!_enabled)
+                return null;
+
             DnsQuestionRecord question = request.Question[0];
 
             NetworkAddress eDnsClientSubnet = null;
@@ -1304,6 +1420,36 @@ namespace ZenitiumDns.Core.Dns.ZoneManagers
                 _serveStaleResetTtl = value;
             }
         }
+
+        public bool Enabled
+        {
+            get { return _enabled; }
+            set
+            {
+                if (_enabled == value)
+                    return;
+
+                _enabled = value;
+
+                if (!value)
+                    Flush();
+            }
+        }
+
+        public int MaximumMemoryMegabytes
+        {
+            get { return _maximumMemoryMegabytes; }
+            set
+            {
+                if (value < 0)
+                    throw new ArgumentOutOfRangeException(nameof(MaximumMemoryMegabytes), "Invalid cache maximum memory value. Valid range is 0 and above.");
+
+                _maximumMemoryMegabytes = value;
+            }
+        }
+
+        public long MemoryTrimmedEntries
+        { get { return Interlocked.Read(ref _memoryTrimmedEntries); } }
 
         public long MaximumEntries
         {

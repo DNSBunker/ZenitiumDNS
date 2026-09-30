@@ -517,6 +517,7 @@ namespace ZenitiumDns.Core
                 Utf8JsonWriter jsonWriter = context.GetCurrentJsonWriter();
 
                 jsonWriter.WriteBoolean("hasDefaultCredentials", _dnsWebService._authManager.HasDefaultCredentials());
+                jsonWriter.WriteBoolean("onlyAdminUser", _dnsWebService._authManager.HasOnlyAdminUser());
                 jsonWriter.WriteBoolean("ssoEnabled", _dnsWebService._ssoEnabled);
             }
 
@@ -708,7 +709,7 @@ namespace ZenitiumDns.Core
 
                     _dnsWebService._authManager.SaveConfigFile();
 
-                    context.Response.Cookies.Append("token", session.Token, new CookieOptions() { MaxAge = TimeSpan.FromMinutes(2) });
+                    context.Response.Cookies.Append("token", session.Token, new CookieOptions() { MaxAge = TimeSpan.FromMinutes(2), Path = "/", Secure = context.Request.IsHttps, SameSite = SameSiteMode.Strict });
                     context.Response.Redirect("/");
                 }
                 catch (Exception ex)
@@ -850,6 +851,22 @@ namespace ZenitiumDns.Core
                 Utf8JsonWriter jsonWriter = context.GetCurrentJsonWriter();
 
                 WriteUserDetails(jsonWriter, session.User, session, true, false);
+            }
+
+            public void GetPreferences(HttpContext context)
+            {
+                UserSession session = context.GetCurrentSession();
+                Utf8JsonWriter jsonWriter = context.GetCurrentJsonWriter();
+
+                jsonWriter.WritePropertyName("preferences");
+                jsonWriter.WriteRawValue(_dnsWebService._userPreferences.Get(session.User.Username), true);
+            }
+
+            public void SetPreferences(HttpContext context)
+            {
+                UserSession session = context.GetCurrentSession();
+
+                _dnsWebService._userPreferences.Set(session.User.Username, context.Request.QueryOrForm("preferences"));
             }
 
             public void SetProfile(HttpContext context)
@@ -1085,6 +1102,9 @@ namespace ZenitiumDns.Core
                         int iterations = request.GetQueryOrForm("iterations", int.Parse, User.DEFAULT_ITERATIONS);
 
                         user.ChangePassword(newPassword, iterations);
+
+                        if (user.Username.Equals("admin", StringComparison.OrdinalIgnoreCase))
+                            _dnsWebService._authManager.RemoveStaleAdminPasswordFile();
                     }
 
                     if (request.TryQueryOrForm("memberOfGroups", out string memberOfGroups))

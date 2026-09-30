@@ -211,6 +211,8 @@ namespace ZenitiumDns.Core.Auth
                     catch
                     { }
                 }
+
+                RemoveStaleAdminPasswordFile();
             }
             catch (FileNotFoundException)
             {
@@ -1075,6 +1077,16 @@ namespace ZenitiumDns.Core.Auth
             return (user is not null) && user.HasDefaultCredentials();
         }
 
+        public bool HasOnlyAdminUser()
+        {
+            if (_users.Count != 1)
+                return false;
+
+            User user = GetUser("admin");
+
+            return (user is not null) && !user.Disabled;
+        }
+
         public void ChangeUsername(User user, string newUsername)
         {
             if (user.Username.Equals(newUsername, StringComparison.OrdinalIgnoreCase))
@@ -1090,6 +1102,7 @@ namespace ZenitiumDns.Core.Auth
             }
 
             _users.TryRemove(oldUsername, out _);
+            _dnsWebService._userPreferences.Rename(oldUsername, user.Username);
         }
 
         public async Task<User> ChangePasswordAsync(string username, string password, string totp, IPAddress remoteAddress, string newPassword, int iterations)
@@ -1098,7 +1111,48 @@ namespace ZenitiumDns.Core.Auth
 
             user.ChangePassword(newPassword, iterations);
 
+            if (user.Username.Equals("admin", StringComparison.OrdinalIgnoreCase))
+                RemoveStaleAdminPasswordFile();
+
             return user;
+        }
+
+        internal void RemoveStaleAdminPasswordFile()
+        {
+            string adminPasswordFile = Environment.GetEnvironmentVariable("DNS_SERVER_ADMIN_PASSWORD_FILE");
+            if (string.IsNullOrEmpty(adminPasswordFile))
+                adminPasswordFile = Path.Combine(_configFolder, "admin.password");
+
+            try
+            {
+                string fullPath = Path.GetFullPath(adminPasswordFile);
+
+                if (!string.Equals(Path.GetDirectoryName(fullPath), Path.TrimEndingDirectorySeparator(Path.GetFullPath(_configFolder)), StringComparison.Ordinal))
+                    return;
+
+                if (!File.Exists(fullPath))
+                    return;
+
+                string password;
+
+                using (StreamReader sR = new StreamReader(fullPath, true))
+                {
+                    password = sR.ReadLine();
+                }
+
+                User adminUser = GetUser("admin");
+
+                if ((adminUser is not null) && (adminUser.Type == UserType.Local) && !string.IsNullOrEmpty(password) && adminUser.PasswordHash.Equals(adminUser.GetPasswordHashFor(password), StringComparison.Ordinal))
+                    return;
+
+                File.Delete(fullPath);
+
+                _log.Write("DNS Server deleted the initial admin password file because the password of user admin has been changed: " + fullPath);
+            }
+            catch (Exception ex)
+            {
+                _log.Write("DNS Server failed to delete the initial admin password file: " + adminPasswordFile, ex);
+            }
         }
 
         public bool DeleteUser(string username)
@@ -1113,6 +1167,8 @@ namespace ZenitiumDns.Core.Auth
                     permission.Value.RemovePermission(deletedUser);
                     permission.Value.RemoveAllSubItemPermissions(deletedUser);
                 }
+
+                _dnsWebService._userPreferences.Remove(deletedUser.Username);
 
                 return true;
             }

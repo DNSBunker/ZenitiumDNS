@@ -6,7 +6,7 @@ ZenitiumDNS gibt es als OCI-Container-Image für amd64 und arm64. Es wird für j
 
 ```
 ghcr.io/dnsbunker/zenitiumdns:latest
-ghcr.io/dnsbunker/zenitiumdns:15.5.1-10
+ghcr.io/dnsbunker/zenitiumdns:15.5.1-11
 ```
 
 Das Image basiert auf Alpine Linux und enthält den eigenständigen Server, die mitgelieferten Apps und `libmsquic` für DNS-over-QUIC und HTTP/3. Der Server läuft als unprivilegierter Benutzer `zenitiumdns` (UID und GID 1053).
@@ -34,11 +34,7 @@ Beim ersten Start legt der Container ein zufälliges Passwort für den Benutzer 
 podman logs zenitiumdns
 ```
 
-Das Passwort steht außerdem in `/etc/zenitiumdns/admin.password`. `http://<Host>:5380/` öffnen, anmelden, die Sprache wählen, das Passwort im Kontomenü ändern und die Datei löschen:
-
-```
-podman exec zenitiumdns rm /etc/zenitiumdns/admin.password
-```
+Das Passwort steht außerdem in `/etc/zenitiumdns/admin.password`. `http://<Host>:5380/` öffnen, anmelden, die Sprache wählen und das Passwort im Kontomenü ändern. Der Server löscht die Datei danach selbst.
 
 ## Ports
 

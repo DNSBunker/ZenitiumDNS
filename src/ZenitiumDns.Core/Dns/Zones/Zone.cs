@@ -56,6 +56,14 @@ namespace ZenitiumDns.Core.Dns.Zones
             _entries = entries;
         }
 
+        protected Zone(string name, bool withoutEntries)
+        {
+            _name = name.ToLowerInvariant();
+
+            if (!withoutEntries)
+                _entries = new ConcurrentDictionary<DnsResourceRecordType, IReadOnlyList<DnsResourceRecord>>(1, 5);
+        }
+
         #endregion
 
         #region static

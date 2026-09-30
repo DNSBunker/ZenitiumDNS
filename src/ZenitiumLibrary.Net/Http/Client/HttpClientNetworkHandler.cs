@@ -47,6 +47,8 @@ namespace ZenitiumLibrary.Net.Http.Client
     {
         #region variables
 
+        static volatile string _defaultUserAgent = "ZenitiumDNS";
+
         static bool _publicIpv6Available;
         static DateTime _publicIpv6AvailableLastCheckedOn;
         const int PUBLIC_IPv6_CHECK_FREQUENCY = 300000;
@@ -546,10 +548,22 @@ namespace ZenitiumLibrary.Net.Http.Client
 
         #region protected
 
+        private static void ApplyDefaultUserAgent(HttpRequestMessage request)
+        {
+            if (request.Headers.UserAgent.Count > 0)
+                return;
+
+            string userAgent = _defaultUserAgent;
+            if (!string.IsNullOrEmpty(userAgent))
+                request.Headers.TryAddWithoutValidation("User-Agent", userAgent);
+        }
+
         protected override HttpResponseMessage Send(HttpRequestMessage request, CancellationToken cancellationToken)
         {
             if (_innerHandler.ConnectCallback != ConnectCallback)
                 throw new NotSupportedException("ConnectCallback is not supported for SocketsHttpHandler.");
+
+            ApplyDefaultUserAgent(request);
 
             if (request.Version == HttpVersion.Version30)
                 request.Version = HttpVersion.Version20;
@@ -562,6 +576,8 @@ namespace ZenitiumLibrary.Net.Http.Client
             if (_innerHandler.ConnectCallback != ConnectCallback)
                 throw new NotSupportedException("ConnectCallback is not supported for SocketsHttpHandler.");
 
+            ApplyDefaultUserAgent(request);
+
             if (request.Version == HttpVersion.Version30)
                 request.Version = HttpVersion.Version20;
 
@@ -571,6 +587,12 @@ namespace ZenitiumLibrary.Net.Http.Client
         #endregion
 
         #region properties
+
+        public static string DefaultUserAgent
+        {
+            get { return _defaultUserAgent; }
+            set { _defaultUserAgent = value; }
+        }
 
         public new SocketsHttpHandler InnerHandler
         { get { return _innerHandler; } }

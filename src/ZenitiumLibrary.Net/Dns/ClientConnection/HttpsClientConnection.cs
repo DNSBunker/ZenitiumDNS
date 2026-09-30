@@ -28,6 +28,7 @@ using System.Net.Quic;
 using System.Net.Sockets;
 using System.Threading;
 using System.Threading.Tasks;
+using ZenitiumLibrary.Net.Http.Client;
 using ZenitiumLibrary.Net.Proxy;
 
 namespace ZenitiumLibrary.Net.Dns.ClientConnection
@@ -71,7 +72,7 @@ namespace ZenitiumLibrary.Net.Dns.ClientConnection
 
             _httpClient = new HttpClient(handler);
             _httpClient.DefaultRequestHeaders.Add("accept", "application/dns-message");
-            _httpClient.DefaultRequestHeaders.Add("user-agent", "DoH client");
+            _httpClient.DefaultRequestHeaders.TryAddWithoutValidation("user-agent", HttpClientNetworkHandler.DefaultUserAgent);
         }
 
         #endregion

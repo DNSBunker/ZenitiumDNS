@@ -38,17 +38,19 @@ namespace ZenitiumDns.Core.Dns
         readonly bool _skipDnsAppAuthoritativeRequestHandlers;
         readonly bool _skipConditionalForwardingResolution;
         readonly bool _aggressiveNsec;
+        readonly DnsCache _scratchCache;
 
         #endregion
 
         #region constructor
 
-        public ResolverDnsCache(DnsServer dnsServer, bool skipDnsAppAuthoritativeRequestHandlers, bool skipConditionalForwardingResolution = false, bool aggressiveNsec = true)
+        public ResolverDnsCache(DnsServer dnsServer, bool skipDnsAppAuthoritativeRequestHandlers, bool skipConditionalForwardingResolution = false, bool aggressiveNsec = true, DnsCache scratchCache = null)
         {
             _dnsServer = dnsServer;
             _skipDnsAppAuthoritativeRequestHandlers = skipDnsAppAuthoritativeRequestHandlers;
             _skipConditionalForwardingResolution = skipConditionalForwardingResolution;
-            _aggressiveNsec = aggressiveNsec;
+            _aggressiveNsec = aggressiveNsec && (scratchCache is null);
+            _scratchCache = scratchCache;
         }
 
         #endregion
@@ -149,7 +151,7 @@ namespace ZenitiumDns.Core.Dns
                 advancedForwardingClientSubnet = requestECS.AdvancedForwardingClientSubnet;
             }
 
-            ResolverDnsCache dnsCache = new ResolverDnsCache(_dnsServer, _skipDnsAppAuthoritativeRequestHandlers, true, false);
+            ResolverDnsCache dnsCache = new ResolverDnsCache(_dnsServer, _skipDnsAppAuthoritativeRequestHandlers, true, false, _scratchCache is null ? null : new ResolutionScratchCache());
 
             return _dnsServer.PriorityConditionalForwarderResolveAsync(question, eDnsClientSubnet, advancedForwardingClientSubnet, dnsCache, _skipDnsAppAuthoritativeRequestHandlers, conditionalForwarders, new DnsClient.ResolverContext());
         }
@@ -162,7 +164,7 @@ namespace ZenitiumDns.Core.Dns
         {
             DnsDatagram authResponse = await AuthoritativeQueryClosestDelegationAsync(request);
 
-            DnsDatagram cacheResponse = _dnsServer.CacheZoneManager.QueryClosestDelegation(request);
+            DnsDatagram cacheResponse = _scratchCache is null ? _dnsServer.CacheZoneManager.QueryClosestDelegation(request) : null;
 
             if ((authResponse is not null) && (authResponse.Authority.Count > 0))
             {
@@ -200,7 +202,12 @@ namespace ZenitiumDns.Core.Dns
                     return authResponse;
             }
 
-            DnsDatagram cacheResponse = _dnsServer.CacheZoneManager.Query(request, serveStale, findClosestNameServers, resetExpiry, _aggressiveNsec && ((authResponse is null) || (authResponse.Authority.Count == 0)));
+            DnsDatagram cacheResponse;
+
+            if (_scratchCache is null)
+                cacheResponse = _dnsServer.CacheZoneManager.Query(request, serveStale, findClosestNameServers, resetExpiry, _aggressiveNsec && ((authResponse is null) || (authResponse.Authority.Count == 0)));
+            else
+                cacheResponse = await _scratchCache.QueryAsync(request, serveStale, findClosestNameServers, resetExpiry);
             if (cacheResponse is not null)
             {
                 if ((cacheResponse.RCODE != DnsResponseCode.NoError) || (cacheResponse.Answer.Count > 0) || (cacheResponse.Authority.Count == 0) || cacheResponse.IsFirstAuthoritySOA())
@@ -235,7 +242,10 @@ namespace ZenitiumDns.Core.Dns
 
         public void CacheResponse(DnsDatagram response, bool isDnssecBadCache = false, string zoneCut = null)
         {
-            _dnsServer.CacheZoneManager.CacheResponse(response, isDnssecBadCache, zoneCut);
+            if (_scratchCache is null)
+                _dnsServer.CacheZoneManager.CacheResponse(response, isDnssecBadCache, zoneCut);
+            else
+                _scratchCache.CacheResponse(response, isDnssecBadCache, zoneCut);
         }
 
         #endregion

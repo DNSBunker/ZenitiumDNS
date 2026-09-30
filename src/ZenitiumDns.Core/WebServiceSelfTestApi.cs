@@ -285,6 +285,14 @@ namespace ZenitiumDns.Core
 
                 results.Add(new SelfTestResult(group, Lang.T("Rekursive Auflösung", "Recursive resolution"), SelfTestStatus.Ok, Lang.T("Die Root-Zone wurde " + via + " in " + stopwatch.ElapsedMilliseconds + " ms aufgelöst.", "The root zone was resolved " + via + " in " + stopwatch.ElapsedMilliseconds + " ms.")));
 
+                if (!dnsServer.EnableCache)
+                {
+                    if ((dnsServer.Forwarders is not null) && (dnsServer.Forwarders.Count > 0))
+                        results.Add(new SelfTestResult(group, "Cache", SelfTestStatus.Info, Lang.T("Der Cache ist ausgeschaltet. Jede Anfrage geht an die Forwarder, die dann selbst cachen sollten (etwa Unbound)." + (dnsServer.DnssecValidation ? " Die DNSSEC-Validierung fragt ohne Cache bei jeder Auflösung die Schlüssel der Zonen erneut ab." : ""), "The cache is turned off. Every query goes to the forwarders, which should cache themselves (for example Unbound)." + (dnsServer.DnssecValidation ? " Without a cache, DNSSEC validation fetches the keys of the zones again for every resolution." : ""))));
+                    else
+                        results.Add(new SelfTestResult(group, "Cache", SelfTestStatus.Warning, Lang.T("Der Cache ist ausgeschaltet, aber es sind keine Forwarder eingetragen. Jede Anfrage wird ab den Root-Servern aufgelöst, das ist langsam und belastet die Nameserver. Forwarder mit eigenem Cache eintragen (etwa Unbound) oder den Cache einschalten.", "The cache is turned off, but no forwarders are configured. Every query is resolved starting at the root servers, which is slow and loads the name servers. Configure forwarders with their own cache (for example Unbound) or turn the cache on.")));
+                }
+
                 if (!dnsServer.DnssecValidation)
                     results.Add(new SelfTestResult(group, Lang.T("DNSSEC-Validierung", "DNSSEC validation"), SelfTestStatus.Warning, Lang.T("Die DNSSEC-Validierung ist ausgeschaltet. Clients erhalten keine geprüften Antworten und keine Signaturen.", "DNSSEC validation is turned off. Clients receive no validated answers and no signatures.")));
                 else if (response.AuthenticData)
@@ -352,7 +360,7 @@ namespace ZenitiumDns.Core
                     results.Add(new SelfTestResult(group, Lang.T("Admin-Passwort", "Admin password"), SelfTestStatus.Ok, Lang.T("Das Standardpasswort ist geändert.", "The default password has been changed.")));
 
                 if (File.Exists(Path.Combine(_dnsWebService._configFolder, "admin.password")))
-                    results.Add(new SelfTestResult(group, Lang.T("Passwortdatei", "Password file"), SelfTestStatus.Warning, Lang.T("Die Datei admin.password aus der Installation liegt noch im Konfigurationsordner. Nach der ersten Anmeldung löschen.", "The file admin.password from the installation is still in the configuration folder. Delete it after the first sign-in.")));
+                    results.Add(new SelfTestResult(group, Lang.T("Passwortdatei", "Password file"), SelfTestStatus.Warning, Lang.T("Die Datei admin.password aus der Installation enthält noch das gültige Passwort von admin. Sobald das Passwort geändert ist, wird sie automatisch gelöscht.", "The file admin.password from the installation still contains the valid password of admin. It is deleted automatically as soon as the password is changed.")));
 
                 bool publicHttp = false;
 
@@ -520,7 +528,9 @@ namespace ZenitiumDns.Core
                 {
                     var state = manager.GetZoneState(item);
 
-                    if (state.Mode == IanaDataMode.Disabled)
+                    if (!_dnsWebService._dnsServer.EnableCache)
+                        results.Add(new SelfTestResult(group, title, SelfTestStatus.Info, Lang.T("Nicht genutzt, weil der Cache ausgeschaltet ist.", "Not used because the cache is turned off.")));
+                    else if (state.Mode == IanaDataMode.Disabled)
                         results.Add(new SelfTestResult(group, title, SelfTestStatus.Info, Lang.T("Ausgeschaltet, der Resolver fragt die zuständigen Nameserver.", "Turned off, the resolver queries the responsible name servers.")));
                     else if (state.Error is not null)
                         results.Add(new SelfTestResult(group, title, SelfTestStatus.Warning, state.Error + (state.Active ? Lang.T(" Die zuletzt geprüfte Version ist weiter aktiv.", " The last verified version remains active.") : Lang.T(" Der Resolver fragt so lange die zuständigen Nameserver.", " Meanwhile the resolver queries the responsible name servers."))));

@@ -23,6 +23,7 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
+using System.Threading;
 using ZenitiumLibrary;
 using ZenitiumLibrary.Net;
 using ZenitiumLibrary.Net.Dns;
@@ -30,23 +31,28 @@ using ZenitiumLibrary.Net.Dns.ResourceRecords;
 
 namespace ZenitiumDns.Core.Dns.Zones
 {
-    class CacheZone : Zone
+    class CacheZone : Zone, ICacheEntrySet
     {
         #region variables
 
-        ConcurrentDictionary<NetworkAddress, ConcurrentDictionary<DnsResourceRecordType, IReadOnlyList<DnsResourceRecord>>> _ecsEntries;
+        CacheEntry[] _items;
+        ConcurrentDictionary<NetworkAddress, CacheEntrySet> _ecsEntries;
 
         #endregion
 
         #region constructor
 
         public CacheZone(string name, int capacity)
-            : base(name, capacity)
-        { }
+            : base(name, true)
+        {
+            _items = [];
+        }
 
-        private CacheZone(string name, ConcurrentDictionary<DnsResourceRecordType, IReadOnlyList<DnsResourceRecord>> entries)
-            : base(name, entries)
-        { }
+        private CacheZone(string name, CacheEntry[] items)
+            : base(name, true)
+        {
+            _items = items;
+        }
 
         #endregion
 
@@ -59,23 +65,21 @@ namespace ZenitiumDns.Core.Dns.Zones
             {
                 case 1:
                     string name = bR.ReadString();
-                    ConcurrentDictionary<DnsResourceRecordType, IReadOnlyList<DnsResourceRecord>> entries = ReadEntriesFrom(bR, serveStale);
-
-                    CacheZone cacheZone = new CacheZone(name, entries);
+                    CacheZone cacheZone = new CacheZone(name, ReadEntriesFrom(bR, serveStale));
 
                     {
                         int ecsCount = bR.ReadInt32();
                         if (ecsCount > 0)
                         {
-                            ConcurrentDictionary<NetworkAddress, ConcurrentDictionary<DnsResourceRecordType, IReadOnlyList<DnsResourceRecord>>> ecsEntries = new ConcurrentDictionary<NetworkAddress, ConcurrentDictionary<DnsResourceRecordType, IReadOnlyList<DnsResourceRecord>>>(1, ecsCount);
+                            ConcurrentDictionary<NetworkAddress, CacheEntrySet> ecsEntries = new ConcurrentDictionary<NetworkAddress, CacheEntrySet>(1, ecsCount);
 
                             for (int i = 0; i < ecsCount; i++)
                             {
                                 NetworkAddress key = NetworkAddress.ReadFrom(bR);
-                                ConcurrentDictionary<DnsResourceRecordType, IReadOnlyList<DnsResourceRecord>> ecsEntry = ReadEntriesFrom(bR, serveStale);
+                                CacheEntry[] ecsItems = ReadEntriesFrom(bR, serveStale);
 
-                                if (!ecsEntry.IsEmpty)
-                                    ecsEntries.TryAdd(key, ecsEntry);
+                                if (ecsItems.Length > 0)
+                                    ecsEntries.TryAdd(key, new CacheEntrySet(ecsItems));
                             }
 
                             if (!ecsEntries.IsEmpty)
@@ -138,10 +142,10 @@ namespace ZenitiumDns.Core.Dns.Zones
             return records;
         }
 
-        private static ConcurrentDictionary<DnsResourceRecordType, IReadOnlyList<DnsResourceRecord>> ReadEntriesFrom(BinaryReader bR, bool serveStale)
+        private static CacheEntry[] ReadEntriesFrom(BinaryReader bR, bool serveStale)
         {
             int count = bR.ReadInt32();
-            ConcurrentDictionary<DnsResourceRecordType, IReadOnlyList<DnsResourceRecord>> entries = new ConcurrentDictionary<DnsResourceRecordType, IReadOnlyList<DnsResourceRecord>>(1, count);
+            List<CacheEntry> entries = new List<CacheEntry>(count);
 
             for (int i = 0; i < count; i++)
             {
@@ -158,22 +162,24 @@ namespace ZenitiumDns.Core.Dns.Zones
                 }
 
                 if (!DnsResourceRecord.IsRRSetExpired(records, serveStale))
-                    entries.TryAdd(key, records);
+                    entries.Add(new CacheEntry(key, records));
             }
 
-            return entries;
+            return entries.ToArray();
         }
 
-        private static void WriteEntriesTo(ConcurrentDictionary<DnsResourceRecordType, IReadOnlyList<DnsResourceRecord>> entries, BinaryWriter bW)
+        private static void WriteEntriesTo(ICacheEntrySet entries, BinaryWriter bW)
         {
-            bW.Write(entries.Count);
+            CacheEntry[] items = entries.Items;
 
-            foreach (KeyValuePair<DnsResourceRecordType, IReadOnlyList<DnsResourceRecord>> entry in entries)
+            bW.Write(items.Length);
+
+            foreach (CacheEntry entry in items)
             {
-                bW.Write((ushort)entry.Key);
-                bW.Write(entry.Value.Count);
+                bW.Write((ushort)entry.Type);
+                bW.Write(entry.Records.Count);
 
-                foreach (DnsResourceRecord record in entry.Value)
+                foreach (DnsResourceRecord record in entry.Records)
                 {
                     record.WriteCacheRecordTo(bW, delegate ()
                     {
@@ -184,6 +190,38 @@ namespace ZenitiumDns.Core.Dns.Zones
                     });
                 }
             }
+        }
+
+        private static int RemoveExpiredEntries(ICacheEntrySet entries, bool serveStale)
+        {
+            int removedEntries = 0;
+
+            foreach (CacheEntry entry in entries.Items)
+            {
+                if (DnsResourceRecord.IsRRSetExpired(entry.Records, serveStale))
+                {
+                    if (entries.TryRemove(entry.Type, entry.Records))
+                        removedEntries++;
+                }
+            }
+
+            return removedEntries;
+        }
+
+        private static int RemoveLeastUsedEntries(ICacheEntrySet entries, DateTime cutoff)
+        {
+            int removedEntries = 0;
+
+            foreach (CacheEntry entry in entries.Items)
+            {
+                if ((entry.Records.Count == 0) || (entry.Records[0].GetCacheRecordInfo().LastUsedOn < cutoff))
+                {
+                    if (entries.TryRemove(entry.Type, entry.Records))
+                        removedEntries++;
+                }
+            }
+
+            return removedEntries;
         }
 
         #endregion
@@ -199,26 +237,34 @@ namespace ZenitiumDns.Core.Dns.Zones
             CacheRecordInfo cacheRecordInfo = firstRecord.GetCacheRecordInfo();
             NetworkAddress eDnsClientSubnet = cacheRecordInfo.EDnsClientSubnet;
 
-            ConcurrentDictionary<DnsResourceRecordType, IReadOnlyList<DnsResourceRecord>> entries;
+            ICacheEntrySet entries;
 
             if (eDnsClientSubnet is null)
             {
-                entries = _entries;
+                entries = this;
             }
             else
             {
                 if (_ecsEntries is null)
                 {
-                    _ecsEntries = new ConcurrentDictionary<NetworkAddress, ConcurrentDictionary<DnsResourceRecordType, IReadOnlyList<DnsResourceRecord>>>(1, 5);
-                    entries = new ConcurrentDictionary<DnsResourceRecordType, IReadOnlyList<DnsResourceRecord>>(1, 1);
-                    if (!_ecsEntries.TryAdd(eDnsClientSubnet, entries))
+                    _ecsEntries = new ConcurrentDictionary<NetworkAddress, CacheEntrySet>(1, 5);
+                    CacheEntrySet ecsEntry = new CacheEntrySet();
+                    if (!_ecsEntries.TryAdd(eDnsClientSubnet, ecsEntry))
                         return false;
+
+                    entries = ecsEntry;
                 }
-                else if (!_ecsEntries.TryGetValue(eDnsClientSubnet, out entries))
+                else if (_ecsEntries.TryGetValue(eDnsClientSubnet, out CacheEntrySet existingEcsEntry))
                 {
-                    entries = new ConcurrentDictionary<DnsResourceRecordType, IReadOnlyList<DnsResourceRecord>>(1, 1);
-                    if (!_ecsEntries.TryAdd(eDnsClientSubnet, entries))
+                    entries = existingEcsEntry;
+                }
+                else
+                {
+                    CacheEntrySet ecsEntry = new CacheEntrySet();
+                    if (!_ecsEntries.TryAdd(eDnsClientSubnet, ecsEntry))
                         return false;
+
+                    entries = ecsEntry;
                 }
             }
 
@@ -252,7 +298,7 @@ namespace ZenitiumDns.Core.Dns.Zones
                             {
                                 if ((existingCNAMERecords.Count > 0) && (existingCNAMERecords[0].RDATA is DnsCNAMERecordData) && existingCNAMERecords[0].IsStale)
                                 {
-                                    entries.TryRemove(DnsResourceRecordType.CNAME, out _);
+                                    entries.TryRemove(DnsResourceRecordType.CNAME);
                                 }
                             }
                             break;
@@ -265,7 +311,7 @@ namespace ZenitiumDns.Core.Dns.Zones
                     {
                         if ((existingChildNSRecords.Count > 0) && (existingChildNSRecords[0].RDATA is DnsNSRecordData) && existingChildNSRecords[0].IsStale)
                         {
-                            entries.TryRemove(DnsResourceRecordType.CHILD_NS, out _);
+                            entries.TryRemove(DnsResourceRecordType.CHILD_NS);
                         }
                     }
                 }
@@ -287,20 +333,22 @@ namespace ZenitiumDns.Core.Dns.Zones
                 records = newRecords;
             }
 
+            if (records is not DnsResourceRecord[])
+            {
+                DnsResourceRecord[] compactRecords = new DnsResourceRecord[records.Count];
+
+                for (int i = 0; i < compactRecords.Length; i++)
+                    compactRecords[i] = records[i];
+
+                records = compactRecords;
+            }
+
             DateTime utcNow = DateTime.UtcNow;
 
             foreach (DnsResourceRecord record in records)
                 record.GetCacheRecordInfo().LastUsedOn = utcNow;
 
-            bool added = true;
-
-            entries.AddOrUpdate(type, records, delegate (DnsResourceRecordType key, IReadOnlyList<DnsResourceRecord> existingRecords)
-            {
-                added = false;
-                return records;
-            });
-
-            return added;
+            return entries.Set(type, records);
         }
 
         public int RemoveExpiredRecords(bool serveStale)
@@ -309,30 +357,16 @@ namespace ZenitiumDns.Core.Dns.Zones
 
             if (_ecsEntries is not null)
             {
-                foreach (KeyValuePair<NetworkAddress, ConcurrentDictionary<DnsResourceRecordType, IReadOnlyList<DnsResourceRecord>>> ecsEntry in _ecsEntries)
+                foreach (KeyValuePair<NetworkAddress, CacheEntrySet> ecsEntry in _ecsEntries)
                 {
-                    foreach (KeyValuePair<DnsResourceRecordType, IReadOnlyList<DnsResourceRecord>> entry in ecsEntry.Value)
-                    {
-                        if (DnsResourceRecord.IsRRSetExpired(entry.Value, serveStale))
-                        {
-                            if (ecsEntry.Value.TryRemove(entry.Key, out _))
-                                removedEntries++;
-                        }
-                    }
+                    removedEntries += RemoveExpiredEntries(ecsEntry.Value, serveStale);
 
                     if (ecsEntry.Value.IsEmpty)
                         _ecsEntries.TryRemove(ecsEntry.Key, out _);
                 }
             }
 
-            foreach (KeyValuePair<DnsResourceRecordType, IReadOnlyList<DnsResourceRecord>> entry in _entries)
-            {
-                if (DnsResourceRecord.IsRRSetExpired(entry.Value, serveStale))
-                {
-                    if (_entries.TryRemove(entry.Key, out _))
-                        removedEntries++;
-                }
-            }
+            removedEntries += RemoveExpiredEntries(this, serveStale);
 
             return removedEntries;
         }
@@ -343,30 +377,16 @@ namespace ZenitiumDns.Core.Dns.Zones
 
             if (_ecsEntries is not null)
             {
-                foreach (KeyValuePair<NetworkAddress, ConcurrentDictionary<DnsResourceRecordType, IReadOnlyList<DnsResourceRecord>>> ecsEntry in _ecsEntries)
+                foreach (KeyValuePair<NetworkAddress, CacheEntrySet> ecsEntry in _ecsEntries)
                 {
-                    foreach (KeyValuePair<DnsResourceRecordType, IReadOnlyList<DnsResourceRecord>> entry in ecsEntry.Value)
-                    {
-                        if ((entry.Value.Count == 0) || (entry.Value[0].GetCacheRecordInfo().LastUsedOn < cutoff))
-                        {
-                            if (ecsEntry.Value.TryRemove(entry.Key, out _))
-                                removedEntries++;
-                        }
-                    }
+                    removedEntries += RemoveLeastUsedEntries(ecsEntry.Value, cutoff);
 
                     if (ecsEntry.Value.IsEmpty)
                         _ecsEntries.TryRemove(ecsEntry.Key, out _);
                 }
             }
 
-            foreach (KeyValuePair<DnsResourceRecordType, IReadOnlyList<DnsResourceRecord>> entry in _entries)
-            {
-                if ((entry.Value.Count == 0) || (entry.Value[0].GetCacheRecordInfo().LastUsedOn < cutoff))
-                {
-                    if (_entries.TryRemove(entry.Key, out _))
-                        removedEntries++;
-                }
-            }
+            removedEntries += RemoveLeastUsedEntries(this, cutoff);
 
             return removedEntries;
         }
@@ -378,7 +398,7 @@ namespace ZenitiumDns.Core.Dns.Zones
 
             int count = 0;
 
-            foreach (KeyValuePair<NetworkAddress, ConcurrentDictionary<DnsResourceRecordType, IReadOnlyList<DnsResourceRecord>>> ecsEntry in _ecsEntries)
+            foreach (KeyValuePair<NetworkAddress, CacheEntrySet> ecsEntry in _ecsEntries)
                 count += ecsEntry.Value.Count;
 
             _ecsEntries = null;
@@ -388,11 +408,11 @@ namespace ZenitiumDns.Core.Dns.Zones
 
         public IReadOnlyList<DnsResourceRecord> QueryRecords(DnsResourceRecordType type, bool serveStale, bool skipSpecialCacheRecord, NetworkAddress eDnsClientSubnet, bool advancedForwardingClientSubnet)
         {
-            ConcurrentDictionary<DnsResourceRecordType, IReadOnlyList<DnsResourceRecord>> entries;
+            ICacheEntrySet entries;
 
             if (eDnsClientSubnet is null)
             {
-                entries = _entries;
+                entries = this;
             }
             else
             {
@@ -401,15 +421,17 @@ namespace ZenitiumDns.Core.Dns.Zones
 
                 if (advancedForwardingClientSubnet)
                 {
-                    if (!_ecsEntries.TryGetValue(eDnsClientSubnet, out entries))
+                    if (!_ecsEntries.TryGetValue(eDnsClientSubnet, out CacheEntrySet ecsEntry))
                         return [];
+
+                    entries = ecsEntry;
                 }
                 else
                 {
                     NetworkAddress selectedNetwork = null;
                     entries = null;
 
-                    foreach (KeyValuePair<NetworkAddress, ConcurrentDictionary<DnsResourceRecordType, IReadOnlyList<DnsResourceRecord>>> ecsEntry in _ecsEntries)
+                    foreach (KeyValuePair<NetworkAddress, CacheEntrySet> ecsEntry in _ecsEntries)
                     {
                         NetworkAddress cacheSubnet = ecsEntry.Key;
 
@@ -441,18 +463,19 @@ namespace ZenitiumDns.Core.Dns.Zones
                     break;
 
                 case DnsResourceRecordType.ANY:
-                    List<DnsResourceRecord> anyRecords = new List<DnsResourceRecord>(entries.Count * 2);
+                    CacheEntry[] items = entries.Items;
+                    List<DnsResourceRecord> anyRecords = new List<DnsResourceRecord>(items.Length * 2);
 
-                    foreach (KeyValuePair<DnsResourceRecordType, IReadOnlyList<DnsResourceRecord>> entry in entries)
+                    foreach (CacheEntry entry in items)
                     {
-                        switch (entry.Key)
+                        switch (entry.Type)
                         {
                             case DnsResourceRecordType.DS:
                             case DnsResourceRecordType.NS:
                                 continue;
                         }
 
-                        anyRecords.AddRange(ValidateRRSet(entry.Value, serveStale, true));
+                        anyRecords.AddRange(ValidateRRSet(entry.Records, serveStale, true));
                     }
 
                     return anyRecords;
@@ -498,25 +521,41 @@ namespace ZenitiumDns.Core.Dns.Zones
             return [];
         }
 
+        public bool TryGetValue(DnsResourceRecordType type, out IReadOnlyList<DnsResourceRecord> records)
+        {
+            return CacheEntries.TryGetValue(Volatile.Read(ref _items), type, out records);
+        }
+
+        public bool Set(DnsResourceRecordType type, IReadOnlyList<DnsResourceRecord> records)
+        {
+            return CacheEntries.Set(ref _items, this, type, records);
+        }
+
+        public bool TryRemove(DnsResourceRecordType type, IReadOnlyList<DnsResourceRecord> expectedRecords = null)
+        {
+            return CacheEntries.TryRemove(ref _items, this, type, expectedRecords);
+        }
+
         public override void ListAllRecords(List<DnsResourceRecord> records)
         {
             if (_ecsEntries is not null)
             {
-                foreach (KeyValuePair<NetworkAddress, ConcurrentDictionary<DnsResourceRecordType, IReadOnlyList<DnsResourceRecord>>> ecsEntry in _ecsEntries)
+                foreach (KeyValuePair<NetworkAddress, CacheEntrySet> ecsEntry in _ecsEntries)
                 {
-                    foreach (KeyValuePair<DnsResourceRecordType, IReadOnlyList<DnsResourceRecord>> entry in ecsEntry.Value)
-                        records.AddRange(entry.Value);
+                    foreach (CacheEntry entry in ecsEntry.Value.Items)
+                        records.AddRange(entry.Records);
                 }
             }
 
-            base.ListAllRecords(records);
+            foreach (CacheEntry entry in Items)
+                records.AddRange(entry.Records);
         }
 
         public override bool ContainsNameServerRecords()
         {
-            if (!_entries.TryGetValue(DnsResourceRecordType.NS, out IReadOnlyList<DnsResourceRecord> records))
+            if (!TryGetValue(DnsResourceRecordType.NS, out IReadOnlyList<DnsResourceRecord> records))
             {
-                if ((_name.Length > 0) || !_entries.TryGetValue(DnsResourceRecordType.CHILD_NS, out records))
+                if ((_name.Length > 0) || !TryGetValue(DnsResourceRecordType.CHILD_NS, out records))
                     return false;
             }
 
@@ -534,7 +573,7 @@ namespace ZenitiumDns.Core.Dns.Zones
 
         public override bool ContainsDNAMERecord()
         {
-            if (!_entries.TryGetValue(DnsResourceRecordType.DNAME, out IReadOnlyList<DnsResourceRecord> records))
+            if (!TryGetValue(DnsResourceRecordType.DNAME, out IReadOnlyList<DnsResourceRecord> records))
                 return false;
 
             foreach (DnsResourceRecord record in records)
@@ -555,7 +594,7 @@ namespace ZenitiumDns.Core.Dns.Zones
 
             bW.Write(_name);
 
-            WriteEntriesTo(_entries, bW);
+            WriteEntriesTo(this, bW);
 
             if (_ecsEntries is null)
             {
@@ -565,7 +604,7 @@ namespace ZenitiumDns.Core.Dns.Zones
             {
                 bW.Write(_ecsEntries.Count);
 
-                foreach (KeyValuePair<NetworkAddress, ConcurrentDictionary<DnsResourceRecordType, IReadOnlyList<DnsResourceRecord>>> ecsEntry in _ecsEntries)
+                foreach (KeyValuePair<NetworkAddress, CacheEntrySet> ecsEntry in _ecsEntries)
                 {
                     ecsEntry.Key.WriteTo(bW);
                     WriteEntriesTo(ecsEntry.Value, bW);
@@ -582,22 +621,31 @@ namespace ZenitiumDns.Core.Dns.Zones
             get
             {
                 if (_ecsEntries is null)
-                    return _entries.IsEmpty;
+                    return Volatile.Read(ref _items).Length == 0;
 
-                return _ecsEntries.IsEmpty && _entries.IsEmpty;
+                return _ecsEntries.IsEmpty && (Volatile.Read(ref _items).Length == 0);
             }
         }
+
+        public CacheEntry[] Items
+        { get { return Volatile.Read(ref _items); } }
+
+        bool ICacheEntrySet.IsEmpty
+        { get { return Volatile.Read(ref _items).Length == 0; } }
+
+        int ICacheEntrySet.Count
+        { get { return Volatile.Read(ref _items).Length; } }
 
         public int TotalEntries
         {
             get
             {
                 if (_ecsEntries is null)
-                    return _entries.Count;
+                    return Volatile.Read(ref _items).Length;
 
-                int count = _entries.Count;
+                int count = Volatile.Read(ref _items).Length;
 
-                foreach (KeyValuePair<NetworkAddress, ConcurrentDictionary<DnsResourceRecordType, IReadOnlyList<DnsResourceRecord>>> ecsEntry in _ecsEntries)
+                foreach (KeyValuePair<NetworkAddress, CacheEntrySet> ecsEntry in _ecsEntries)
                     count += ecsEntry.Value.Count;
 
                 return count;

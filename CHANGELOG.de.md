@@ -2,6 +2,60 @@
 
 [English version](CHANGELOG.md)
 
+## ZenitiumDNS 15.5.1 (Paket 15.5.1-11)
+Veröffentlicht: 30. September 2026
+
+### Neu
+- Blocklisten verstehen neben hosts-Dateien, reinen Domainlisten und Wildcard-Listen die Regelsyntax von AdGuard Home und Adblock: `||domain^`, Ausnahmen mit `@@`, `|domain^` für genau diesen Namen, `||*.domain^` nur für Subdomains, Platzhalter `*`, reguläre Ausdrücke `/…/` und die Modifikatoren `$important`, `$badfilter`, `$dnstype`, `$denyallow` und `$client`. Listen im Format der Regex-Filter von Pi-hole (mit `;querytype=`) funktionieren ebenfalls; POSIX-Zeichenklassen werden übersetzt. Reguläre Ausdrücke laufen ohne Backtracking und mit Zeitlimit, eine Liste kann den Server also nicht ausbremsen. Regeln für Elemente von Webseiten und Modifikatoren ohne Bedeutung für DNS werden übersprungen und gezählt. Einzelheiten in [docs/BlockLists.de.md](docs/BlockLists.de.md).
+- IP-Adressen und Netze in einer Blockliste blockieren Antworten, deren A- oder AAAA-Einträge auf sie zeigen, auch aus dem Cache; Erlaubnislisten nehmen Adressen wieder aus.
+- Die Schnellauswahl der Listen von HaGeZi nutzt jetzt das Adblock-Format von `hagezi-mirror.dnsbunker.org`.
+- Clientprofile (Filter > Clients) nach dem Vorbild von AdGuard Home: Geräte werden über IP-Adresse, Netz oder ClientID erkannt und bekommen zusätzliche Block- oder Erlaubnislisten, nutzen nur eigene Listen oder werden gar nicht gefiltert. Die ClientID kommt aus dem DoH-Pfad (`/dns-query/<id>`) oder dem Servernamen bei DoT und DoQ (`<id>.<Servername>`). Alle Profile teilen sich einen geladenen Regelsatz, der je Anfrage gefiltert wird; eine Liste, die mehrere Profile nutzen, wird also nur einmal geladen.
+- DNS-Cookies (RFC 7873, RFC 9018), standardmäßig eingeschaltet: Der Server beantwortet Client-Cookies mit interoperablen Server-Cookies (SipHash-2-4, eine Stunde gültig) und schickt eigene Cookies an Nameserver und Forwarder; Antworten mit falschem oder fehlendem Cookie von einem Server, der zuvor Cookies verwendet hat, werden verworfen. Clients über der UDP-Ratenbegrenzung mit gültigem Cookie werden weiter beantwortet, solange sie innerhalb der TCP-Grenze bleiben; andere bekommen eine gekürzte Antwort oder `BADCOOKIE`. Fehlerhafte Cookies werden mit `FORMERR` beantwortet. Das Geheimnis ist bei jedem Start zufällig oder lässt sich festlegen (32 Hexadezimalzeichen), damit mehrere Server hinter einer Adresse die Cookies der anderen annehmen.
+- Automatischer Rückfall bei der QNAME-Minimierung: Beantwortet ein Nameserver eine minimierte Anfrage falsch oder gar nicht, wiederholt der Resolver sie mit dem längeren oder vollständigen Namen und merkt sich die Zone eine Stunde lang (höchstens 10.000 Zonen). Die Option steht unter Einstellungen > Resolver und ist standardmäßig eingeschaltet.
+- Der Cache lässt sich vollständig abschalten (Einstellungen > Cache > Cache verwenden), um ZenitiumDNS als filterndes Frontend mit DoH, DoT und DoQ vor einem Resolver mit eigenem Cache wie Unbound zu betreiben, ohne doppelt zu cachen. Ausgeschaltet werden keine Antworten gespeichert, und es gibt kein Prefetch, kein Serve Stale, keine aggressive Nutzung von NSEC und keine lokale Root- und arpa-Zone; der vorhandene Cache wird geleert und `cache.bin` gelöscht. TTLs werden unverändert durchgereicht, gleichzeitige gleiche Anfragen weiterhin zusammengefasst, und jede Auflösung behält nur in einem kurzlebigen Zwischenspeicher, was sie unterwegs erfährt. Ohne Forwarder wird jede Anfrage ab den Root-Servern aufgelöst; der Selbsttest weist darauf hin.
+- Speichergrenze für den Cache (Einstellungen > Cache, standardmäßig aus): Überschreitet der belegte Speicher des Servers die Grenze, entfernt die minütliche Cache-Wartung die am längsten ungenutzten Einträge, bis wieder etwa 90 % der Grenze erreicht sind; mindestens 10.000 Einträge bleiben erhalten. Nach einem großen Schnitt wird der Speicher höchstens alle 15 Minuten kompaktiert, sodass der Prozess auch Speicher an das System zurückgibt.
+- Status jeder Blockliste (Upstream-Issue #2198): wann sie zuletzt geprüft und geändert wurde, das Ergebnis, Fehler, die Zahl der Domains, Ausnahmen, Muster und IP-Einträge sowie übersprungene Zeilen. In der Tabelle lassen sich Listen ein- und ausschalten, benennen, einzeln aktualisieren und entfernen.
+- Eigene Farbschemata: Jeder Benutzer kann im Farbschema-Menü Schemata anlegen, ändern und anwenden; sie werden je Benutzer auf dem Server gespeichert.
+- Schreibschutz für die Einstellungen: Eine Sperre je Benutzer verhindert versehentliche Änderungen; sie lässt sich vorübergehend aufheben und greift wieder, sobald die Einstellungen verlassen werden.
+- Weitere Sprachen der Oberfläche lassen sich als JSON-Wörterbuch (deutscher Text zu Übersetzung, bis 4 MB) unter Einstellungen > Server > Sprache importieren; fehlende Texte erscheinen auf Englisch.
+- Der HTTP-User-Agent für das Herunterladen von Blocklisten und andere ausgehende HTTP-Anfragen ist einstellbar (Standard `ZenitiumDNS/<Version>`).
+- Die Konsole zeigt nach dem Start Version und Startzeit (Upstream-Issue #2195).
+- Gibt es nur den Benutzer `admin`, füllt das Anmeldeformular den Benutzernamen aus.
+
+### Speicher
+- Ein Cache-Eintrag braucht etwa halb so viel Speicher. Mit 1,2 Millionen Namen im Cache sank der verwaltete Heap von 1.506 auf 789 MB und der belegte Arbeitsspeicher von 1,94 auf 1,26 GB:
+  - Die Einträge eines Namens liegen in einem kleinen Array statt in einem eigenen nebenläufigen Dictionary je Name (rund 240 Byte weniger je Name).
+  - Der Nameserver der Antwort wird zwischen Einträgen geteilt statt für jede Antwort kopiert (rund 210 Byte weniger).
+  - Der Domainbaum nutzt für Knoten mit bis zu 8 Kindern genau passende Arrays statt 41 Plätzen (39 statt 157 MB für die Arrays des Baums).
+  - A- und AAAA-Einträge sowie Signaturen (RRSIG) behalten keine zweite Rohkopie ihrer Daten mehr, und selten genutzte Felder von Cache-Einträgen werden nur bei Bedarf angelegt.
+- Die CPU-Zeit je Anfrage ist unverändert (20,3 µs bei 40.000 Anfragen/s auf 4 Kernen); 400.000 Anfragen/s aus Cache-Treffern und blockierten Namen lasteten den Server nicht aus.
+
+### Sicherheit
+- systemd-Dienst: Systemaufruf-Filter (`@system-service` ohne `@privileged`), erlaubte Adressfamilien auf Unix, IPv4, IPv6 und Netlink beschränkt, `ProtectProc=invisible`. `ProtectClock` wurde entfernt, weil es auch das Lesen des NTP-Status für den Selbsttest blockierte; die Uhr stellen kann der Dienst weiterhin nicht. `systemd-analyze security` bewertet die Unit mit 1,9 statt 3,6.
+- Die Datei `/etc/zenitiumdns/admin.password` mit dem Startpasswort wird gelöscht, sobald sich das Passwort von `admin` davon unterscheidet, direkt nach der Änderung oder beim nächsten Start.
+- Weboberfläche: Die Content Security Policy erlaubt kein `unsafe-eval` mehr, Anfragen ohne gültige Sitzung dürfen höchstens 1 MB groß sein, `Strict-Transport-Security` wird gesendet, wenn HTTPS mit Umleitung aktiv ist, `X-Content-Type-Options: nosniff` und `Referrer-Policy: same-origin` bei jeder Antwort, und das kurzlebige Token-Cookie des Single Sign-On ist `SameSite=Strict` und über HTTPS `Secure`.
+- Zufällige Groß-/Kleinschreibung des QNAME (0x20) ist standardmäßig eingeschaltet; von älteren Versionen aktualisierte Installationen schalten sie einmalig ein.
+- Container-Image: GitHub Actions und Basis-Images sind per Commit-Hash und Digest festgelegt, das Image bekommt eine SBOM und Build-Provenienz und wird mit cosign (ohne Schlüssel) signiert.
+
+### Behoben
+- Aggressive Nutzung von NSEC: Namen mit Zeichen, die in Hostnamen nicht erlaubt sind, etwa `securel~.ikea.com`, lösten beim Erzeugen synthetisierter Antworten eine Ausnahme aus.
+- Das Wiederherstellen einer Sicherung mit Protokolldateien konnte mit „ZipArchiveEntry does not support reading“ scheitern, weil die Protokolle im Hintergrund entpackt wurden, während das Archiv schon geschlossen war.
+- Aktualisierungen von Blocklisten konnten gleichzeitig laufen (etwa nach schnellen Änderungen der Einstellungen) und sich an der temporären Download-Datei in die Quere kommen; sie laufen jetzt nacheinander.
+- Das Installationsprogramm des Debian-Pakets gibt seine Meldungen nur noch auf Englisch aus.
+
+### Tests
+- Regelparser: 106 Prüfungen einschließlich Pi-hole-Listen, `$client`, Filtern je Profil und IP-Regeln; HaGeZi Pro und TIF im Adblock-Format (2,6 Millionen Domains) laden in 1,4 s in rund 107 MB.
+- Im isolierten Testnetz: Listensyntax 44 von 44, Clientprofile einschließlich DoH-ClientID, DoT-Servername und Neustart 52 von 52, allgemeine Regressionstests 88 von 88, Weboberfläche auf Deutsch und Englisch 27 und 28 Prüfungen, DNSSEC und aggressives NSEC mit signierten Knot-Zonen 35 von 35.
+- Domainbaum: 600.096 Prüfungen gegen eine Referenz, einschließlich Reihenfolge beim Durchlaufen und paralleler Änderungen, mit identischem Ergebnis für die alte und die neue Implementierung.
+- Ohne Cache vor Unbound: 23 von 23 Prüfungen (jede wiederholte Anfrage erreicht Unbound, TTLs unverändert, Blockierung und Profile funktionieren, die Einstellung übersteht einen Neustart, kein `cache.bin`); mit signierten Knot-Zonen werden Antworten auch ohne Cache validiert (AD) und Nichtexistenz belegt.
+- Speichergrenze: Bei 400 MB und 12.000 neuen Namen pro Sekunde wurde der Cache in einem Schritt von 1,2 Millionen auf 577.000 Einträge verkleinert, und der belegte Arbeitsspeicher sank nach einer Kompaktierung von 312 ms von 1,25 GB auf 574 MB.
+
+### Sonstige Änderungen
+- Formatversion 17 der DNS-Einstellungsdatei. Ältere Versionen von ZenitiumDNS können sie nicht lesen. Vorhandene Einstellungen werden übernommen, mit eingeschalteten DNS-Cookies, 0x20 und Rückfall bei der QNAME-Minimierung, eingeschaltetem Cache und ohne Speichergrenze.
+- Clientprofile stehen in `clients.json`, Einstellungen je Benutzer in `userprefs.json` und importierte Sprachen im Ordner `lang`; alle sind Teil der Sicherung.
+- Neue Prometheus-Metriken für DNS-Cookies, den Rückfall bei der QNAME-Minimierung, den Cache-Schalter und die Speichergrenze des Caches, siehe [docs/Metrics.de.md](docs/Metrics.de.md).
+- Unterstützte RFCs: RFC 7873 und RFC 9018 ergänzt.
+
 ## ZenitiumDNS 15.5.1 (Paket 15.5.1-10)
 Veröffentlicht: 28. September 2026
 

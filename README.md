@@ -46,7 +46,10 @@ ZenitiumDNS is a fork of [Technitium DNS Server](https://github.com/TechnitiumSo
   - about 70 % less CPU time per query under the same load,
   - about 65 % fewer memory allocations,
   - no minute-by-minute stalls caused by cache maintenance.
-- Much lower memory use: 2.5 million block list domains take about 80 instead of 395 MB, and the statistics keep only the top 1,000 entries of every completed minute. Under load, about 70 % less memory is in use.
+- Much lower memory use: 2.5 million block list domains take about 80 instead of 395 MB, the statistics keep only the top 1,000 entries of every completed minute, and a cache entry needs about half the memory. Under load, about 70 % less memory is in use. An optional memory limit trims the cache automatically.
+- Block lists in AdGuard Home, Adblock and Pi-hole regex syntax next to hosts files and plain domain lists, with exceptions, wildcards, regular expressions and modifiers, and blocking by the IP address in the answer.
+- Client profiles in the style of AdGuard Home: devices are recognized by IP address, network or ClientID (DoH path, DoT/DoQ server name) and get their own lists, skip the default lists or are not filtered at all.
+- DNS cookies ([RFC 7873](https://www.rfc-editor.org/rfc/rfc7873.html), [RFC 9018](https://www.rfc-editor.org/rfc/rfc9018.html)) towards clients and name servers; clients with a valid cookie are let through by the rate limiting.
 - Additional bug and security fixes in the cache, the query log apps, the web interface and DNS-over-TCP/TLS.
 
 # Features
@@ -57,7 +60,8 @@ ZenitiumDNS is a fork of [Technitium DNS Server](https://github.com/TechnitiumSo
 - Latency-based name server selection with parallel queries. Response time and error rate are tracked separately for IPv4 and IPv6.
 - Automatic IPv6 fallback when IPv6 connectivity is broken, with background checks and a manual check in the web interface.
 - DNSSEC validation with RSA, ECDSA, EdDSA and ML-DSA-44 for the recursive resolver, forwarders and forwarder zones, with NSEC and NSEC3. Validated NSEC and NSEC3 records are used aggressively according to RFC 8198: queries for names and types that do not exist in signed zones are answered from the cache, which also slows down attacks with random subdomains.
-- QNAME minimization ([RFC 9156](https://www.rfc-editor.org/rfc/rfc9156.html)).
+- QNAME minimization ([RFC 9156](https://www.rfc-editor.org/rfc/rfc9156.html)) with an automatic fallback for name servers that mishandle it.
+- DNS cookies ([RFC 7873](https://www.rfc-editor.org/rfc/rfc7873.html), [RFC 9018](https://www.rfc-editor.org/rfc/rfc9018.html)) towards clients and name servers.
 - Random letter case of the QNAME over UDP ([draft-vixie-dnsext-dns0x20-00](https://datatracker.ietf.org/doc/html/draft-vixie-dnsext-dns0x20-00)). Mismatching answers are treated as spoofing attempts and immediately retried over TCP.
 - EDNS(0) ([RFC 6891](https://datatracker.ietf.org/doc/html/rfc6891)), EDNS Client Subnet ([RFC 7871](https://datatracker.ietf.org/doc/html/rfc7871)) and Extended DNS Errors ([RFC 8914](https://datatracker.ietf.org/doc/html/rfc8914)).
 - Locally served zones ([RFC 6303](https://www.rfc-editor.org/rfc/rfc6303)) and special-use domain names ([RFC 6761](https://www.rfc-editor.org/rfc/rfc6761)).
@@ -68,13 +72,15 @@ ZenitiumDNS is a fork of [Technitium DNS Server](https://github.com/TechnitiumSo
 
 ## Cache
 - Comprehensive cache with serve stale ([RFC 8767](https://www.rfc-editor.org/rfc/rfc8767)) and prefetch.
+- The cache can be switched off completely to run ZenitiumDNS as a filtering front end in front of a caching resolver such as Unbound.
 - The cache is saved on shutdown and loaded again on start.
 - Cache view with name server statistics per address family in the web interface.
 
 ## Protection and filtering
-- Blocks ads and malware via one or more block list URLs, manually blocked domains and exceptions via allowed domains. The quick selection offers HaGeZi's lists from the build mirror; custom blocking texts and a custom TTL for negative caching can be configured.
+- Blocks ads and malware via one or more block list URLs, manually blocked domains and exceptions via allowed domains. Lists can use the AdGuard Home and Adblock rule syntax (`||domain^`, `@@` exceptions, wildcards, `/regex/`, `$important`, `$badfilter`, `$dnstype`, `$denyallow`, `$client`), Pi-hole regex lists, hosts files or plain domains; IP addresses in a list block answers that point to them. The quick selection offers HaGeZi's lists in Adblock format from the build mirror; custom blocking texts and a custom TTL for negative caching can be configured. See [Block lists and client profiles](docs/BlockLists.md).
+- Client profiles: per device (IP address, network or ClientID via DoH path and DoT/DoQ server name) additional lists, only own lists or no blocking at all.
 - CNAME cloaking detection: domains that point to blocked domains via CNAME are blocked as well.
-- Block lists with regular expressions and different lists per client IP address or subnet via the Advanced Blocking app.
+- Further per-client rules via the Advanced Blocking app.
 - Protection against DNS rebinding attacks with the DNS Rebinding Protection app.
 - Request filter for unusual queries with hit counters per rule.
 - Access control for recursion via network ACL.
@@ -93,7 +99,7 @@ ZenitiumDNS is a fork of [Technitium DNS Server](https://github.com/TechnitiumSo
 - Statistics from one minute to twelve months and live graphs of internal processes.
 - Built-in server and query logging, optionally without client addresses, and export of query logs to SQLite, MySQL, PostgreSQL or SQL Server via apps.
 - High performance: dedicated UDP receive threads answer cache hits without thread switches. In tests on a machine with 20 cores, more than 700,000 queries per second were answered.
-- Web interface for configuration in the browser, in English or German, with dark mode.
+- Web interface for configuration in the browser, in English or German, with dark mode, color schemes of your own per user, write protection for the settings against accidental changes and further languages imported as JSON dictionaries.
 - Multi-user operation with roles, two-factor authentication (2FA) via TOTP, single sign-on with OpenID Connect and sign-in via LDAP.
 - Built-in DNS client for testing resolutions.
 - Optional Prometheus endpoint `/metrics` with detailed metrics (histograms, protocols, query types, response codes, Extended DNS Errors, name server queries, process), protected by an ACL and a bearer token, see [Prometheus metrics](docs/Metrics.md).
@@ -117,7 +123,7 @@ ZenitiumDNS is a fork of [Technitium DNS Server](https://github.com/TechnitiumSo
 Ready-made Debian 13 packages for amd64 and arm64 are available under [Releases](https://github.com/DNSBunker/ZenitiumDNS/releases):
 
 ```
-sudo apt install ./zenitiumdns_15.5.1-10_amd64.deb
+sudo apt install ./zenitiumdns_15.5.1-11_amd64.deb
 ```
 
 The container image for amd64 and arm64 runs with Podman and Docker, see [Container image](docs/Container.md):
@@ -158,6 +164,7 @@ to list missing translations and to verify that markup and placeholders match. `
 - [Debian package](setup/debian/README.Debian.md)
 - [Container image](docs/Container.md)
 - [Environment variables](docs/EnvironmentVariables.md)
+- [Block lists and client profiles](docs/BlockLists.md)
 - [Prometheus metrics](docs/Metrics.md)
 - [Supported RFCs](docs/SupportedRFCs.md)
 - [Changelog](CHANGELOG.md)

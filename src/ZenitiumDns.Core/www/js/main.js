@@ -59,6 +59,13 @@ function showPageLogin(autoLogin) {
             else
                 $("#divLoginSso").hide();
 
+            if (responseJSON.onlyAdminUser && ($("#txtUser").val() === "")) {
+                $("#txtUser").val("admin");
+
+                if ($("#txtPass").val() === "")
+                    $("#txtPass").trigger("focus");
+            }
+
             if (autoLogin && responseJSON.hasDefaultCredentials)
                 login("admin", "admin");
         }
@@ -120,6 +127,7 @@ function showPageMain() {
     $("#filterTabListBlocked").toggle(permissions.Blocked.canView);
     $("#filterTabListAllowed").toggle(permissions.Allowed.canView);
     $("#filterTabListLists").toggle(permissions.Settings.canView);
+    $("#filterTabListClients").toggle(permissions.Settings.canView);
 
     if (permissions.Blocked.canView) {
         $("#filterTabListBlocked").addClass("active");
@@ -305,6 +313,16 @@ function refreshResolverTab() {
         refreshZones(true);
 }
 
+function updateCacheDependentSettings() {
+    var enabled = $("#chkEnableCache").prop("checked");
+
+    $(".cache-dependent").toggleClass("settings-section-inactive", !enabled);
+    $(".cache-dependent :input").prop("disabled", !enabled);
+
+    if (enabled)
+        $("#chkServeStale").triggerHandler("click");
+}
+
 function showSettingsSection(settingsTabListId) {
     $("#mainPanelTabListSettings a").tab("show");
     refreshDnsSettings();
@@ -336,6 +354,8 @@ $(function () {
     });
 
     $("#chkEnableBlocking").on("click", updateBlockingState);
+
+    $("#chkEnableCache").on("change", updateCacheDependentSettings);
 
     $("input[type=radio][name=rdProxyType]").on("change", function () {
         var proxyType = $("input[name=rdProxyType]:checked").val().toLowerCase();
@@ -1005,6 +1025,130 @@ function loadQuickForwardersListFrom(responseJSON) {
     $("#optQuickForwarders").html(htmlList);
 }
 
+function renderLanguageOptions(importedLanguages, selected) {
+    var optLanguage = $("#optLanguage");
+    optLanguage.find("option.imported-language").remove();
+
+    var list = $("#divImportedLanguages");
+    list.empty();
+
+    if (importedLanguages != null) {
+        for (var i = 0; i < importedLanguages.length; i++) {
+            var item = importedLanguages[i];
+
+            optLanguage.append($("<option class=\"imported-language\"></option>").val(item.code).attr("lang", item.code).text(item.name + " (" + item.code + ")"));
+
+            var row = $("<div class=\"imported-language-row\"></div>");
+            row.append($("<span></span>").text(item.name + " (" + item.code + ")"));
+            row.append(" ");
+            row.append($("<button type=\"button\" class=\"btn btn-default btn-xs\"></button>").text(tr("Entfernen")).attr("data-code", item.code).on("click", function () {
+                deleteImportedLanguage(this, $(this).attr("data-code"));
+            }));
+
+            list.append(row);
+        }
+    }
+
+    if ((importedLanguages == null) || (importedLanguages.length === 0))
+        list.append($("<span class=\"text-muted\"></span>").text(tr("Keine")));
+
+    optLanguage.val(selected);
+}
+
+function importLanguage(objBtn) {
+    var code = $("#txtImportLanguageCode").val().trim();
+    var name = $("#txtImportLanguageName").val().trim();
+    var fileInput = $("#fileImportLanguage")[0];
+
+    if (!/^[a-z]{2,3}(-[A-Za-z0-9]{2,8})?$/.test(code)) {
+        showAlert("warning", tr("Ungültige Angabe"), tr("Der Sprachcode muss aus 2 oder 3 Kleinbuchstaben bestehen, optional mit Region, z. B. fr oder pt-BR."));
+        $("#txtImportLanguageCode").trigger("focus");
+        return;
+    }
+
+    if (name === "") {
+        showAlert("warning", tr("Angabe fehlt"), tr("Bitte den Namen der Sprache eingeben."));
+        $("#txtImportLanguageName").trigger("focus");
+        return;
+    }
+
+    if ((fileInput.files == null) || (fileInput.files.length === 0)) {
+        showAlert("warning", tr("Angabe fehlt"), tr("Bitte eine Sprachdatei auswählen."));
+        return;
+    }
+
+    var formData = new FormData();
+    formData.append("code", code);
+    formData.append("name", name);
+    formData.append("fileLanguage", fileInput.files[0]);
+
+    var btn = $(objBtn);
+    btn.button("loading");
+
+    HTTPRequest({
+        url: "api/settings/languages/import",
+        method: "POST",
+        data: formData,
+        processData: false,
+        contentType: false,
+        token: sessionData.token,
+        success: function (responseJSON) {
+            btn.button("reset");
+
+            var r = responseJSON.response;
+            var message = tr("{0} von {1} Texten übernommen.", r.translated, r.total);
+
+            if (r.rejected > 0)
+                message += " " + tr("{0} Einträge verworfen, weil Markup oder Platzhalter nicht zum Original passen.", r.rejected);
+
+            if (r.unknown > 0)
+                message += " " + tr("{0} unbekannte Einträge ignoriert.", r.unknown);
+
+            showAlert("success", tr("Sprache importiert"), message);
+
+            $("#txtImportLanguageCode").val("");
+            $("#txtImportLanguageName").val("");
+            $("#fileImportLanguage").val("");
+
+            refreshDnsSettings();
+        },
+        error: function () {
+            btn.button("reset");
+        },
+        invalidToken: function () {
+            btn.button("reset");
+            showPageLogin();
+        }
+    });
+}
+
+function deleteImportedLanguage(objBtn, code) {
+    if (!confirm(tr("Sprache {0} wirklich entfernen?", code)))
+        return;
+
+    var btn = $(objBtn);
+    btn.button("loading");
+
+    HTTPRequest({
+        url: "api/settings/languages/delete?code=" + encodeURIComponent(code),
+        token: sessionData.token,
+        success: function () {
+            if (code === zdnsI18n.language) {
+                window.location.reload();
+                return;
+            }
+
+            refreshDnsSettings();
+        },
+        error: function () {
+            btn.button("reset");
+        },
+        invalidToken: function () {
+            showPageLogin();
+        }
+    });
+}
+
 function refreshDnsSettings() {
     var divDnsSettingsLoader = $("#divDnsSettingsLoader");
     var divDnsSettings = $("#divDnsSettings");
@@ -1024,8 +1168,11 @@ function refreshDnsSettings() {
             $("#btnSettingsFlushCache").toggle(sessionData.info.permissions.Cache.canDelete);
             $("#btnShowBackupSettingsModal").toggle(sessionData.info.permissions.Settings.canDelete);
             $("#btnShowRestoreSettingsModal").toggle(sessionData.info.permissions.Settings.canDelete);
+            $("#btnSettingsLock").toggle(sessionData.info.permissions.Settings.canModify);
+            applySettingsLockState();
 
             refreshIpv6UpstreamStatus();
+            refreshBlockListStatus();
 
             divDnsSettingsLoader.hide();
             divDnsSettings.show();
@@ -1153,7 +1300,7 @@ function loadDnsSettings(responseJSON) {
 
     $("#txtDefaultResponsiblePerson").val(responseJSON.response.defaultResponsiblePerson);
 
-    $("#optLanguage").val(responseJSON.response.language);
+    renderLanguageOptions(responseJSON.response.importedLanguages, responseJSON.response.language);
 
     $("#chkDnsServerEnableCheckForUpdate").prop("checked", responseJSON.response.dnsServerEnableCheckForUpdate);
 
@@ -1428,7 +1575,12 @@ function loadDnsSettings(responseJSON) {
     $("#txtRecursionNetworkACL").val(getArrayAsString(responseJSON.response.recursionNetworkACL));
 
     $("#chkRandomizeName").prop("checked", responseJSON.response.randomizeName);
+    $("#chkEnableDnsCookies").prop("checked", responseJSON.response.enableDnsCookies);
+    $("#txtDnsCookieSecret").val(responseJSON.response.dnsCookieSecret == null ? "" : responseJSON.response.dnsCookieSecret);
+    $("#txtDnsCookieSecret").prop("disabled", !responseJSON.response.enableDnsCookies);
     $("#chkQnameMinimization").prop("checked", responseJSON.response.qnameMinimization);
+    $("#chkQnameMinimizationFallback").prop("checked", responseJSON.response.qnameMinimizationFallback);
+    $("#lblQnameMinimizationFallbackZones").text(responseJSON.response.qnameMinimizationFallbackZones);
     $("#chkLocallyServedDnsZones").prop("checked", responseJSON.response.locallyServedDnsZones);
 
     $("#txtResolverRetries").val(responseJSON.response.resolverRetries);
@@ -1450,7 +1602,10 @@ function loadDnsSettings(responseJSON) {
     $("#txtServeStaleResetTtl").val(responseJSON.response.serveStaleResetTtl);
     $("#txtServeStaleMaxWaitTime").val(responseJSON.response.serveStaleMaxWaitTime);
 
+    $("#chkEnableCache").prop("checked", responseJSON.response.enableCache !== false);
+    updateCacheDependentSettings();
     $("#txtCacheMaximumEntries").val(responseJSON.response.cacheMaximumEntries);
+    $("#txtCacheMaximumMemory").val(responseJSON.response.cacheMaximumMemory);
     $("#txtCacheMinimumRecordTtl").val(responseJSON.response.cacheMinimumRecordTtl);
     $("#txtCacheMaximumRecordTtl").val(responseJSON.response.cacheMaximumRecordTtl);
     $("#txtCacheNegativeRecordTtl").val(responseJSON.response.cacheNegativeRecordTtl);
@@ -1590,6 +1745,9 @@ function loadDnsSettings(responseJSON) {
         $("#txtProxyPassword").prop("disabled", false);
         $("#txtProxyBypassList").prop("disabled", false);
     }
+
+    $("#txtHttpUserAgent").val(responseJSON.response.httpUserAgent == null ? "" : responseJSON.response.httpUserAgent);
+    $("#txtHttpUserAgent").attr("placeholder", responseJSON.response.httpUserAgentDefault);
 
     var forwarders = responseJSON.response.forwarders;
     if (forwarders == null)
@@ -1754,8 +1912,8 @@ function saveDnsSettings(objBtn) {
     formData += "&defaultRecordTtl=" + encodeURIComponent(defaultRecordTtl) + "&defaultResponsiblePerson=" + encodeURIComponent(defaultResponsiblePerson) + "&dnsServerEnableCheckForUpdate=" + dnsServerEnableCheckForUpdate;
 
     var language = $("#optLanguage").val();
-    if ((language === "de") || (language === "en"))
-        formData += "&language=" + language;
+    if ((language != null) && /^[a-z]{2,3}(-[A-Za-z0-9]{2,8})?$/.test(language))
+        formData += "&language=" + encodeURIComponent(language);
 
     var ipv6Mode = $("input[name=rdIPv6Mode]:checked").val();
     var ipv6AutoFallback = $("#chkIpv6AutoFallback").prop("checked");
@@ -2063,6 +2221,15 @@ function saveDnsSettings(objBtn) {
         $("#txtRecursionNetworkACL").val(recursionNetworkACL.replace(/,/g, "\n"));
 
     var randomizeName = $("#chkRandomizeName").prop("checked");
+    var enableDnsCookies = $("#chkEnableDnsCookies").prop("checked");
+    var dnsCookieSecret = $("#txtDnsCookieSecret").val().trim();
+
+    if ((dnsCookieSecret.length > 0) && !/^[0-9a-fA-F]{32}$/.test(dnsCookieSecret)) {
+        showAlert("warning", tr("Ungültige Angabe"), tr("Das Cookie-Geheimnis muss aus 32 Hexadezimalzeichen (16 Byte) bestehen."));
+        $("#settingsTabListRecursion a").tab("show");
+        $("#txtDnsCookieSecret").trigger("focus");
+        return;
+    }
     var qnameMinimization = $("#chkQnameMinimization").prop("checked");
     var locallyServedDnsZones = $("#chkLocallyServedDnsZones").prop("checked");
 
@@ -2094,7 +2261,7 @@ function saveDnsSettings(objBtn) {
         return;
     }
 
-    formData += "&recursion=" + recursion + "&recursionNetworkACL=" + encodeURIComponent(recursionNetworkACL) + "&randomizeName=" + randomizeName + "&qnameMinimization=" + qnameMinimization + "&locallyServedDnsZones=" + locallyServedDnsZones + "&resolverRetries=" + resolverRetries + "&resolverTimeout=" + resolverTimeout + "&resolverConcurrency=" + resolverConcurrency + "&resolverMaxStackCount=" + resolverMaxStackCount;
+    formData += "&recursion=" + recursion + "&recursionNetworkACL=" + encodeURIComponent(recursionNetworkACL)  + "&randomizeName=" + randomizeName + "&enableDnsCookies=" + enableDnsCookies + "&dnsCookieSecret=" + encodeURIComponent(dnsCookieSecret)  + "&qnameMinimization=" + qnameMinimization + "&qnameMinimizationFallback=" + $("#chkQnameMinimizationFallback").prop("checked") + "&locallyServedDnsZones=" + locallyServedDnsZones + "&resolverRetries=" + resolverRetries + "&resolverTimeout=" + resolverTimeout + "&resolverConcurrency=" + resolverConcurrency + "&resolverMaxStackCount=" + resolverMaxStackCount;
 
     var saveCache = $("#chkSaveCache").prop("checked");
 
@@ -2160,7 +2327,7 @@ function saveDnsSettings(objBtn) {
         return;
     }
 
-    formData += "&saveCache=" + saveCache + "&serveStale=" + serveStale + "&serveStaleTtl=" + serveStaleTtl + "&serveStaleAnswerTtl=" + serveStaleAnswerTtl + "&serveStaleResetTtl=" + serveStaleResetTtl + "&serveStaleMaxWaitTime=" + serveStaleMaxWaitTime + "&cacheMaximumEntries=" + cacheMaximumEntries + "&cacheMinimumRecordTtl=" + cacheMinimumRecordTtl + "&cacheMaximumRecordTtl=" + cacheMaximumRecordTtl  + "&cacheNegativeRecordTtl=" + cacheNegativeRecordTtl + "&cacheMaximumNegativeRecordTtl=" + cacheMaximumNegativeRecordTtl + "&cacheFailureRecordTtl=" + cacheFailureRecordTtl + "&cachePrefetchEligibility=" + cachePrefetchEligibility + "&cachePrefetchTrigger=" + cachePrefetchTrigger + "&cachePrefetchTriggerPercent=" + encodeURIComponent($("#txtCachePrefetchTriggerPercent").val());
+    formData += "&saveCache=" + saveCache + "&serveStale=" + serveStale + "&serveStaleTtl=" + serveStaleTtl + "&serveStaleAnswerTtl=" + serveStaleAnswerTtl + "&serveStaleResetTtl=" + serveStaleResetTtl + "&serveStaleMaxWaitTime=" + serveStaleMaxWaitTime + "&enableCache=" + $("#chkEnableCache").prop("checked") + "&cacheMaximumEntries=" + cacheMaximumEntries + "&cacheMaximumMemory=" + encodeURIComponent($("#txtCacheMaximumMemory").val() || "0") + "&cacheMinimumRecordTtl=" + cacheMinimumRecordTtl + "&cacheMaximumRecordTtl=" + cacheMaximumRecordTtl  + "&cacheNegativeRecordTtl=" + cacheNegativeRecordTtl + "&cacheMaximumNegativeRecordTtl=" + cacheMaximumNegativeRecordTtl + "&cacheFailureRecordTtl=" + cacheFailureRecordTtl + "&cachePrefetchEligibility=" + cachePrefetchEligibility + "&cachePrefetchTrigger=" + cachePrefetchTrigger + "&cachePrefetchTriggerPercent=" + encodeURIComponent($("#txtCachePrefetchTriggerPercent").val());
 
     var enableBlocking = $("#chkEnableBlocking").prop("checked");
     var allowTxtBlockingReport = $("#chkAllowTxtBlockingReport").prop("checked");
@@ -2259,7 +2426,7 @@ function saveDnsSettings(objBtn) {
         return;
     }
 
-    formData += proxy + "&forwarders=" + encodeURIComponent(forwarders) + "&forwarderProtocol=" + forwarderProtocol + "&concurrentForwarding=" + concurrentForwarding + "&forwarderRetries=" + forwarderRetries + "&forwarderTimeout=" + forwarderTimeout + "&forwarderConcurrency=" + forwarderConcurrency;
+    formData += proxy + "&httpUserAgent=" + encodeURIComponent($("#txtHttpUserAgent").val().trim()) + "&forwarders=" + encodeURIComponent(forwarders) + "&forwarderProtocol=" + forwarderProtocol + "&concurrentForwarding=" + concurrentForwarding + "&forwarderRetries=" + forwarderRetries + "&forwarderTimeout=" + forwarderTimeout + "&forwarderConcurrency=" + forwarderConcurrency;
 
     var loggingType = $("input[name=rdLoggingType]:checked").val();
     var ignoreResolverLogs = $("#chkIgnoreResolverLogs").prop("checked");
@@ -2292,6 +2459,7 @@ function saveDnsSettings(objBtn) {
 
             btn.button("reset");
             showAlert("success", tr("Gespeichert"), tr("Die Einstellungen wurden übernommen."));
+            relockSettings();
 
             var redirecting = false;
 
@@ -2463,6 +2631,185 @@ function checkForWebConsoleRedirection(responseJSON) {
     }
 
     return false;
+}
+
+function deriveBlockListName(url) {
+    try {
+        var parsed = new URL(url);
+        var segments = parsed.pathname.split("/").filter(function (segment) { return segment !== ""; });
+        var file = segments.length > 0 ? segments[segments.length - 1] : "";
+
+        file = file.replace(/\.(txt|list|hosts|conf)$/i, "");
+
+        if (parsed.protocol === "file:")
+            return file !== "" ? file : parsed.pathname;
+
+        return (file !== "") ? (file + " (" + parsed.hostname + ")") : parsed.hostname;
+    }
+    catch (e) {
+        return url;
+    }
+}
+
+function formatBlockListTime(value) {
+    if (value == null)
+        return "–";
+
+    return moment(value).local().format(tr("DD.MM.YYYY HH:mm"));
+}
+
+function formatBlockListSize(bytes) {
+    if ((bytes == null) || (bytes < 0))
+        return "";
+
+    if (bytes >= 1048576)
+        return (bytes / 1048576).toFixed(1) + " MB";
+
+    if (bytes >= 1024)
+        return Math.round(bytes / 1024) + " KB";
+
+    return bytes + " B";
+}
+
+function getBlockListStatusBadge(item) {
+    if (item.loadError != null)
+        return "<span class=\"label label-warning\" title=\"" + htmlEncode(item.loadError) + "\">" + tr("Lesefehler") + "</span>";
+
+    switch (item.lastResult) {
+        case "updated":
+            return "<span class=\"label label-success\">" + tr("Aktualisiert") + "</span>";
+
+        case "notModified":
+            return "<span class=\"label label-success\">" + tr("Unverändert") + "</span>";
+
+        case "notFound":
+            return "<span class=\"label label-danger\" title=\"" + htmlEncode(item.lastError || "") + "\">" + tr("Nicht gefunden") + "</span>";
+
+        case "failed":
+            return "<span class=\"label label-danger\" title=\"" + htmlEncode(item.lastError || "") + "\">" + tr("Fehler") + "</span>";
+
+        default:
+            return "<span class=\"label label-default\">" + tr("Noch nicht geprüft") + "</span>";
+    }
+}
+
+function refreshBlockListStatus() {
+    var div = $("#divBlockListStatus");
+
+    HTTPRequest({
+        url: "api/settings/blockLists/status",
+        token: sessionData.token,
+        success: function (responseJSON) {
+            var lists = responseJSON.response.lists;
+
+            if ((lists == null) || (lists.length === 0)) {
+                div.html("<span class=\"text-muted\">" + tr("Keine Listen eingetragen.") + "</span>");
+                return;
+            }
+
+            var html = "<table class=\"table table-condensed blocklist-status-table\"><thead><tr><th>" + tr("Aktiv") + "</th><th>" + tr("Liste") + "</th><th>" + tr("Domains") + "</th><th>" + tr("Geprüft") + "</th><th>" + tr("Geändert") + "</th><th>" + tr("Status") + "</th><th></th></tr></thead><tbody>";
+
+            for (var i = 0; i < lists.length; i++) {
+                var item = lists[i];
+                var url = htmlEncode(item.url);
+                var domains = (item.domains != null) ? item.domains.toLocaleString(zdnsI18n.locale) : "–";
+
+                if ((item.exceptions != null) && (item.exceptions > 0))
+                    domains += "<br><small class=\"text-muted\">" + htmlEncode(tr("{0} Ausnahmen", item.exceptions.toLocaleString(zdnsI18n.locale))) + "</small>";
+
+                if ((item.regexes != null) && (item.regexes > 0))
+                    domains += "<br><small class=\"text-muted\">" + htmlEncode(tr("{0} Muster", item.regexes.toLocaleString(zdnsI18n.locale))) + "</small>";
+
+                if ((item.ips != null) && (item.ips > 0))
+                    domains += "<br><small class=\"text-muted\">" + htmlEncode(tr("{0} IP-Einträge", item.ips.toLocaleString(zdnsI18n.locale))) + "</small>";
+
+                if ((item.skipped != null) && (item.skipped > 0))
+                    domains += "<br><small class=\"text-muted\" title=\"" + htmlEncode(tr("Regeln für Browser-Filter wie Element-Ausblendung oder unbekannte Modifikatoren wirken nicht auf DNS und werden übersprungen.")) + "\">" + htmlEncode(tr("{0} übersprungen", item.skipped.toLocaleString(zdnsI18n.locale))) + "</small>";
+
+                var errorLine = "";
+                if ((item.lastError != null) && ((item.lastResult === "failed") || (item.lastResult === "notFound")))
+                    errorLine = "<div class=\"blocklist-error\">" + htmlEncode(item.lastError) + "</div>";
+                else if (item.loadError != null)
+                    errorLine = "<div class=\"blocklist-error\">" + htmlEncode(item.loadError) + "</div>";
+
+                var isGlobal = (item.global !== false);
+                var profileLabels = "";
+
+                if ((item.profiles != null) && (item.profiles.length > 0)) {
+                    for (var k = 0; k < item.profiles.length; k++)
+                        profileLabels += "<span class=\"label label-default\" title=\"" + htmlEncode(tr("Clientprofil")) + "\">" + htmlEncode(item.profiles[k]) + "</span> ";
+                }
+
+                html += "<tr" + (item.enabled ? "" : " class=\"blocklist-disabled\"") + ">" +
+                    "<td><input type=\"checkbox\" class=\"blocklist-enabled\" data-url=\"" + url + "\"" + (item.enabled ? " checked" : "") + (isGlobal ? "" : " disabled title=\"" + htmlEncode(tr("Nur in Clientprofilen eingetragen, dort bearbeiten.")) + "\"") + " aria-label=\"" + htmlEncode(tr("Aktiv")) + "\"></td>" +
+                    "<td class=\"blocklist-name-cell\"><input type=\"text\" class=\"form-control input-sm blocklist-name\" data-url=\"" + url + "\" maxlength=\"60\" value=\"" + htmlEncode(item.name || "") + "\" placeholder=\"" + htmlEncode(deriveBlockListName(item.url)) + "\" aria-label=\"" + htmlEncode(tr("Name")) + "\">" +
+                    "<div class=\"blocklist-url\">" + (isGlobal ? "" : "<span class=\"label label-warning\">" + tr("Nur Profile") + "</span> ") + profileLabels + (item.allowList ? "<span class=\"label label-info\">" + tr("Erlaubnisliste") + "</span> " : "") + "<a href=\"" + url + "\" target=\"_blank\" rel=\"noopener noreferrer\">" + url + "</a></div>" +
+                    "<div class=\"blocklist-path\" title=\"" + htmlEncode(tr("Lokale Datei")) + "\">" + htmlEncode(item.localPath) + (item.fileSize != null ? " · " + formatBlockListSize(item.fileSize) : "") + "</div>" + errorLine + "</td>" +
+                    "<td class=\"text-right\">" + domains + "</td>" +
+                    "<td>" + formatBlockListTime(item.lastCheckedOn) + "</td>" +
+                    "<td>" + formatBlockListTime(item.lastUpdatedOn || item.fileModifiedOn) + "</td>" +
+                    "<td>" + getBlockListStatusBadge(item) + "</td>" +
+                    "<td class=\"blocklist-actions\"><button type=\"button\" class=\"btn btn-default btn-xs blocklist-update\" data-url=\"" + url + "\" data-loading-text=\"" + htmlEncode(tr("Aktualisiere...")) + "\"" + (item.enabled ? "" : " disabled") + ">" + tr("Aktualisieren") + "</button>" + (isGlobal ? " <button type=\"button\" class=\"btn btn-default btn-xs blocklist-remove\" data-url=\"" + url + "\">" + tr("Entfernen") + "</button>" : "") + "</td>" +
+                    "</tr>";
+            }
+
+            html += "</tbody></table>";
+            div.html(html);
+
+            div.find("input.blocklist-enabled").on("change", function () {
+                blockListAction("api/settings/blockLists/setEnabled?url=" + encodeURIComponent($(this).attr("data-url")) + "&enabled=" + $(this).prop("checked"), null, true);
+            });
+
+            div.find("input.blocklist-name").on("change", function () {
+                blockListAction("api/settings/blockLists/setName?url=" + encodeURIComponent($(this).attr("data-url")) + "&name=" + encodeURIComponent($(this).val().trim()), null, false);
+            });
+
+            div.find("button.blocklist-update").on("click", function () {
+                blockListAction("api/settings/blockLists/update?url=" + encodeURIComponent($(this).attr("data-url")), $(this), false);
+            });
+
+            div.find("button.blocklist-remove").on("click", function () {
+                if (!confirm(tr("Liste {0} entfernen?", $(this).attr("data-url"))))
+                    return;
+
+                blockListAction("api/settings/blockLists/remove?url=" + encodeURIComponent($(this).attr("data-url")), $(this), true);
+            });
+        },
+        invalidToken: function () {
+            showPageLogin();
+        }
+    });
+}
+
+function blockListAction(url, btn, reloadSettings) {
+    if (btn != null)
+        btn.button("loading");
+
+    HTTPRequest({
+        url: url,
+        token: sessionData.token,
+        success: function (responseJSON) {
+            if (btn != null)
+                btn.button("reset");
+
+            if ((responseJSON.response != null) && (responseJSON.response.success === false))
+                showAlert("warning", tr("Aktualisierung fehlgeschlagen"), tr("Die Liste konnte nicht abgerufen werden. Details stehen in der Tabelle und im Serverprotokoll."));
+
+            if (reloadSettings)
+                refreshDnsSettings();
+            else
+                refreshBlockListStatus();
+        },
+        error: function () {
+            if (btn != null)
+                btn.button("reset");
+
+            refreshBlockListStatus();
+        },
+        invalidToken: function () {
+            showPageLogin();
+        }
+    });
 }
 
 function forceUpdateBlockLists() {
@@ -2787,6 +3134,9 @@ function initTheme() {
     if (window.matchMedia) {
         window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", e => {
             const currentTheme = localStorage.getItem("theme");
+            if ((currentTheme != null) && (currentTheme.indexOf("custom:") === 0))
+                return;
+
             switch (currentTheme) {
                 case "light":
                 case "dark":
@@ -2805,10 +3155,26 @@ function initTheme() {
     }
 
     const currentTheme = localStorage.getItem("theme");
-    changeTheme(currentTheme);
+    changeTheme(currentTheme, false);
 }
 
-function changeTheme(newTheme) {
+function changeTheme(newTheme, persist) {
+    clearCustomThemeColors();
+
+    if ((newTheme != null) && (newTheme.indexOf("custom:") === 0)) {
+        if (applyCustomTheme(newTheme.substring(7))) {
+            localStorage.setItem("theme", newTheme);
+            updateDashboardChartTheme();
+
+            if (persist !== false)
+                saveActiveThemePreference(newTheme);
+
+            return;
+        }
+
+        newTheme = "system";
+    }
+
     switch (newTheme) {
         case "light":
             applyLightMode();
@@ -2836,6 +3202,9 @@ function changeTheme(newTheme) {
     localStorage.setItem("theme", newTheme);
 
     updateDashboardChartTheme();
+
+    if (persist !== false)
+        saveActiveThemePreference(newTheme == null ? "system" : newTheme);
 }
 
 function applyDarkMode() {
@@ -2869,9 +3238,12 @@ function showChangeThemeModal() {
             break;
 
         default:
-            $("#rdChangeThemeSystem").prop("checked", true);
+            $("#rdChangeThemeSystem").prop("checked", (currentTheme == null) || (currentTheme.indexOf("custom:") !== 0));
             break;
     }
+
+    $("#divCustomThemeEditor").hide();
+    renderCustomThemeList();
 
     $("#modalChangeTheme").modal("show");
 }

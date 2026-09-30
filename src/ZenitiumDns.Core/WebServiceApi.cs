@@ -133,7 +133,6 @@ namespace ZenitiumDns.Core
                         using (HttpClient http = new HttpClient(handler))
                         {
                             http.Timeout = TimeSpan.FromSeconds(20);
-                            http.DefaultRequestHeaders.UserAgent.ParseAdd("ZenitiumDNS/" + _dnsWebService.GetServerVersion());
                             http.DefaultRequestHeaders.Accept.ParseAdd("application/vnd.github+json");
 
                             string jsonData = await http.GetStringAsync(_updateCheckUri);

@@ -19,12 +19,14 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Net;
 using System.Net.Http;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using ZenitiumLibrary;
@@ -48,8 +50,17 @@ namespace ZenitiumDns.Core.Dns.ZoneManagers
         readonly string _localCacheFolder;
 
         IReadOnlyList<string> _blockListUrls = [];
+        IReadOnlyList<string> _profileListUrls = [];
+        ClientProfile.FilterCache _defaultFilterCache;
 
-        ListZone _listZone = ListZone.Empty;
+        const string STATUS_FILE_NAME = "status.json";
+        const int MAX_LIST_NAME_LENGTH = 60;
+        readonly ConcurrentDictionary<string, ListStatus> _listStatus = new ConcurrentDictionary<string, ListStatus>(StringComparer.Ordinal);
+        readonly Lock _statusLock = new Lock();
+
+        ListRuleSet _ruleSet = ListRuleSet.Empty;
+        readonly SemaphoreSlim _updateSemaphore = new SemaphoreSlim(1, 1);
+        readonly Lock _loadLock = new Lock();
 
         DnsSOARecordData _soaRecord;
         DnsNSRecordData _nsRecord;
@@ -83,6 +94,8 @@ namespace ZenitiumDns.Core.Dns.ZoneManagers
 
             if (!Directory.Exists(_localCacheFolder))
                 Directory.CreateDirectory(_localCacheFolder);
+
+            LoadListStatus();
 
             UpdateServerDomain();
 
@@ -253,7 +266,7 @@ namespace ZenitiumDns.Core.Dns.ZoneManagers
                     DateTime blockListLastUpdatedOn = s.ReadDateTime();
                     _blockListLastUpdatedOn = blockListLastUpdatedOn;
 
-                    if (blockListUrls.Length > 0)
+                    if ((blockListUrls.Length > 0) || (_profileListUrls.Count > 0))
                     {
                         ThreadPool.QueueUserWorkItem(delegate (object state)
                         {
@@ -340,202 +353,56 @@ namespace ZenitiumDns.Core.Dns.ZoneManagers
             return GetBlockListFilePath(listUrl);
         }
 
-        private void ReadListFile(Uri listUrl, bool isAllowList, Action<string> addDomain, Action<string> addExceptionDomain)
+        private void ReadListFile(Uri listUrl, bool isAllowList, ListRuleSetBuilder builder)
         {
-            int domainCount = 0;
-            int exceptionDomainCount = 0;
-
-            void AddDomain(string domain)
+            if (!File.Exists(GetListFilePath(listUrl)))
             {
-                addDomain(domain);
-                domainCount++;
-            }
+                _dnsServer.LogManager.Write("DNS Server has no local copy of the " + (isAllowList ? "allow" : "block") + " list yet: " + listUrl.AbsoluteUri);
 
-            void AddExceptionDomain(string domain)
-            {
-                addExceptionDomain(domain);
-                exceptionDomainCount++;
+                ListStatus missingStatus = GetListStatus(listUrl);
+                missingStatus.Domains = 0;
+                missingStatus.Exceptions = 0;
+                missingStatus.Regexes = 0;
+                missingStatus.Ips = 0;
+                missingStatus.LoadError = "File not found";
+                return;
             }
 
             try
             {
                 _dnsServer.LogManager.Write("DNS Server is reading " + (isAllowList ? "allow" : "block") + " list from: " + listUrl.AbsoluteUri);
 
+                ListRuleCounts counts;
+
                 using (FileStream fS = new FileStream(GetListFilePath(listUrl), FileMode.Open, FileAccess.Read, FileShare.Read, 65536))
                 {
-                    StreamReader sR = new StreamReader(fS, true);
-
-                    string line;
-                    string firstWord;
-                    string secondWord;
-                    string hostname;
-                    string domain;
-                    string options;
-                    int i;
-
-                    while (true)
+                    using (StreamReader sR = new StreamReader(fS, true))
                     {
-                        line = sR.ReadLine();
-                        if (line is null)
-                            break;
-
-                        line = line.TrimStart(_trimSeperator);
-
-                        if (line.Length == 0)
-                            continue;
-
-                        if (line.StartsWith('#') || line.StartsWith('!'))
-                            continue;
-
-                        if (line.StartsWith("||", StringComparison.Ordinal))
-                        {
-                            i = line.IndexOf('^');
-                            if (i > -1)
-                            {
-                                domain = line.Substring(2, i - 2);
-                                options = line.Substring(i + 1);
-
-                                if (((options.Length == 0) || (options.StartsWith('$') && (options.Contains("doc") || options.Contains("all")))) && DnsClient.IsDomainNameValid(domain))
-                                    AddDomain(domain.ToLowerInvariant());
-                            }
-                            else
-                            {
-                                domain = line.Substring(2);
-
-                                if (DnsClient.IsDomainNameValid(domain))
-                                    AddDomain(domain.ToLowerInvariant());
-                            }
-                        }
-                        else if (line.StartsWith("@@||", StringComparison.Ordinal))
-                        {
-                            i = line.IndexOf('^');
-                            if (i > -1)
-                            {
-                                domain = line.Substring(4, i - 4);
-                                options = line.Substring(i + 1);
-
-                                if (((options.Length == 0) || (options.StartsWith('$') && (options.Contains("doc") || options.Contains("all")))) && DnsClient.IsDomainNameValid(domain))
-                                    AddExceptionDomain(domain.ToLowerInvariant());
-                            }
-                            else
-                            {
-                                domain = line.Substring(4);
-
-                                if (DnsClient.IsDomainNameValid(domain))
-                                    AddExceptionDomain(domain.ToLowerInvariant());
-                            }
-                        }
-                        else
-                        {
-                            firstWord = PopWord(ref line);
-
-                            if (line.Length == 0)
-                            {
-                                hostname = firstWord;
-                            }
-                            else
-                            {
-                                secondWord = PopWord(ref line);
-
-                                if ((secondWord.Length == 0) || secondWord.StartsWith('#'))
-                                {
-                                    hostname = firstWord;
-                                }
-                                else
-                                {
-                                    if (!IPAddress.TryParse(firstWord, out _))
-                                        continue;
-
-                                    hostname = secondWord;
-                                }
-                            }
-
-                            hostname = hostname.Trim('.').ToLowerInvariant();
-
-                            switch (hostname)
-                            {
-                                case "":
-                                case "localhost":
-                                case "localhost.localdomain":
-                                case "local":
-                                case "broadcasthost":
-                                case "ip6-localhost":
-                                case "ip6-loopback":
-                                case "ip6-localnet":
-                                case "ip6-mcastprefix":
-                                case "ip6-allnodes":
-                                case "ip6-allrouters":
-                                case "ip6-allhosts":
-                                    continue;
-                            }
-
-                            if (!DnsClient.IsDomainNameValid(hostname))
-                                continue;
-
-                            if (IPAddress.TryParse(hostname, out _))
-                                continue;
-
-                            AddDomain(hostname);
-                        }
+                        counts = builder.ParseList(listUrl, isAllowList, sR);
                     }
                 }
 
-                _dnsServer.LogManager.Write("DNS Server read " + (isAllowList ? "allow" : "block") + " list file (" + domainCount + " domain(s) " + (isAllowList ? "allowed" : "blocked") + (exceptionDomainCount > 0 ? ", " + exceptionDomainCount + " domain(s) " + (isAllowList ? "blocked" : "allowed") : "") + ") from: " + listUrl.AbsoluteUri);
+                _dnsServer.LogManager.Write("DNS Server read " + (isAllowList ? "allow" : "block") + " list file (" + counts.Domains + " domain(s) " + (isAllowList ? "allowed" : "blocked") + (counts.Exceptions > 0 ? ", " + counts.Exceptions + " exception(s)" : "") + (counts.Regexes > 0 ? ", " + counts.Regexes + " regex rule(s)" : "") + (counts.Ips > 0 ? ", " + counts.Ips + " IP rule(s)" : "") + (counts.Skipped > 0 ? ", " + counts.Skipped + " unsupported line(s) skipped" : "") + ") from: " + listUrl.AbsoluteUri);
+
+                ListStatus status = GetListStatus(listUrl);
+                status.Domains = counts.Domains;
+                status.Exceptions = counts.Exceptions;
+                status.Regexes = counts.Regexes;
+                status.Ips = counts.Ips;
+                status.Skipped = counts.Skipped;
+                status.LastLoadedOn = DateTime.UtcNow;
+                status.LoadError = null;
             }
             catch (Exception ex)
             {
                 _dnsServer.LogManager.Write("DNS Server failed to read " + (isAllowList ? "allow" : "block") + " list from: " + listUrl.AbsoluteUri, ex);
-            }
-        }
 
-        private static int ToLowerDomain(string domain, Span<char> buffer)
-        {
-            return domain.AsSpan().ToLowerInvariant(buffer);
-        }
-
-        private IReadOnlyList<Uri> IsZoneBlocked(string domain, out string blockedDomain)
-        {
-            ListZone listZone = _listZone;
-
-            Span<char> buffer = domain.Length <= 256 ? stackalloc char[domain.Length] : new char[domain.Length];
-            ReadOnlySpan<char> current = buffer.Slice(0, ToLowerDomain(domain, buffer));
-
-            while (true)
-            {
-                if (listZone.BlockZone.TryGetValue(current, out ushort combination))
-                {
-                    blockedDomain = current.ToString();
-                    return listZone.BlockListCombinations[combination];
-                }
-
-                int i = current.IndexOf('.');
-                if (i < 0)
-                    break;
-
-                current = current.Slice(i + 1);
-            }
-
-            blockedDomain = null;
-            return null;
-        }
-
-        private bool IsZoneAllowed(string domain)
-        {
-            ListZone listZone = _listZone;
-
-            Span<char> buffer = domain.Length <= 256 ? stackalloc char[domain.Length] : new char[domain.Length];
-            ReadOnlySpan<char> current = buffer.Slice(0, ToLowerDomain(domain, buffer));
-
-            while (true)
-            {
-                if (listZone.AllowZone.Contains(current))
-                    return true;
-
-                int i = current.IndexOf('.');
-                if (i < 0)
-                    return false;
-
-                current = current.Slice(i + 1);
+                ListStatus status = GetListStatus(listUrl);
+                status.Domains = 0;
+                status.Exceptions = 0;
+                status.Regexes = 0;
+                status.Ips = 0;
+                status.LoadError = ex is FileNotFoundException ? "File not found" : ex.Message;
             }
         }
 
@@ -545,11 +412,18 @@ namespace ZenitiumDns.Core.Dns.ZoneManagers
 
             _blockListUrls = blockListUrls;
 
-            if ((_blockListUpdateIntervalHours > 0) && (_blockListUrls.Count > 0))
+            ApplyListChanges(blockListUrlsUpdated);
+        }
+
+        private void ApplyListChanges(bool listsUpdated)
+        {
+            bool hasLists = (_blockListUrls.Count > 0) || (_profileListUrls.Count > 0);
+
+            if ((_blockListUpdateIntervalHours > 0) && hasLists)
             {
                 if (_blockListUpdateTimer is null)
-                    StartBlockListUpdateTimer(blockListUrlsUpdated);
-                else if (blockListUrlsUpdated)
+                    StartBlockListUpdateTimer(listsUpdated);
+                else if (listsUpdated)
                     ForceUpdateBlockLists(true);
             }
             else
@@ -557,13 +431,92 @@ namespace ZenitiumDns.Core.Dns.ZoneManagers
                 StopBlockListUpdateTimer();
             }
 
-            if (_blockListUrls.Count < 1)
+            if (!hasLists)
                 Flush();
+        }
+
+        private List<(Uri Url, bool IsAllowList)> GetEnabledLists()
+        {
+            List<(Uri Url, bool IsAllowList)> lists = new List<(Uri Url, bool IsAllowList)>();
+            HashSet<string> seen = new HashSet<string>(StringComparer.Ordinal);
+
+            void Add(IReadOnlyList<string> lines)
+            {
+                foreach (string line in lines)
+                {
+                    if (!TryParseListLine(line, out Uri listUrl, out bool isAllowList, out bool enabled) || !enabled)
+                        continue;
+
+                    if (seen.Add(GetListKey(listUrl, isAllowList)))
+                        lists.Add((listUrl, isAllowList));
+                }
+            }
+
+            Add(_blockListUrls);
+            Add(_profileListUrls);
+
+            return lists;
+        }
+
+        private static string GetListKey(Uri listUrl, bool isAllowList)
+        {
+            return (isAllowList ? "!" : "") + listUrl.AbsoluteUri;
+        }
+
+        private HashSet<string> GetGlobalListKeys()
+        {
+            HashSet<string> keys = new HashSet<string>(StringComparer.Ordinal);
+
+            foreach (string line in _blockListUrls)
+            {
+                if (TryParseListLine(line, out Uri listUrl, out bool isAllowList, out bool enabled) && enabled)
+                    keys.Add(GetListKey(listUrl, isAllowList));
+            }
+
+            return keys;
+        }
+
+        private ListRuleFilter GetFilter(ListRuleSet ruleSet, ClientProfile profile)
+        {
+            IReadOnlyList<string> globalLines = _blockListUrls;
+
+            if ((profile is null) || profile.UsesOnlyDefaultLists)
+            {
+                if (_profileListUrls.Count == 0)
+                    return null;
+
+                ClientProfile.FilterCache defaultCache = _defaultFilterCache;
+                if ((defaultCache is not null) && ReferenceEquals(defaultCache.RuleSet, ruleSet) && ReferenceEquals(defaultCache.GlobalLines, globalLines))
+                    return defaultCache.Filter;
+
+                HashSet<string> globalKeys = GetGlobalListKeys();
+                ListRuleFilter defaultFilter = ruleSet.CreateFilter(delegate (Uri listUrl, bool isAllowList) { return globalKeys.Contains(GetListKey(listUrl, isAllowList)); });
+
+                _defaultFilterCache = new ClientProfile.FilterCache() { RuleSet = ruleSet, GlobalLines = globalLines, Filter = defaultFilter };
+                return defaultFilter;
+            }
+
+            ClientProfile.FilterCache cache = profile._filterCache;
+            if ((cache is not null) && ReferenceEquals(cache.RuleSet, ruleSet) && ReferenceEquals(cache.GlobalLines, globalLines))
+                return cache.Filter;
+
+            HashSet<string> keys = profile.UseDefaultLists ? GetGlobalListKeys() : new HashSet<string>(StringComparer.Ordinal);
+
+            foreach (string line in profile.BlockListUrls)
+            {
+                if (TryParseListLine(line, out Uri listUrl, out bool isAllowList, out bool enabled) && enabled)
+                    keys.Add(GetListKey(listUrl, isAllowList));
+            }
+
+            ListRuleFilter filter = ruleSet.CreateFilter(delegate (Uri listUrl, bool isAllowList) { return keys.Contains(GetListKey(listUrl, isAllowList)); });
+
+            profile._filterCache = new ClientProfile.FilterCache() { RuleSet = ruleSet, GlobalLines = globalLines, Filter = filter };
+            return filter;
         }
 
         private void ApplyBlockListUpdateInterval()
         {
-            if ((_blockListUpdateIntervalHours > 0) && (_blockListUrls.Count > 0))
+            if ((_blockListUpdateIntervalHours > 0) && ((_blockListUrls.Count > 0) || (_profileListUrls.Count > 0)))
             {
                 if (_blockListUpdateTimer is null)
                     StartBlockListUpdateTimer(false);
@@ -576,117 +529,152 @@ namespace ZenitiumDns.Core.Dns.ZoneManagers
 
         private void Flush()
         {
-            _listZone = ListZone.Empty;
+            _ruleSet = ListRuleSet.Empty;
+        }
+
+        private async Task<ListDownloadResult> DownloadListAsync(Uri listUrl, bool isAllowList)
+        {
+            ListStatus status = GetListStatus(listUrl);
+            status.LastCheckedOn = DateTime.UtcNow;
+
+            try
+            {
+                _dnsServer.LogManager.Write("DNS Server is downloading " + (isAllowList ? "allow" : "block") + " list: " + listUrl.AbsoluteUri);
+
+                string listFilePath = GetBlockListFilePath(listUrl);
+
+                if (listUrl.IsFile)
+                {
+                    if (!File.Exists(listUrl.LocalPath))
+                    {
+                        _dnsServer.LogManager.Write("DNS Server did not find the " + (isAllowList ? "allow" : "block") + " list: " + listUrl.AbsoluteUri);
+
+                        status.LastResult = "notFound";
+                        status.LastError = "File not found: " + listUrl.LocalPath;
+                        return ListDownloadResult.Failed;
+                    }
+
+                    if (File.Exists(listFilePath))
+                    {
+                        if (File.GetLastWriteTimeUtc(listUrl.LocalPath) <= File.GetLastWriteTimeUtc(listFilePath))
+                        {
+                            _dnsServer.LogManager.Write("DNS Server successfully checked for a new update of the " + (isAllowList ? "allow" : "block") + " list: " + listUrl.AbsoluteUri);
+
+                            status.LastResult = "notModified";
+                            status.LastError = null;
+                            return ListDownloadResult.NotModified;
+                        }
+                    }
+
+                    await File.Create(listFilePath).DisposeAsync();
+
+                    _dnsServer.LogManager.Write("DNS Server found new update for the " + (isAllowList ? "allow" : "block") + " list: " + listUrl.AbsoluteUri);
+
+                    status.LastResult = "updated";
+                    status.LastError = null;
+                    status.LastUpdatedOn = DateTime.UtcNow;
+                    return ListDownloadResult.Downloaded;
+                }
+
+                HttpClientNetworkHandler handler = new HttpClientNetworkHandler();
+                handler.Proxy = _dnsServer.Proxy;
+                handler.NetworkType = HttpClientNetworkHandler.GetNetworkType(_dnsServer.IPv6Mode);
+                handler.DnsClient = _dnsServer;
+
+                using (HttpClient http = new HttpClient(handler))
+                {
+                    if (File.Exists(listFilePath))
+                        http.DefaultRequestHeaders.IfModifiedSince = File.GetLastWriteTimeUtc(listFilePath);
+
+                    HttpResponseMessage httpResponse = await http.GetAsync(listUrl, HttpCompletionOption.ResponseHeadersRead);
+                    switch (httpResponse.StatusCode)
+                    {
+                        case HttpStatusCode.OK:
+                            {
+                                string listDownloadFilePath = listFilePath + ".downloading";
+
+                                await using (FileStream fS = new FileStream(listDownloadFilePath, FileMode.Create, FileAccess.Write))
+                                {
+                                    await using (Stream httpStream = await httpResponse.Content.ReadAsStreamAsync())
+                                    {
+                                        await httpStream.CopyToAsync(fS, TimeSpan.FromSeconds(60));
+                                    }
+                                }
+
+                                File.Move(listDownloadFilePath, listFilePath, true);
+
+                                if (httpResponse.Content.Headers.LastModified != null)
+                                    File.SetLastWriteTimeUtc(listFilePath, httpResponse.Content.Headers.LastModified.Value.UtcDateTime);
+
+                                _dnsServer.LogManager.Write("DNS Server successfully downloaded " + (isAllowList ? "allow" : "block") + " list (" + WebUtilities.GetFormattedSize(new FileInfo(listFilePath).Length) + "): " + listUrl.AbsoluteUri);
+
+                                status.LastResult = "updated";
+                                status.LastError = null;
+                                status.LastUpdatedOn = DateTime.UtcNow;
+                                return ListDownloadResult.Downloaded;
+                            }
+
+                        case HttpStatusCode.NotModified:
+                            {
+                                _dnsServer.LogManager.Write("DNS Server successfully checked for a new update of the " + (isAllowList ? "allow" : "block") + " list: " + listUrl.AbsoluteUri);
+
+                                status.LastResult = "notModified";
+                                status.LastError = null;
+                                return ListDownloadResult.NotModified;
+                            }
+
+                        default:
+                            throw new HttpRequestException((int)httpResponse.StatusCode + " " + httpResponse.ReasonPhrase);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _dnsServer.LogManager.Write("DNS Server failed to download " + (isAllowList ? "allow" : "block") + " list and will use previously downloaded file (if available): " + listUrl.AbsoluteUri, ex);
+
+                status.LastResult = "failed";
+                status.LastError = ex.Message;
+                return ListDownloadResult.Failed;
+            }
         }
 
         private async Task<bool> UpdateBlockListsAsync(bool forceReload)
         {
+            await _updateSemaphore.WaitAsync();
+
+            try
+            {
+                return await UpdateBlockListsInternalAsync(forceReload);
+            }
+            finally
+            {
+                _updateSemaphore.Release();
+            }
+        }
+
+        private async Task<bool> UpdateBlockListsInternalAsync(bool forceReload)
+        {
+            List<Task<ListDownloadResult>> tasks = new List<Task<ListDownloadResult>>();
+            HashSet<string> downloading = new HashSet<string>(StringComparer.Ordinal);
+
+            foreach ((Uri listUrl, bool isAllowList) in GetEnabledLists())
+            {
+                if (downloading.Add(listUrl.AbsoluteUri))
+                    tasks.Add(DownloadListAsync(listUrl, isAllowList));
+            }
+
+            ListDownloadResult[] results = await Task.WhenAll(tasks);
+
             bool downloaded = false;
             bool notModified = false;
 
-            async Task DownloadListUrlAsync(Uri listUrl, bool isAllowList)
+            foreach (ListDownloadResult result in results)
             {
-                try
-                {
-                    _dnsServer.LogManager.Write("DNS Server is downloading " + (isAllowList ? "allow" : "block") + " list: " + listUrl.AbsoluteUri);
-
-                    string listFilePath = GetBlockListFilePath(listUrl);
-
-                    if (listUrl.IsFile)
-                    {
-                        if (!File.Exists(listUrl.LocalPath))
-                        {
-                            _dnsServer.LogManager.Write("DNS Server did not find the " + (isAllowList ? "allow" : "block") + " list: " + listUrl.AbsoluteUri);
-                            return;
-                        }
-
-                        if (File.Exists(listFilePath))
-                        {
-                            if (File.GetLastWriteTimeUtc(listUrl.LocalPath) <= File.GetLastWriteTimeUtc(listFilePath))
-                            {
-                                notModified = true;
-                                _dnsServer.LogManager.Write("DNS Server successfully checked for a new update of the " + (isAllowList ? "allow" : "block") + " list: " + listUrl.AbsoluteUri);
-                                return;
-                            }
-                        }
-
-                        await File.Create(listFilePath).DisposeAsync();
-
-                        downloaded = true;
-                        _dnsServer.LogManager.Write("DNS Server found new update for the " + (isAllowList ? "allow" : "block") + " list: " + listUrl.AbsoluteUri);
-                    }
-                    else
-                    {
-                        HttpClientNetworkHandler handler = new HttpClientNetworkHandler();
-                        handler.Proxy = _dnsServer.Proxy;
-                        handler.NetworkType = HttpClientNetworkHandler.GetNetworkType(_dnsServer.IPv6Mode);
-                        handler.DnsClient = _dnsServer;
-
-                        using (HttpClient http = new HttpClient(handler))
-                        {
-                            if (File.Exists(listFilePath))
-                                http.DefaultRequestHeaders.IfModifiedSince = File.GetLastWriteTimeUtc(listFilePath);
-
-                            http.DefaultRequestHeaders.UserAgent.TryParseAdd("ZenitiumDNS");
-
-                            HttpResponseMessage httpResponse = await http.GetAsync(listUrl, HttpCompletionOption.ResponseHeadersRead);
-                            switch (httpResponse.StatusCode)
-                            {
-                                case HttpStatusCode.OK:
-                                    {
-                                        string listDownloadFilePath = listFilePath + ".downloading";
-
-                                        await using (FileStream fS = new FileStream(listDownloadFilePath, FileMode.Create, FileAccess.Write))
-                                        {
-                                            await using (Stream httpStream = await httpResponse.Content.ReadAsStreamAsync())
-                                            {
-                                                await httpStream.CopyToAsync(fS, TimeSpan.FromSeconds(60));
-                                            }
-                                        }
-
-                                        File.Move(listDownloadFilePath, listFilePath, true);
-
-                                        if (httpResponse.Content.Headers.LastModified != null)
-                                            File.SetLastWriteTimeUtc(listFilePath, httpResponse.Content.Headers.LastModified.Value.UtcDateTime);
-
-                                        downloaded = true;
-                                        _dnsServer.LogManager.Write("DNS Server successfully downloaded " + (isAllowList ? "allow" : "block") + " list (" + WebUtilities.GetFormattedSize(new FileInfo(listFilePath).Length) + "): " + listUrl.AbsoluteUri);
-                                    }
-                                    break;
-
-                                case HttpStatusCode.NotModified:
-                                    {
-                                        notModified = true;
-                                        _dnsServer.LogManager.Write("DNS Server successfully checked for a new update of the " + (isAllowList ? "allow" : "block") + " list: " + listUrl.AbsoluteUri);
-                                    }
-                                    break;
-
-                                default:
-                                    throw new HttpRequestException((int)httpResponse.StatusCode + " " + httpResponse.ReasonPhrase);
-                            }
-                        }
-                    }
-                }
-                catch (Exception ex)
-                {
-                    _dnsServer.LogManager.Write("DNS Server failed to download " + (isAllowList ? "allow" : "block") + " list and will use previously downloaded file (if available): " + listUrl.AbsoluteUri, ex);
-                }
+                if (result == ListDownloadResult.Downloaded)
+                    downloaded = true;
+                else if (result == ListDownloadResult.NotModified)
+                    notModified = true;
             }
-
-            List<Task> tasks = new List<Task>();
-
-            foreach (string blockListUrl in _blockListUrls)
-            {
-                if (blockListUrl.TrimStart().StartsWith('#'))
-                    continue;
-
-                if (blockListUrl.StartsWith('!'))
-                    tasks.Add(DownloadListUrlAsync(new Uri(blockListUrl.Substring(1)), true));
-                else
-                    tasks.Add(DownloadListUrlAsync(new Uri(blockListUrl), false));
-            }
-
-            await Task.WhenAll(tasks);
 
             if (downloaded || forceReload)
             {
@@ -694,6 +682,8 @@ namespace ZenitiumDns.Core.Dns.ZoneManagers
 
                 GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced, false);
             }
+
+            SaveListStatus();
 
             return downloaded || notModified;
         }
@@ -765,20 +755,25 @@ namespace ZenitiumDns.Core.Dns.ZoneManagers
 
         private void LoadBlockLists()
         {
+            lock (_loadLock)
+            {
+                LoadBlockListsInternal();
+            }
+        }
+
+        private void LoadBlockListsInternal()
+        {
             _dnsServer.LogManager.Write("DNS Server is loading block list zone...");
 
             List<Uri> allowListUrls = new List<Uri>();
             List<Uri> blockListUrls = new List<Uri>();
 
-            foreach (string listUri in _blockListUrls)
+            foreach ((Uri listUrl, bool isAllowList) in GetEnabledLists())
             {
-                if (listUri.TrimStart().StartsWith('#'))
-                    continue;
-
-                if (listUri.StartsWith('!'))
-                    allowListUrls.Add(new Uri(listUri.Substring(1)));
+                if (isAllowList)
+                    allowListUrls.Add(listUrl);
                 else
-                    blockListUrls.Add(new Uri(listUri));
+                    blockListUrls.Add(listUrl);
             }
 
             long totalFileSize = 0;
@@ -795,111 +790,221 @@ namespace ZenitiumDns.Core.Dns.ZoneManagers
                 { }
             }
 
-            ListZone currentListZone = _listZone;
-
-            DomainTable allowListZone = new DomainTable(currentListZone.AllowZone.Count);
-            DomainTable blockListZone = new DomainTable(Math.Max(currentListZone.BlockZone.Count, totalFileSize / 24));
-            List<Uri[]> combinations = new List<Uri[]>();
-            Dictionary<(int, int), int> extendedCombinations = new Dictionary<(int, int), int>();
-            HashSet<Uri> loadedListUrls = new HashSet<Uri>();
-            int listIndex = 0;
-
-            void LoadList(Uri listUrl, bool isAllowList)
-            {
-                if (!loadedListUrls.Add(listUrl))
-                    return;
-
-                int currentListIndex = listIndex++;
-                int singleCombination = -1;
-
-                void AddBlocked(string domain)
-                {
-                    if (blockListZone.TryAdd(domain, 0, out int handle))
-                    {
-                        if (singleCombination < 0)
-                        {
-                            singleCombination = combinations.Count;
-                            combinations.Add([listUrl]);
-                        }
-
-                        blockListZone.SetValue(handle, (ushort)singleCombination);
-                    }
-                    else if (handle >= 0)
-                    {
-                        int combination = blockListZone.GetValue(handle);
-
-                        if (Array.IndexOf(combinations[combination], listUrl) >= 0)
-                            return;
-
-                        if (!extendedCombinations.TryGetValue((combination, currentListIndex), out int extendedCombination))
-                        {
-                            if (combinations.Count > ushort.MaxValue)
-                                return;
-
-                            extendedCombination = combinations.Count;
-                            combinations.Add([.. combinations[combination], listUrl]);
-                            extendedCombinations.Add((combination, currentListIndex), extendedCombination);
-                        }
-
-                        blockListZone.SetValue(handle, (ushort)extendedCombination);
-                    }
-                }
-
-                void AddAllowed(string domain)
-                {
-                    allowListZone.TryAdd(domain, 0, out _);
-                }
-
-                if (isAllowList)
-                    ReadListFile(listUrl, true, AddAllowed, AddBlocked);
-                else
-                    ReadListFile(listUrl, false, AddBlocked, AddAllowed);
-            }
-
+            ListRuleSet currentRuleSet = _ruleSet;
+            ListRuleSetBuilder builder = new ListRuleSetBuilder(Math.Max(currentRuleSet.Block.Tree.Count, totalFileSize / 24));
             foreach (Uri allowListUrl in allowListUrls)
-                LoadList(allowListUrl, true);
+                ReadListFile(allowListUrl, true, builder);
 
             foreach (Uri blockListUrl in blockListUrls)
-                LoadList(blockListUrl, false);
+                ReadListFile(blockListUrl, false, builder);
 
-            allowListZone.TrimExcess();
-            blockListZone.TrimExcess();
+            ListRuleSet ruleSet = builder.Build();
+            _ruleSet = ruleSet;
 
-            _listZone = new ListZone(allowListZone, blockListZone, combinations.ToArray());
-
-            _dnsServer.LogManager.Write("DNS Server block list zone uses " + WebUtilities.GetFormattedSize(allowListZone.MemoryUsage + blockListZone.MemoryUsage) + " of memory for " + blockListZone.Count + " blocked and " + allowListZone.Count + " allowed domain(s).");
+            _dnsServer.LogManager.Write("DNS Server block list zone uses " + WebUtilities.GetFormattedSize(ruleSet.MemoryUsage) + " of memory for " + ruleSet.BlockedDomainCount + " blocked and " + ruleSet.AllowedDomainCount + " allowed domain(s), " + ruleSet.RegexCount + " regex and " + ruleSet.AdvancedCount + " advanced rule(s), " + ruleSet.IpBlock.Count + " IP rule(s).");
             _dnsServer.LogManager.Write("DNS Server block list zone was loaded successfully.");
+
+            SaveListStatus();
+        }
+
+        private ListStatus GetListStatus(Uri listUrl)
+        {
+            return _listStatus.GetOrAdd(listUrl.AbsoluteUri, delegate (string key) { return new ListStatus(); });
+        }
+
+        private void LoadListStatus()
+        {
+            string file = Path.Combine(_localCacheFolder, STATUS_FILE_NAME);
+
+            if (!File.Exists(file))
+                return;
+
+            try
+            {
+                Dictionary<string, ListStatus> stored = JsonSerializer.Deserialize<Dictionary<string, ListStatus>>(File.ReadAllBytes(file));
+
+                if (stored is not null)
+                {
+                    foreach (KeyValuePair<string, ListStatus> entry in stored)
+                    {
+                        if (entry.Value is not null)
+                            _listStatus[entry.Key] = entry.Value;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _dnsServer.LogManager.Write("DNS Server failed to load the block list status file: " + file, ex);
+            }
+        }
+
+        private void SaveListStatus()
+        {
+            string file = Path.Combine(_localCacheFolder, STATUS_FILE_NAME);
+
+            lock (_statusLock)
+            {
+                try
+                {
+                    Dictionary<string, ListStatus> snapshot = new Dictionary<string, ListStatus>(_listStatus, StringComparer.Ordinal);
+                    string tmpFile = file + ".tmp";
+
+                    File.WriteAllBytes(tmpFile, JsonSerializer.SerializeToUtf8Bytes(snapshot));
+                    File.Move(tmpFile, file, true);
+                }
+                catch (Exception ex)
+                {
+                    _dnsServer.LogManager.Write("DNS Server failed to save the block list status file: " + file, ex);
+                }
+            }
+        }
+
+        private static bool TryParseListLine(string line, out Uri listUrl, out bool isAllowList, out bool enabled)
+        {
+            listUrl = null;
+            isAllowList = false;
+            enabled = true;
+
+            string value = line.Trim();
+
+            if (value.StartsWith('#'))
+            {
+                enabled = false;
+                value = value.TrimStart('#').Trim();
+            }
+
+            if (value.StartsWith('!'))
+            {
+                isAllowList = true;
+                value = value.Substring(1).Trim();
+            }
+
+            return Uri.TryCreate(value, UriKind.Absolute, out listUrl) && (listUrl.IsFile || (listUrl.Scheme == Uri.UriSchemeHttp) || (listUrl.Scheme == Uri.UriSchemeHttps));
+        }
+
+        private int FindListLine(IReadOnlyList<string> lines, string url)
+        {
+            for (int i = 0; i < lines.Count; i++)
+            {
+                if (TryParseListLine(lines[i], out Uri listUrl, out _, out _) && listUrl.AbsoluteUri.Equals(url, StringComparison.Ordinal))
+                    return i;
+            }
+
+            return -1;
         }
 
         #endregion
 
         #region public
 
+        internal void SetProfileListUrls(IReadOnlyList<string> profileListUrls)
+        {
+            bool updated = !profileListUrls.HasSameItems(_profileListUrls);
+
+            _profileListUrls = profileListUrls;
+
+            if (!updated)
+                return;
+
+            if (_blockListUpdateIntervalHours > 0)
+                ApplyListChanges(true);
+            else if ((_blockListUrls.Count > 0) || (_profileListUrls.Count > 0))
+                ForceUpdateBlockLists(true);
+            else
+                Flush();
+        }
+
+        internal void InitializeProfileListUrls(IReadOnlyList<string> profileListUrls)
+        {
+            _profileListUrls = profileListUrls;
+        }
+
         public bool IsAllowed(DnsDatagram request)
         {
-            if (_listZone.AllowZone.Count < 1)
+            return IsAllowed(request, default);
+        }
+
+        public bool IsAllowed(DnsDatagram request, in DnsClientIdentity client)
+        {
+            ListRuleSet ruleSet = _ruleSet;
+            if (!ruleSet.HasAllowRules)
                 return false;
 
-            return IsZoneAllowed(request.Question[0].Name);
+            DnsQuestionRecord question = request.Question[0];
+
+            return ruleSet.Evaluate(question.Name, question.Type, GetFilter(ruleSet, client.Profile), new ListClientInfo(client.Address, client.Profile?.Name, client.ClientId)).Action == ListRuleAction.Allow;
         }
 
         public DnsDatagram Query(DnsDatagram request)
         {
-            if (_listZone.BlockZone.Count < 1)
+            return Query(request, default);
+        }
+
+        public DnsDatagram Query(DnsDatagram request, in DnsClientIdentity client)
+        {
+            ListRuleSet ruleSet = _ruleSet;
+            if (!ruleSet.HasBlockRules)
                 return null;
 
             DnsQuestionRecord question = request.Question[0];
 
-            IReadOnlyList<Uri> blockLists = IsZoneBlocked(question.Name, out string blockedDomain);
-            if (blockLists is null)
+            ListRuleMatch match = ruleSet.Evaluate(question.Name, question.Type, GetFilter(ruleSet, client.Profile), new ListClientInfo(client.Address, client.Profile?.Name, client.ClientId));
+            if (match.Action != ListRuleAction.Block)
                 return null;
+
+            return GetBlockedResponse(request, match.Domain, match.Lists, "block-list-zone");
+        }
+
+        public DnsDatagram QueryAnswerAddresses(DnsDatagram request, DnsDatagram response)
+        {
+            return QueryAnswerAddresses(request, response, default);
+        }
+
+        public DnsDatagram QueryAnswerAddresses(DnsDatagram request, DnsDatagram response, in DnsClientIdentity client)
+        {
+            ListRuleSet ruleSet = _ruleSet;
+            if (!ruleSet.HasIpRules)
+                return null;
+
+            ListRuleFilter filter = GetFilter(ruleSet, client.Profile);
+            if ((filter is not null) && filter.IsEmpty)
+                return null;
+
+            foreach (DnsResourceRecord record in response.Answer)
+            {
+                IPAddress address;
+
+                switch (record.Type)
+                {
+                    case DnsResourceRecordType.A:
+                        address = (record.RDATA as DnsARecordData).Address;
+                        break;
+
+                    case DnsResourceRecordType.AAAA:
+                        address = (record.RDATA as DnsAAAARecordData).Address;
+                        break;
+
+                    default:
+                        continue;
+                }
+
+                if (ruleSet.TryMatchAnswerAddress(address, filter, out Uri list))
+                    return GetBlockedResponse(request, request.Question[0].Name.ToLowerInvariant(), [list], "block-list-ip " + address.ToString());
+            }
+
+            return null;
+        }
+
+        private DnsDatagram GetBlockedResponse(DnsDatagram request, string blockedDomain, IReadOnlyList<Uri> blockLists, string source)
+        {
+            DnsQuestionRecord question = request.Question[0];
 
             if (_dnsServer.AllowTxtBlockingReport && (question.Type == DnsResourceRecordType.TXT))
             {
                 DnsResourceRecord[] answer = new DnsResourceRecord[_dnsServer.IsBlockingReportTextPerList ? blockLists.Count : 1];
 
                 for (int i = 0; i < answer.Length; i++)
-                    answer[i] = new DnsResourceRecord(question.Name, DnsResourceRecordType.TXT, question.Class, _dnsServer.BlockingAnswerTtl, new DnsTXTRecordData(_dnsServer.GetBlockingReportText("block-list-zone", blockedDomain, blockLists[i].AbsoluteUri)));
+                    answer[i] = new DnsResourceRecord(question.Name, DnsResourceRecordType.TXT, question.Class, _dnsServer.BlockingAnswerTtl, new DnsTXTRecordData(_dnsServer.GetBlockingReportText(source, blockedDomain, blockLists[i].AbsoluteUri)));
 
                 return new DnsDatagram(request.Identifier, true, DnsOpcode.StandardQuery, false, false, request.RecursionDesired, false, false, false, DnsResponseCode.NoError, request.Question, answer);
             }
@@ -912,7 +1017,7 @@ namespace ZenitiumDns.Core.Dns.ZoneManagers
                     options = new EDnsOption[_dnsServer.IsBlockingReportTextPerList ? blockLists.Count : 1];
 
                     for (int i = 0; i < options.Length; i++)
-                        options[i] = new EDnsOption(EDnsOptionCode.EXTENDED_DNS_ERROR, new EDnsExtendedDnsErrorOptionData(EDnsExtendedDnsErrorCode.Blocked, _dnsServer.GetBlockingReportText("block-list-zone", blockedDomain, blockLists[i].AbsoluteUri)));
+                        options[i] = new EDnsOption(EDnsOptionCode.EXTENDED_DNS_ERROR, new EDnsExtendedDnsErrorOptionData(EDnsExtendedDnsErrorCode.Blocked, _dnsServer.GetBlockingReportText(source, blockedDomain, blockLists[i].AbsoluteUri)));
                 }
 
                 IReadOnlyCollection<DnsARecordData> aRecords;
@@ -1008,6 +1113,171 @@ namespace ZenitiumDns.Core.Dns.ZoneManagers
         public void ForceUpdateBlockLists()
         {
             ForceUpdateBlockLists(false);
+        }
+
+        public IReadOnlyList<ListInfo> GetListInfos()
+        {
+            List<ListInfo> infos = new List<ListInfo>();
+            HashSet<string> seen = new HashSet<string>(StringComparer.Ordinal);
+
+            ClientProfileManager profileManager = _dnsServer.ClientProfileManager;
+            List<(string Line, bool Global)> allLines = new List<(string Line, bool Global)>();
+
+            foreach (string line in _blockListUrls)
+                allLines.Add((line, true));
+
+            foreach (string line in _profileListUrls)
+                allLines.Add((line, false));
+
+            foreach ((string line, bool global) in allLines)
+            {
+                if (!TryParseListLine(line, out Uri listUrl, out bool isAllowList, out bool enabled))
+                    continue;
+
+                if (!seen.Add(listUrl.AbsoluteUri))
+                    continue;
+
+                IReadOnlyList<string> profiles = profileManager is null ? [] : profileManager.GetProfilesUsingList(GetListKey(listUrl, isAllowList));
+
+                _listStatus.TryGetValue(listUrl.AbsoluteUri, out ListStatus status);
+
+                string localPath = GetListFilePath(listUrl);
+                long fileSize = -1;
+                DateTime fileModifiedOn = default;
+
+                try
+                {
+                    FileInfo fileInfo = new FileInfo(localPath);
+                    if (fileInfo.Exists)
+                    {
+                        fileSize = fileInfo.Length;
+                        fileModifiedOn = fileInfo.LastWriteTimeUtc;
+                    }
+                }
+                catch
+                { }
+
+                infos.Add(new ListInfo(listUrl.AbsoluteUri, isAllowList, enabled, status?.Name, localPath, fileSize, fileModifiedOn, status, global, profiles));
+            }
+
+            return infos;
+        }
+
+        public async Task<bool> UpdateListAsync(string url)
+        {
+            List<string> lines = new List<string>(_blockListUrls);
+            lines.AddRange(_profileListUrls);
+            int index = FindListLine(lines, url);
+
+            if ((index < 0) || !TryParseListLine(lines[index], out Uri listUrl, out bool isAllowList, out bool enabled) || !enabled)
+                return false;
+
+            await _updateSemaphore.WaitAsync();
+
+            try
+            {
+                ListDownloadResult result = await DownloadListAsync(listUrl, isAllowList);
+
+                if (result == ListDownloadResult.Downloaded)
+                {
+                    LoadBlockLists();
+                    GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced, false);
+                }
+
+                SaveListStatus();
+
+                return result != ListDownloadResult.Failed;
+            }
+            finally
+            {
+                _updateSemaphore.Release();
+            }
+        }
+
+        public bool SetListEnabled(string url, bool enabled)
+        {
+            List<string> lines = new List<string>(_blockListUrls);
+            int index = FindListLine(lines, url);
+
+            if ((index < 0) || !TryParseListLine(lines[index], out Uri listUrl, out bool isAllowList, out bool currentlyEnabled))
+                return false;
+
+            if (currentlyEnabled == enabled)
+                return true;
+
+            lines[index] = (enabled ? "" : "#") + (isAllowList ? "!" : "") + listUrl.AbsoluteUri;
+
+            ApplyBlockListUrls(lines);
+            SaveConfigFile();
+
+            if (!enabled || (_blockListUpdateTimer is null))
+            {
+                ThreadPool.QueueUserWorkItem(delegate (object state)
+                {
+                    try
+                    {
+                        LoadBlockLists();
+                    }
+                    catch (Exception ex)
+                    {
+                        _dnsServer.LogManager.Write(ex);
+                    }
+                });
+            }
+
+            return true;
+        }
+
+        public bool RemoveList(string url)
+        {
+            List<string> lines = new List<string>(_blockListUrls);
+            int index = FindListLine(lines, url);
+
+            if (index < 0)
+                return false;
+
+            lines.RemoveAt(index);
+
+            bool onlyComments = true;
+
+            foreach (string line in lines)
+            {
+                if (!line.TrimStart().StartsWith('#'))
+                {
+                    onlyComments = false;
+                    break;
+                }
+            }
+
+            ApplyBlockListUrls(lines.Count == 0 ? [] : lines);
+            SaveConfigFile();
+
+            _listStatus.TryRemove(url, out _);
+            SaveListStatus();
+
+            if (onlyComments)
+                Flush();
+            else if (_blockListUpdateTimer is null)
+                LoadBlockLists();
+
+            return true;
+        }
+
+        public bool SetListName(string url, string name)
+        {
+            if ((FindListLine(_blockListUrls, url) < 0) && (FindListLine(_profileListUrls, url) < 0))
+                return false;
+
+            name = name?.Trim();
+
+            if (!string.IsNullOrEmpty(name) && (name.Length > MAX_LIST_NAME_LENGTH))
+                name = name.Substring(0, MAX_LIST_NAME_LENGTH);
+
+            ListStatus status = _listStatus.GetOrAdd(url, delegate (string key) { return new ListStatus(); });
+            status.Name = string.IsNullOrEmpty(name) ? null : name;
+
+            SaveListStatus();
+            return true;
         }
 
         public void TemporaryDisableBlocking(int minutes, IPEndPoint userEP, string username)
@@ -1141,27 +1411,36 @@ namespace ZenitiumDns.Core.Dns.ZoneManagers
         { get { return _temporaryDisableBlockingTill; } }
 
         public int TotalZonesAllowed
-        { get { return _listZone.AllowZone.Count; } }
+        { get { return _ruleSet.AllowedDomainCount; } }
 
         public int TotalZonesBlocked
-        { get { return _listZone.BlockZone.Count; } }
+        { get { return _ruleSet.BlockedDomainCount; } }
 
         #endregion
 
-        sealed class ListZone
+        enum ListDownloadResult : byte
         {
-            public static readonly ListZone Empty = new ListZone(DomainTable.Empty, DomainTable.Empty, []);
-
-            public readonly DomainTable AllowZone;
-            public readonly DomainTable BlockZone;
-            public readonly Uri[][] BlockListCombinations;
-
-            public ListZone(DomainTable allowZone, DomainTable blockZone, Uri[][] blockListCombinations)
-            {
-                AllowZone = allowZone;
-                BlockZone = blockZone;
-                BlockListCombinations = blockListCombinations;
-            }
+            Failed = 0,
+            NotModified = 1,
+            Downloaded = 2
         }
+
+        public sealed class ListStatus
+        {
+            public string Name { get; set; }
+            public DateTime LastCheckedOn { get; set; }
+            public DateTime LastUpdatedOn { get; set; }
+            public string LastResult { get; set; }
+            public string LastError { get; set; }
+            public DateTime LastLoadedOn { get; set; }
+            public string LoadError { get; set; }
+            public int Domains { get; set; }
+            public int Exceptions { get; set; }
+            public int Regexes { get; set; }
+            public int Ips { get; set; }
+            public int Skipped { get; set; }
+        }
+
+        public sealed record ListInfo(string Url, bool IsAllowList, bool Enabled, string Name, string LocalPath, long FileSize, DateTime FileModifiedOn, ListStatus Status, bool Global, IReadOnlyList<string> Profiles);
     }
 }

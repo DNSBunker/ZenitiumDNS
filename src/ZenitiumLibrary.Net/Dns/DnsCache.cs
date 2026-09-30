@@ -906,7 +906,7 @@ namespace ZenitiumLibrary.Net.Dns
                             {
                                 string cnameDomain = (lastAnswer.RDATA as DnsCNAMERecordData).Domain;
 
-                                if (cnameDomain.Equals(firstAuthority.Name, StringComparison.OrdinalIgnoreCase) || cnameDomain.EndsWith("." + firstAuthority.Name, StringComparison.OrdinalIgnoreCase))
+                                if ((cnameDomain.Equals(firstAuthority.Name, StringComparison.OrdinalIgnoreCase) || cnameDomain.EndsWith("." + firstAuthority.Name, StringComparison.OrdinalIgnoreCase)) && DnsClient.IsDomainNameValid(cnameDomain))
                                 {
                                     foreach (DnsQuestionRecord question in response.Question)
                                     {

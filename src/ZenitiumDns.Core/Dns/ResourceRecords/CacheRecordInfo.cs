@@ -19,6 +19,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using ZenitiumLibrary.Net;
@@ -33,10 +34,21 @@ namespace ZenitiumDns.Core.Dns.ResourceRecords
 
         public static readonly CacheRecordInfo Default = new CacheRecordInfo();
 
-        IReadOnlyList<DnsResourceRecord> _glueRecords;
-        IReadOnlyList<DnsResourceRecord> _rrsigRecords;
-        IReadOnlyList<DnsResourceRecord> _nsecRecords;
-        NetworkAddress _eDnsClientSubnet;
+        const int MAX_POOLED_NAME_SERVERS = 65536;
+        static readonly ConcurrentDictionary<NameServerAddress, NameServerAddress> _nameServerPool = new ConcurrentDictionary<NameServerAddress, NameServerAddress>();
+
+        sealed class Extras
+        {
+            public IReadOnlyList<DnsResourceRecord> GlueRecords;
+            public IReadOnlyList<DnsResourceRecord> RRSIGRecords;
+            public IReadOnlyList<DnsResourceRecord> NSECRecords;
+            public NetworkAddress EDnsClientSubnet;
+
+            public bool IsEmpty
+            { get { return (GlueRecords is null) && (RRSIGRecords is null) && (NSECRecords is null) && (EDnsClientSubnet is null); } }
+        }
+
+        Extras _extras;
         DnsDatagramMetadata _responseMetadata;
 
         DateTime _lastUsedOn;
@@ -55,17 +67,17 @@ namespace ZenitiumDns.Core.Dns.ResourceRecords
             {
                 case 1:
                 case 2:
-                    _glueRecords = ReadRecordsFrom(bR, true);
-                    _rrsigRecords = ReadRecordsFrom(bR, false);
-                    _nsecRecords = ReadRecordsFrom(bR, true);
+                    GlueRecords = ReadRecordsFrom(bR, true);
+                    RRSIGRecords = ReadRecordsFrom(bR, false);
+                    NSECRecords = ReadRecordsFrom(bR, true);
 
                     if (bR.ReadBoolean())
-                        _eDnsClientSubnet = NetworkAddress.ReadFrom(bR);
+                        EDnsClientSubnet = NetworkAddress.ReadFrom(bR);
 
                     if (version >= 2)
                     {
                         if (bR.ReadBoolean())
-                            _responseMetadata = new DnsDatagramMetadata(bR);
+                            _responseMetadata = InternMetadata(new DnsDatagramMetadata(bR));
                     }
 
                     break;
@@ -95,7 +107,7 @@ namespace ZenitiumDns.Core.Dns.ResourceRecords
                     {
                         IReadOnlyList<DnsResourceRecord> rrsigRecords = ReadRecordsFrom(bR, false);
                         if (rrsigRecords is not null)
-                            record.GetCacheRecordInfo()._rrsigRecords = rrsigRecords;
+                            record.GetCacheRecordInfo().RRSIGRecords = rrsigRecords;
                     }
                 });
             }
@@ -120,7 +132,7 @@ namespace ZenitiumDns.Core.Dns.ResourceRecords
                         if (includeInnerRRSigRecords)
                         {
                             if (record.Tag is CacheRecordInfo cacheRecordInfo)
-                                WriteRecordsTo(cacheRecordInfo._rrsigRecords, bW, false);
+                                WriteRecordsTo(cacheRecordInfo.RRSIGRecords, bW, false);
                             else
                                 bW.Write((byte)0);
                         }
@@ -129,26 +141,70 @@ namespace ZenitiumDns.Core.Dns.ResourceRecords
             }
         }
 
+        private Extras GetExtras(bool create)
+        {
+            Extras extras = _extras;
+
+            if ((extras is null) && create)
+            {
+                extras = new Extras();
+                _extras = extras;
+            }
+
+            return extras;
+        }
+
+        private void TrimExtras()
+        {
+            Extras extras = _extras;
+
+            if ((extras is not null) && extras.IsEmpty)
+                _extras = null;
+        }
+
         #endregion
 
         #region public
+
+        public static DnsDatagramMetadata InternMetadata(DnsDatagramMetadata metadata)
+        {
+            NameServerAddress server = metadata?.NameServer;
+            if (server is null)
+                return metadata;
+
+            if (_nameServerPool.TryGetValue(server, out NameServerAddress pooled))
+            {
+                if (ReferenceEquals(pooled, server))
+                    return metadata;
+
+                return new DnsDatagramMetadata(pooled, metadata.DatagramSize, metadata.RoundTripTime);
+            }
+
+            if (_nameServerPool.Count >= MAX_POOLED_NAME_SERVERS)
+                _nameServerPool.Clear();
+
+            _nameServerPool.TryAdd(server, server);
+            return metadata;
+        }
 
         public void WriteTo(BinaryWriter bW)
         {
             bW.Write((byte)2);
 
-            WriteRecordsTo(_glueRecords, bW, true);
-            WriteRecordsTo(_rrsigRecords, bW, false);
-            WriteRecordsTo(_nsecRecords, bW, true);
+            WriteRecordsTo(GlueRecords, bW, true);
+            WriteRecordsTo(RRSIGRecords, bW, false);
+            WriteRecordsTo(NSECRecords, bW, true);
 
-            if (_eDnsClientSubnet is null)
+            NetworkAddress eDnsClientSubnet = EDnsClientSubnet;
+
+            if (eDnsClientSubnet is null)
             {
                 bW.Write(false);
             }
             else
             {
                 bW.Write(true);
-                _eDnsClientSubnet.WriteTo(bW);
+                eDnsClientSubnet.WriteTo(bW);
             }
 
             if (_responseMetadata is null)
@@ -168,44 +224,86 @@ namespace ZenitiumDns.Core.Dns.ResourceRecords
 
         public IReadOnlyList<DnsResourceRecord> GlueRecords
         {
-            get { return _glueRecords; }
+            get { return _extras?.GlueRecords; }
             set
             {
                 if ((value is null) || (value.Count == 0))
-                    _glueRecords = null;
+                {
+                    Extras extras = GetExtras(false);
+                    if (extras is not null)
+                    {
+                        extras.GlueRecords = null;
+                        TrimExtras();
+                    }
+                }
                 else
-                    _glueRecords = value;
+                {
+                    GetExtras(true).GlueRecords = value;
+                }
             }
         }
 
         public IReadOnlyList<DnsResourceRecord> RRSIGRecords
         {
-            get { return _rrsigRecords; }
+            get { return _extras?.RRSIGRecords; }
             set
             {
                 if ((value is null) || (value.Count == 0))
-                    _rrsigRecords = null;
+                {
+                    Extras extras = GetExtras(false);
+                    if (extras is not null)
+                    {
+                        extras.RRSIGRecords = null;
+                        TrimExtras();
+                    }
+                }
                 else
-                    _rrsigRecords = value;
+                {
+                    GetExtras(true).RRSIGRecords = value;
+                }
             }
         }
 
         public IReadOnlyList<DnsResourceRecord> NSECRecords
         {
-            get { return _nsecRecords; }
+            get { return _extras?.NSECRecords; }
             set
             {
                 if ((value is null) || (value.Count == 0))
-                    _nsecRecords = null;
+                {
+                    Extras extras = GetExtras(false);
+                    if (extras is not null)
+                    {
+                        extras.NSECRecords = null;
+                        TrimExtras();
+                    }
+                }
                 else
-                    _nsecRecords = value;
+                {
+                    GetExtras(true).NSECRecords = value;
+                }
             }
         }
 
         public NetworkAddress EDnsClientSubnet
         {
-            get { return _eDnsClientSubnet; }
-            set { _eDnsClientSubnet = value; }
+            get { return _extras?.EDnsClientSubnet; }
+            set
+            {
+                if (value is null)
+                {
+                    Extras extras = GetExtras(false);
+                    if (extras is not null)
+                    {
+                        extras.EDnsClientSubnet = null;
+                        TrimExtras();
+                    }
+                }
+                else
+                {
+                    GetExtras(true).EDnsClientSubnet = value;
+                }
+            }
         }
 
         public DnsDatagramMetadata ResponseMetadata

@@ -64,6 +64,7 @@ namespace ZenitiumDns.Core
                     throw new DnsWebServiceException("Access was denied.");
 
                 _dnsWebService._dnsServer.CacheZoneManager.Flush();
+                QnameMinimizationFallback.Clear();
                 _dnsWebService._dnsServer.IanaDataManager.Reseed();
 
                 _dnsWebService._log.Write(_dnsWebService.GetRemoteEndPoint(context), "[" + sessionUser.Username + "] Cache was flushed.");

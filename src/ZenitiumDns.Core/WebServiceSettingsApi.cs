@@ -21,6 +21,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 using ZenitiumDns.ApplicationCommon;
 using ZenitiumDns.Core.Auth;
 using ZenitiumDns.Core.Dns;
+using ZenitiumDns.Core.Dns.ZoneManagers;
 using Microsoft.AspNetCore.Http;
 using System;
 using System.Collections.Generic;
@@ -267,6 +268,19 @@ namespace ZenitiumDns.Core
                 jsonWriter.WriteString("webServiceRealIpHeader", _dnsWebService._webServiceRealIpHeader);
                 jsonWriter.WriteString("language", _dnsWebService._webServiceLanguage ?? Lang.Code);
                 jsonWriter.WriteBoolean("languageChosen", _dnsWebService._webServiceLanguage is not null);
+
+                jsonWriter.WritePropertyName("importedLanguages");
+                jsonWriter.WriteStartArray();
+
+                foreach (KeyValuePair<string, string> importedLanguage in _dnsWebService._languages.GetImportedLanguages())
+                {
+                    jsonWriter.WriteStartObject();
+                    jsonWriter.WriteString("code", importedLanguage.Key);
+                    jsonWriter.WriteString("name", importedLanguage.Value);
+                    jsonWriter.WriteEndObject();
+                }
+
+                jsonWriter.WriteEndArray();
                 jsonWriter.WriteString("webServiceCspFrameAncestorsHeader", _dnsWebService._webServiceCspFrameAncestorsHeader);
                 jsonWriter.WriteString("webServiceTlsCertificatePath", _dnsWebService._webServiceTlsCertificatePath);
                 jsonWriter.WriteString("webServiceTlsCertificatePassword", string.IsNullOrEmpty(_dnsWebService._webServiceTlsCertificatePath) ? null : "************");
@@ -359,7 +373,11 @@ namespace ZenitiumDns.Core
                 }
 
                 jsonWriter.WriteBoolean("randomizeName", _dnsWebService._dnsServer.RandomizeName);
+                jsonWriter.WriteBoolean("enableDnsCookies", _dnsWebService._dnsServer.EnableDnsCookies);
+                jsonWriter.WriteString("dnsCookieSecret", _dnsWebService._dnsServer.DnsCookieSecret is null ? null : Convert.ToHexStringLower(_dnsWebService._dnsServer.DnsCookieSecret));
                 jsonWriter.WriteBoolean("qnameMinimization", _dnsWebService._dnsServer.QnameMinimization);
+                jsonWriter.WriteBoolean("qnameMinimizationFallback", _dnsWebService._dnsServer.QnameMinimizationFallback);
+                jsonWriter.WriteNumber("qnameMinimizationFallbackZones", ZenitiumLibrary.Net.Dns.QnameMinimizationFallback.Zones);
                 jsonWriter.WriteBoolean("locallyServedDnsZones", _dnsWebService._dnsServer.LocallyServedDnsZones);
 
                 jsonWriter.WriteNumber("resolverRetries", _dnsWebService._dnsServer.ResolverRetries);
@@ -374,7 +392,9 @@ namespace ZenitiumDns.Core
                 jsonWriter.WriteNumber("serveStaleResetTtl", _dnsWebService._dnsServer.CacheZoneManager.ServeStaleResetTtl);
                 jsonWriter.WriteNumber("serveStaleMaxWaitTime", _dnsWebService._dnsServer.ServeStaleMaxWaitTime);
 
+                jsonWriter.WriteBoolean("enableCache", _dnsWebService._dnsServer.EnableCache);
                 jsonWriter.WriteNumber("cacheMaximumEntries", _dnsWebService._dnsServer.CacheZoneManager.MaximumEntries);
+                jsonWriter.WriteNumber("cacheMaximumMemory", _dnsWebService._dnsServer.CacheZoneManager.MaximumMemoryMegabytes);
                 jsonWriter.WriteNumber("cacheMinimumRecordTtl", _dnsWebService._dnsServer.CacheZoneManager.MinimumRecordTtl);
                 jsonWriter.WriteNumber("cacheMaximumRecordTtl", _dnsWebService._dnsServer.CacheZoneManager.MaximumRecordTtl);
                 jsonWriter.WriteNumber("cacheNegativeRecordTtl", _dnsWebService._dnsServer.CacheZoneManager.NegativeRecordTtl);
@@ -451,6 +471,9 @@ namespace ZenitiumDns.Core
 
                     jsonWriter.WriteString("blockListNextUpdatedOn", blockListNextUpdatedOn);
                 }
+
+                jsonWriter.WriteString("httpUserAgent", _dnsWebService._dnsServer.HttpUserAgent);
+                jsonWriter.WriteString("httpUserAgentDefault", DnsServer.DefaultHttpUserAgent);
 
                 jsonWriter.WritePropertyName("proxy");
                 if (_dnsWebService._dnsServer.Proxy == null)
@@ -1004,8 +1027,8 @@ namespace ZenitiumDns.Core
 
                         if (request.TryQueryOrForm("language", out string language))
                         {
-                            if (!Lang.IsSupported(language))
-                                throw new ArgumentException("Language must be 'de' or 'en'.", nameof(language));
+                            if (!_dnsWebService._languages.IsAvailable(language))
+                                throw new ArgumentException(Lang.T("Diese Sprache ist nicht vorhanden.", "This language is not available."), nameof(language));
 
                             _dnsWebService.SetLanguage(language);
                         }
@@ -1354,6 +1377,42 @@ namespace ZenitiumDns.Core
                             _dnsWebService._dnsServer.RandomizeName = randomizeName;
                         }
 
+                        if (request.TryGetQueryOrForm("enableDnsCookies", bool.Parse, out bool enableDnsCookies))
+                        {
+                            _dnsWebService._dnsServer.EnableDnsCookies = enableDnsCookies;
+                        }
+
+                        if (request.TryQueryOrForm("dnsCookieSecret", out string dnsCookieSecret))
+                        {
+                            dnsCookieSecret = dnsCookieSecret.Trim();
+
+                            if (dnsCookieSecret.Length == 0)
+                            {
+                                _dnsWebService._dnsServer.DnsCookieSecret = null;
+                            }
+                            else
+                            {
+                                byte[] secret;
+
+                                try
+                                {
+                                    secret = Convert.FromHexString(dnsCookieSecret);
+                                }
+                                catch (FormatException)
+                                {
+                                    secret = null;
+                                }
+
+                                if ((secret is null) || (secret.Length != DnsCookie.SECRET_LENGTH))
+                                    throw new ArgumentException(Lang.T("Das Cookie-Geheimnis muss aus 32 Hexadezimalzeichen (16 Byte) bestehen.", "The cookie secret must consist of 32 hexadecimal characters (16 bytes)."), nameof(dnsCookieSecret));
+
+                                _dnsWebService._dnsServer.DnsCookieSecret = secret;
+                            }
+                        }
+
+                        if (request.TryGetQueryOrForm("qnameMinimizationFallback", bool.Parse, out bool qnameMinimizationFallback))
+                            _dnsWebService._dnsServer.QnameMinimizationFallback = qnameMinimizationFallback;
+
                         if (request.TryGetQueryOrForm("qnameMinimization", bool.Parse, out bool qnameMinimization))
                         {
                             _dnsWebService._dnsServer.QnameMinimization = qnameMinimization;
@@ -1406,8 +1465,14 @@ namespace ZenitiumDns.Core
                         if (request.TryGetQueryOrForm("serveStaleMaxWaitTime", int.Parse, out int serveStaleMaxWaitTime))
                             _dnsWebService._dnsServer.ServeStaleMaxWaitTime = serveStaleMaxWaitTime;
 
+                        if (request.TryGetQueryOrForm("enableCache", bool.Parse, out bool enableCache))
+                            _dnsWebService._dnsServer.EnableCache = enableCache;
+
                         if (request.TryGetQueryOrForm("cacheMaximumEntries", long.Parse, out long cacheMaximumEntries))
                             _dnsWebService._dnsServer.CacheZoneManager.MaximumEntries = cacheMaximumEntries;
+
+                        if (request.TryGetQueryOrForm("cacheMaximumMemory", int.Parse, out int cacheMaximumMemory))
+                            _dnsWebService._dnsServer.CacheZoneManager.MaximumMemoryMegabytes = cacheMaximumMemory;
 
                         if (request.TryGetQueryOrForm("cacheMinimumRecordTtl", ZoneFile.ParseTtl, out uint cacheMinimumRecordTtl))
                             _dnsWebService._dnsServer.CacheZoneManager.MinimumRecordTtl = cacheMinimumRecordTtl;
@@ -1540,6 +1605,9 @@ namespace ZenitiumDns.Core
                         #endregion
 
                         #region proxy & forwarders
+
+                        if (request.TryQueryOrForm("httpUserAgent", out string httpUserAgent))
+                            _dnsWebService._dnsServer.HttpUserAgent = httpUserAgent;
 
                         if (request.TryGetQueryOrFormEnum("proxyType", out NetProxyType proxyType))
                         {
@@ -1768,6 +1836,269 @@ namespace ZenitiumDns.Core
                 }
 
                 _dnsWebService._log.Write(_dnsWebService.GetRemoteEndPoint(context), "[" + sessionUser.Username + "] Settings backup zip file was exported.");
+            }
+
+            private static void WriteBlockListInfo(Utf8JsonWriter jsonWriter, BlockListZoneManager.ListInfo info)
+            {
+                jsonWriter.WriteStartObject();
+
+                jsonWriter.WriteString("url", info.Url);
+                jsonWriter.WriteBoolean("allowList", info.IsAllowList);
+                jsonWriter.WriteBoolean("enabled", info.Enabled);
+                jsonWriter.WriteString("name", info.Name);
+                jsonWriter.WriteString("localPath", info.LocalPath);
+
+                if (info.FileSize >= 0)
+                {
+                    jsonWriter.WriteNumber("fileSize", info.FileSize);
+                    jsonWriter.WriteString("fileModifiedOn", info.FileModifiedOn);
+                }
+
+                BlockListZoneManager.ListStatus status = info.Status;
+
+                if (status is not null)
+                {
+                    if (status.LastCheckedOn != default)
+                        jsonWriter.WriteString("lastCheckedOn", status.LastCheckedOn);
+
+                    if (status.LastUpdatedOn != default)
+                        jsonWriter.WriteString("lastUpdatedOn", status.LastUpdatedOn);
+
+                    if (status.LastLoadedOn != default)
+                        jsonWriter.WriteString("lastLoadedOn", status.LastLoadedOn);
+
+                    jsonWriter.WriteString("lastResult", status.LastResult);
+                    jsonWriter.WriteString("lastError", status.LastError);
+                    jsonWriter.WriteString("loadError", status.LoadError);
+                    jsonWriter.WriteNumber("domains", status.Domains);
+                    jsonWriter.WriteNumber("exceptions", status.Exceptions);
+                    jsonWriter.WriteNumber("regexes", status.Regexes);
+                    jsonWriter.WriteNumber("ips", status.Ips);
+                    jsonWriter.WriteNumber("skipped", status.Skipped);
+                }
+
+                jsonWriter.WriteBoolean("global", info.Global);
+                jsonWriter.WriteStartArray("profiles");
+
+                foreach (string profile in info.Profiles)
+                    jsonWriter.WriteStringValue(profile);
+
+                jsonWriter.WriteEndArray();
+                jsonWriter.WriteEndObject();
+            }
+
+            private static IEnumerable<string> SplitLines(string value)
+            {
+                if (string.IsNullOrEmpty(value))
+                    return [];
+
+                return value.Split(['\n', '\r', ','], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            }
+
+            public void GetClientProfiles(HttpContext context)
+            {
+                User sessionUser = _dnsWebService.GetSessionUser(context);
+
+                if (!_dnsWebService._authManager.IsPermitted(PermissionSection.Settings, sessionUser, PermissionFlag.View))
+                    throw new DnsWebServiceException("Access was denied.");
+
+                DnsServer dnsServer = _dnsWebService._dnsServer;
+                Utf8JsonWriter jsonWriter = context.GetCurrentJsonWriter();
+
+                jsonWriter.WriteString("serverDomain", dnsServer.ServerDomain);
+                jsonWriter.WriteBoolean("enableDnsOverHttps", dnsServer.EnableDnsOverHttps);
+                jsonWriter.WriteBoolean("enableDnsOverTls", dnsServer.EnableDnsOverTls);
+                jsonWriter.WriteBoolean("enableDnsOverQuic", dnsServer.EnableDnsOverQuic);
+                jsonWriter.WriteNumber("dnsOverHttpsPort", dnsServer.DnsOverHttpsPort);
+
+                jsonWriter.WriteStartArray("defaultBlockListUrls");
+
+                foreach (string line in dnsServer.BlockListZoneManager.BlockListUrls)
+                    jsonWriter.WriteStringValue(line);
+
+                jsonWriter.WriteEndArray();
+
+                jsonWriter.WriteStartArray("profiles");
+
+                foreach (ClientProfile profile in dnsServer.ClientProfileManager.Profiles)
+                    ClientProfileManager.WriteProfile(jsonWriter, profile);
+
+                jsonWriter.WriteEndArray();
+            }
+
+            public void SetClientProfile(HttpContext context)
+            {
+                User sessionUser = CheckBlockListModifyPermission(context);
+                HttpRequest request = context.Request;
+
+                string originalName = request.QueryOrForm("originalName");
+                string name = request.GetQueryOrForm("name");
+                bool blockingEnabled = request.GetQueryOrForm("blockingEnabled", bool.Parse, true);
+                bool useDefaultLists = request.GetQueryOrForm("useDefaultLists", bool.Parse, true);
+
+                ClientProfile profile;
+
+                try
+                {
+                    profile = ClientProfileManager.Normalize(name, SplitLines(request.QueryOrForm("identifiers")), blockingEnabled, useDefaultLists, SplitLines(request.QueryOrForm("blockListUrls")));
+                    _dnsWebService._dnsServer.ClientProfileManager.SetProfile(originalName, profile);
+                }
+                catch (ArgumentException ex)
+                {
+                    throw new DnsWebServiceException(ex.Message);
+                }
+
+                _dnsWebService._log.Write(_dnsWebService.GetRemoteEndPoint(context), "[" + sessionUser.Username + "] Client profile was saved: " + profile.Name);
+
+                Utf8JsonWriter jsonWriter = context.GetCurrentJsonWriter();
+                jsonWriter.WritePropertyName("profile");
+                ClientProfileManager.WriteProfile(jsonWriter, profile);
+            }
+
+            public void DeleteClientProfile(HttpContext context)
+            {
+                User sessionUser = CheckBlockListModifyPermission(context);
+                string name = context.Request.GetQueryOrForm("name");
+
+                if (!_dnsWebService._dnsServer.ClientProfileManager.DeleteProfile(name))
+                    throw new DnsWebServiceException(Lang.T("Dieses Clientprofil existiert nicht.", "This client profile does not exist."));
+
+                _dnsWebService._log.Write(_dnsWebService.GetRemoteEndPoint(context), "[" + sessionUser.Username + "] Client profile was deleted: " + name);
+            }
+
+            public void GetBlockListStatus(HttpContext context)
+            {
+                User sessionUser = _dnsWebService.GetSessionUser(context);
+
+                if (!_dnsWebService._authManager.IsPermitted(PermissionSection.Settings, sessionUser, PermissionFlag.View))
+                    throw new DnsWebServiceException("Access was denied.");
+
+                BlockListZoneManager manager = _dnsWebService._dnsServer.BlockListZoneManager;
+                Utf8JsonWriter jsonWriter = context.GetCurrentJsonWriter();
+
+                jsonWriter.WriteStartArray("lists");
+
+                foreach (BlockListZoneManager.ListInfo info in manager.GetListInfos())
+                    WriteBlockListInfo(jsonWriter, info);
+
+                jsonWriter.WriteEndArray();
+
+                if (manager.BlockListLastUpdatedOn != default)
+                    jsonWriter.WriteString("lastUpdatedOn", manager.BlockListLastUpdatedOn);
+
+                jsonWriter.WriteNumber("updateIntervalHours", manager.BlockListUpdateIntervalHours);
+                jsonWriter.WriteNumber("totalBlocked", manager.TotalZonesBlocked);
+                jsonWriter.WriteNumber("totalAllowed", manager.TotalZonesAllowed);
+            }
+
+            private User CheckBlockListModifyPermission(HttpContext context)
+            {
+                User sessionUser = _dnsWebService.GetSessionUser(context);
+
+                if (!_dnsWebService._authManager.IsPermitted(PermissionSection.Settings, sessionUser, PermissionFlag.Modify))
+                    throw new DnsWebServiceException("Access was denied.");
+
+                return sessionUser;
+            }
+
+            public async Task UpdateBlockListAsync(HttpContext context)
+            {
+                User sessionUser = CheckBlockListModifyPermission(context);
+                string url = context.Request.GetQueryOrForm("url");
+
+                bool success = await _dnsWebService._dnsServer.BlockListZoneManager.UpdateListAsync(url);
+
+                _dnsWebService._log.Write(_dnsWebService.GetRemoteEndPoint(context), "[" + sessionUser.Username + "] Block list update was requested: " + url);
+
+                context.GetCurrentJsonWriter().WriteBoolean("success", success);
+            }
+
+            public void SetBlockListEnabled(HttpContext context)
+            {
+                User sessionUser = CheckBlockListModifyPermission(context);
+                string url = context.Request.GetQueryOrForm("url");
+                bool enabled = context.Request.GetQueryOrForm("enabled", bool.Parse);
+
+                if (!_dnsWebService._dnsServer.BlockListZoneManager.SetListEnabled(url, enabled))
+                    throw new DnsWebServiceException(Lang.T("Diese Liste ist nicht eingetragen.", "This list is not configured."));
+
+                _dnsWebService._log.Write(_dnsWebService.GetRemoteEndPoint(context), "[" + sessionUser.Username + "] Block list was " + (enabled ? "enabled" : "disabled") + ": " + url);
+            }
+
+            public void RemoveBlockList(HttpContext context)
+            {
+                User sessionUser = CheckBlockListModifyPermission(context);
+                string url = context.Request.GetQueryOrForm("url");
+
+                if (!_dnsWebService._dnsServer.BlockListZoneManager.RemoveList(url))
+                    throw new DnsWebServiceException(Lang.T("Diese Liste ist nicht eingetragen.", "This list is not configured."));
+
+                _dnsWebService._log.Write(_dnsWebService.GetRemoteEndPoint(context), "[" + sessionUser.Username + "] Block list was removed: " + url);
+            }
+
+            public void SetBlockListName(HttpContext context)
+            {
+                CheckBlockListModifyPermission(context);
+                string url = context.Request.GetQueryOrForm("url");
+
+                if (!_dnsWebService._dnsServer.BlockListZoneManager.SetListName(url, context.Request.QueryOrForm("name")))
+                    throw new DnsWebServiceException(Lang.T("Diese Liste ist nicht eingetragen.", "This list is not configured."));
+            }
+
+            public async Task ImportLanguageAsync(HttpContext context)
+            {
+                User sessionUser = _dnsWebService.GetSessionUser(context);
+
+                if (!_dnsWebService._authManager.IsPermitted(PermissionSection.Settings, sessionUser, PermissionFlag.Modify))
+                    throw new DnsWebServiceException("Access was denied.");
+
+                HttpRequest request = context.Request;
+
+                if (!request.HasFormContentType || (request.Form.Files.Count == 0))
+                    throw new DnsWebServiceException(Lang.T("Keine Sprachdatei hochgeladen.", "No language file was uploaded."));
+
+                IFormFile file = request.Form.Files[0];
+                if (file.Length > LanguageManager.MAX_FILE_SIZE)
+                    throw new DnsWebServiceException(Lang.T("Die Sprachdatei darf höchstens 4 MB groß sein.", "The language file cannot exceed 4 MB."));
+
+                LanguageManager.ImportResult result;
+
+                await using (Stream stream = file.OpenReadStream())
+                {
+                    result = _dnsWebService._languages.Import(request.Form["code"], request.Form["name"], stream);
+                }
+
+                _dnsWebService._log.Write(_dnsWebService.GetRemoteEndPoint(context), "[" + sessionUser.Username + "] Language was imported: " + result.Code + " (" + result.Translated + " of " + result.Total + " texts)");
+
+                Utf8JsonWriter jsonWriter = context.GetCurrentJsonWriter();
+
+                jsonWriter.WriteString("code", result.Code);
+                jsonWriter.WriteString("name", result.Name);
+                jsonWriter.WriteNumber("translated", result.Translated);
+                jsonWriter.WriteNumber("total", result.Total);
+                jsonWriter.WriteNumber("rejected", result.Rejected);
+                jsonWriter.WriteNumber("unknown", result.Unknown);
+            }
+
+            public void DeleteLanguage(HttpContext context)
+            {
+                User sessionUser = _dnsWebService.GetSessionUser(context);
+
+                if (!_dnsWebService._authManager.IsPermitted(PermissionSection.Settings, sessionUser, PermissionFlag.Modify))
+                    throw new DnsWebServiceException("Access was denied.");
+
+                string code = context.Request.GetQueryOrForm("code");
+
+                if (!_dnsWebService._languages.Delete(code))
+                    throw new DnsWebServiceException(Lang.T("Diese Sprache ist nicht vorhanden.", "This language is not available."));
+
+                if (code == _dnsWebService._webServiceLanguage)
+                {
+                    _dnsWebService.SetLanguage(Lang.English);
+                    _dnsWebService.SaveConfigFile();
+                }
+
+                _dnsWebService._log.Write(_dnsWebService.GetRemoteEndPoint(context), "[" + sessionUser.Username + "] Language was deleted: " + code);
             }
 
             public async Task RestoreSettingsAsync(HttpContext context)

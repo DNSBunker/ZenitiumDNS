@@ -411,6 +411,18 @@ namespace ZenitiumLibrary.Net.Dns
 
         public static async Task<DnsDatagram> RecursiveResolveAsync(DnsQuestionRecord question, IDnsCache cache = null, NetProxy proxy = null, IPv6Mode ipv6Mode = IPv6Mode.Disabled, ushort udpPayloadSize = DnsDatagram.EDNS_DEFAULT_UDP_PAYLOAD_SIZE, bool randomizeName = false, bool qnameMinimization = false, bool dnssecValidation = false, NetworkAddress eDnsClientSubnet = null, int retries = 2, int timeout = 2000, int concurrency = 2, int maxStackCount = 16, bool minimalResponse = false, bool asyncNsResolution = false, List<DnsDatagram> rawResponses = null, ResolverContext context = null, CancellationToken cancellationToken = default)
         {
+            List<string> qnameMinimizationFallbacks = qnameMinimization && QnameMinimizationFallback.Enabled ? new List<string>() : null;
+
+            DnsDatagram response = await InternalRecursiveResolveAsync(question, cache, proxy, ipv6Mode, udpPayloadSize, randomizeName, qnameMinimization, dnssecValidation, eDnsClientSubnet, retries, timeout, concurrency, maxStackCount, minimalResponse, asyncNsResolution, rawResponses, context, cancellationToken, qnameMinimizationFallbacks);
+
+            if ((qnameMinimizationFallbacks is not null) && (qnameMinimizationFallbacks.Count > 0) && (response is not null) && (response.RCODE == DnsResponseCode.NoError))
+                QnameMinimizationFallback.Remember(qnameMinimizationFallbacks);
+
+            return response;
+        }
+
+        private static async Task<DnsDatagram> InternalRecursiveResolveAsync(DnsQuestionRecord question, IDnsCache cache = null, NetProxy proxy = null, IPv6Mode ipv6Mode = IPv6Mode.Disabled, ushort udpPayloadSize = DnsDatagram.EDNS_DEFAULT_UDP_PAYLOAD_SIZE, bool randomizeName = false, bool qnameMinimization = false, bool dnssecValidation = false, NetworkAddress eDnsClientSubnet = null, int retries = 2, int timeout = 2000, int concurrency = 2, int maxStackCount = 16, bool minimalResponse = false, bool asyncNsResolution = false, List<DnsDatagram> rawResponses = null, ResolverContext context = null, CancellationToken cancellationToken = default, List<string> qnameMinimizationFallbacks = null)
+        {
             if (context is null)
                 context = new ResolverContext();
             else if (!context.CanProceedWithResolution())
@@ -489,6 +501,14 @@ namespace ZenitiumLibrary.Net.Dns
                 hopCount = 0;
                 lastResponse = null;
                 lastException = null;
+            }
+
+            void RecordQnameMinimizationFallback()
+            {
+                QnameMinimizationFallback.CountFallback();
+
+                if ((qnameMinimizationFallbacks is not null) && (resolverStack.Count == 0) && (zoneCut is not null))
+                    qnameMinimizationFallbacks.Add(zoneCut);
             }
 
             void PopStack()
@@ -812,7 +832,7 @@ namespace ZenitiumLibrary.Net.Dns
                                                 bool prioritizeOnesWithIPAddress = asyncNsResolution || (resolverStack.Count > 0);
 
                                                 if (question.ZoneCut is not null)
-                                                    question.ZoneCut = nextZoneCut;
+                                                    question.ZoneCut = QnameMinimizationFallback.IsFallbackZone(nextZoneCut) ? null : nextZoneCut;
 
                                                 zoneCut = nextZoneCut;
                                                 dnssecValidationState = nextDnssecValidationState;
@@ -1256,6 +1276,7 @@ namespace ZenitiumLibrary.Net.Dns
                                     }
                                     else
                                     {
+                                        RecordQnameMinimizationFallback();
                                         question.ZoneCut = null;
                                         nameServerIndex = currentNameServerIndex - 1;
                                         continue;
@@ -1263,6 +1284,7 @@ namespace ZenitiumLibrary.Net.Dns
                                 }
                                 else
                                 {
+                                    RecordQnameMinimizationFallback();
                                     question.ZoneCut = question.MinimizedName;
                                     nameServerIndex = currentNameServerIndex - 1;
                                     continue;
@@ -1556,7 +1578,7 @@ namespace ZenitiumLibrary.Net.Dns
                                                 bool prioritizeOnesWithIPAddress = asyncNsResolution || (resolverStack.Count > 0);
 
                                                 if (question.ZoneCut is not null)
-                                                    question.ZoneCut = nextZoneCut;
+                                                    question.ZoneCut = QnameMinimizationFallback.IsFallbackZone(nextZoneCut) ? null : nextZoneCut;
 
                                                 zoneCut = nextZoneCut;
                                                 dnssecValidationState = nextDnssecValidationState;
@@ -1628,6 +1650,7 @@ namespace ZenitiumLibrary.Net.Dns
                                         }
                                         else
                                         {
+                                            RecordQnameMinimizationFallback();
                                             question.ZoneCut = null;
                                             nameServerIndex = currentNameServerIndex - 1;
                                             continue;
@@ -1680,6 +1703,7 @@ namespace ZenitiumLibrary.Net.Dns
                                             }
                                             else
                                             {
+                                                RecordQnameMinimizationFallback();
                                                 question.ZoneCut = null;
                                                 nameServerIndex = currentNameServerIndex - 1;
                                                 continue;
@@ -1687,6 +1711,7 @@ namespace ZenitiumLibrary.Net.Dns
                                         }
                                         else
                                         {
+                                            RecordQnameMinimizationFallback();
                                             question.ZoneCut = question.MinimizedName;
                                             nameServerIndex = currentNameServerIndex - 1;
                                             continue;
@@ -1700,6 +1725,7 @@ namespace ZenitiumLibrary.Net.Dns
 
                     if ((question.ZoneCut is not null) && ((lastException is DnsClientNoResponseException) || (lastException is SocketException) || (lastException is IOException)) && context.CanProceedWithResolution() && !(question.Name.Equals(question.MinimizedName, StringComparison.OrdinalIgnoreCase) && (question.Type == question.MinimizedType)))
                     {
+                        RecordQnameMinimizationFallback();
                         question.ZoneCut = null;
                         nameServerIndex = 0;
                         lastException = null;
@@ -4510,6 +4536,7 @@ namespace ZenitiumLibrary.Net.Dns
                     DateTime successTime = default;
 
                     bool protocolWasSwitched = false;
+                    bool badCookieRetried = false;
                     bool startedWithUdp = server.Protocol == DnsTransportProtocol.Udp;
                     try
                     {
@@ -4557,6 +4584,20 @@ namespace ZenitiumLibrary.Net.Dns
                                         }
                                     }
 
+                                    EDnsCookieOptionData sentCookie = null;
+
+                                    if (DnsCookie.ClientEnabled && (proxy is null) && (server.IPEndPoint is not null) && (queryRequest.EDNS is not null))
+                                    {
+                                        switch (server.Protocol)
+                                        {
+                                            case DnsTransportProtocol.Udp:
+                                            case DnsTransportProtocol.Tcp:
+                                                sentCookie = DnsCookie.GetClientCookieOption(server.IPEndPoint.Address);
+                                                queryRequest = queryRequest.CloneWithEDnsOptions(DnsCookie.ReplaceCookieOption(queryRequest.EDNS.Options, new EDnsOption(EDnsOptionCode.COOKIE, sentCookie)));
+                                                break;
+                                        }
+                                    }
+
                                     DnsClientMetrics.RecordQuery(server);
 
                                     DnsDatagram response;
@@ -4574,7 +4615,37 @@ namespace ZenitiumLibrary.Net.Dns
 
                                     if ((proxy is null) && (server.IPEndPoint is not null) && (server.IPEndPoint.AddressFamily == AddressFamily.InterNetworkV6))
                                         IPv6Reachability.RecordSuccess();
-                                    if (response.Truncation)
+
+                                    if ((sentCookie is not null) && !DnsCookie.ProcessResponse(server.IPEndPoint.Address, sentCookie, response, server.Protocol == DnsTransportProtocol.Tcp))
+                                        throw new DnsClientResponseSpoofedException("Invalid response was received: DNS cookie mismatch or missing for name server [" + server.ToString() + "].");
+
+                                    if ((sentCookie is not null) && (response.RCODE == DnsResponseCode.BADCOOKIE))
+                                    {
+                                        if (!badCookieRetried)
+                                        {
+                                            badCookieRetried = true;
+                                            retryRequest = true;
+                                        }
+                                        else if (server.Protocol == DnsTransportProtocol.Udp)
+                                        {
+                                            server = server.Clone(DnsTransportProtocol.Tcp);
+
+                                            if (_randomizeName)
+                                            {
+                                                foreach (DnsQuestionRecord question in asyncRequest.Question)
+                                                    question.NormalizeName();
+                                            }
+
+                                            retryRequest = true;
+                                            protocolWasSwitched = true;
+                                        }
+                                        else
+                                        {
+                                            server.Metadata.UpdateFailure(_timeout * _retries);
+                                            lastException = new DnsClientResponseValidationException("Invalid response was received: name server [" + server.ToString() + "] keeps answering BADCOOKIE.");
+                                        }
+                                    }
+                                    else if (response.Truncation)
                                     {
                                         if (server.Protocol == DnsTransportProtocol.Udp)
                                         {

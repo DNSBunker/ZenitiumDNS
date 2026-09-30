@@ -47,6 +47,7 @@ using System.Net.Sockets;
 using System.Runtime.ExceptionServices;
 using System.Runtime.InteropServices;
 using System.Security.Authentication;
+using System.Reflection;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
@@ -54,6 +55,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using ZenitiumLibrary;
 using ZenitiumLibrary.IO;
+using ZenitiumLibrary.Net.Http.Client;
 using ZenitiumLibrary.Net;
 using ZenitiumLibrary.Net.Dns;
 using ZenitiumLibrary.Net.Dns.ClientConnection;
@@ -94,6 +96,13 @@ namespace ZenitiumDns.Core.Dns
         Disabled = 0,
         WhenRequested = 1,
         Always = 2
+    }
+
+    enum UdpLimitedResponse : byte
+    {
+        None = 0,
+        Truncation = 1,
+        BadCookie = 2
     }
 
     public sealed class DnsServer : IAsyncDisposable, IDisposable, IDnsClient
@@ -157,6 +166,7 @@ namespace ZenitiumDns.Core.Dns
         readonly AllowedZoneManager _allowedZoneManager;
         readonly BlockedZoneManager _blockedZoneManager;
         readonly BlockListZoneManager _blockListZoneManager;
+        readonly ClientProfileManager _clientProfileManager;
         readonly CacheZoneManager _cacheZoneManager;
         readonly DnsApplicationManager _dnsApplicationManager;
 
@@ -258,6 +268,12 @@ namespace ZenitiumDns.Core.Dns
         IReadOnlyCollection<NetworkAccessControl> _recursionNetworkACL;
 
         bool _randomizeName;
+        bool _enableDnsCookies;
+        string _httpUserAgent;
+
+        internal static readonly string DefaultHttpUserAgent = "ZenitiumDNS/" + (typeof(DnsServer).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "1.0");
+        byte[] _dnsCookieSecret = RandomNumberGenerator.GetBytes(DnsCookie.SECRET_LENGTH);
+        bool _dnsCookieSecretConfigured;
         bool _qnameMinimization = true;
         bool _locallyServedDnsZones = true;
 
@@ -375,6 +391,7 @@ namespace ZenitiumDns.Core.Dns
             _allowedZoneManager = new AllowedZoneManager(this);
             _blockedZoneManager = new BlockedZoneManager(this);
             _blockListZoneManager = new BlockListZoneManager(this);
+            _clientProfileManager = new ClientProfileManager(this, configFolder);
             _cacheZoneManager = new CacheZoneManager(this);
             _dnsApplicationManager = new DnsApplicationManager(this);
 
@@ -384,6 +401,7 @@ namespace ZenitiumDns.Core.Dns
             _forwarderDnsCacheSkipDnsApps = new ResolverDnsCache(this, true, false, false);
 
             _statsManager = new StatsManager(this);
+            HttpClientNetworkHandler.DefaultUserAgent = DefaultHttpUserAgent;
             _clientBlockListManager = new ClientBlockListManager(this);
             _systemMonitor = new SystemMonitor(this);
             _watchdog = new Watchdog(this);
@@ -540,8 +558,10 @@ namespace ZenitiumDns.Core.Dns
                 EnableDnsOverHttpHelpRedirect = true;
 
                 Recursion = DnsServerRecursion.AllowOnlyForPrivateNetworks;
-                RandomizeName = false;
+                RandomizeName = true;
                 QnameMinimization = true;
+                QnameMinimizationFallback = true;
+                EnableDnsCookies = true;
                 LocallyServedDnsZones = true;
 
                 _cacheZoneManager.MaximumEntries = 100000;
@@ -635,7 +655,7 @@ namespace ZenitiumDns.Core.Dns
             BinaryReader bR = new BinaryReader(s);
 
             int version = bR.ReadByte();
-            if ((version < 1) || (version > 14))
+            if ((version < 1) || (version > 17))
                 throw new InvalidDataException("DNS Server config version not supported.");
 
             string serverDomain = s.ReadShortString();
@@ -1217,6 +1237,37 @@ namespace ZenitiumDns.Core.Dns
             else
                 _cacheZoneManager.AggressiveNsec = true;
 
+            if (version >= 15)
+            {
+                EnableDnsCookies = bR.ReadBoolean();
+
+                byte[] dnsCookieSecret = bR.ReadBytes(bR.ReadByte());
+                DnsCookieSecret = dnsCookieSecret.Length == DnsCookie.SECRET_LENGTH ? dnsCookieSecret : null;
+
+                string httpUserAgent = bR.BaseStream.ReadShortString();
+                HttpUserAgent = httpUserAgent.Length == 0 ? null : httpUserAgent;
+
+                QnameMinimizationFallback = bR.ReadBoolean();
+            }
+            else
+            {
+                EnableDnsCookies = true;
+                DnsCookieSecret = null;
+                HttpUserAgent = null;
+                QnameMinimizationFallback = true;
+                _randomizeName = true;
+            }
+
+            if (version >= 16)
+                _cacheZoneManager.MaximumMemoryMegabytes = bR.ReadInt32();
+            else
+                _cacheZoneManager.MaximumMemoryMegabytes = 0;
+
+            if (version >= 17)
+                EnableCache = bR.ReadBoolean();
+            else
+                EnableCache = true;
+
             if (_dnsTlsCertificatePath is null)
             {
                 StopTlsCertificateUpdateTimer();
@@ -1248,7 +1299,7 @@ namespace ZenitiumDns.Core.Dns
             BinaryWriter bW = new BinaryWriter(s);
 
             bW.Write(Encoding.ASCII.GetBytes("DC"));
-            bW.Write((byte)14);
+            bW.Write((byte)17);
 
             s.WriteShortString(_serverDomain);
 
@@ -1516,6 +1567,23 @@ namespace ZenitiumDns.Core.Dns
             bW.Write(_ddrProxyDohHttp3);
             bW.Write((byte)_cachePrefetchTriggerPercent);
             bW.Write(_cacheZoneManager.AggressiveNsec);
+
+            bW.Write(_enableDnsCookies);
+
+            if (_dnsCookieSecretConfigured)
+            {
+                bW.Write((byte)_dnsCookieSecret.Length);
+                bW.Write(_dnsCookieSecret);
+            }
+            else
+            {
+                bW.Write((byte)0);
+            }
+
+            bW.BaseStream.WriteShortString(_httpUserAgent ?? string.Empty);
+            bW.Write(ZenitiumLibrary.Net.Dns.QnameMinimizationFallback.Enabled);
+            bW.Write(_cacheZoneManager.MaximumMemoryMegabytes);
+            bW.Write(_cacheZoneManager.Enabled);
         }
 
         #endregion
@@ -1786,7 +1854,7 @@ namespace ZenitiumDns.Core.Dns
 
         private void ReadUdpRequests(Socket udpListener, DnsTransportProtocol protocol, UdpListenerGate gate, bool isHelper)
         {
-            bool sendTruncationResponse;
+            UdpLimitedResponse limitedResponse;
             byte[] recvBuffer;
 
             if (protocol == DnsTransportProtocol.UdpProxy)
@@ -1936,9 +2004,15 @@ namespace ZenitiumDns.Core.Dns
 
                             if (IsRateLimited(remoteEP.Address, DnsTransportProtocol.Udp))
                             {
-                                if (SendRateLimitedTruncationResponse())
+                                DnsCookieState cookieState = _enableDnsCookies ? DnsCookie.GetState(request, remoteEP.Address, _dnsCookieSecret) : DnsCookieState.None;
+
+                                if ((cookieState == DnsCookieState.Valid) && !IsRateLimited(remoteEP.Address, DnsTransportProtocol.Tcp))
                                 {
-                                    sendTruncationResponse = true;
+                                    limitedResponse = UdpLimitedResponse.None;
+                                }
+                                else if (SendRateLimitedTruncationResponse())
+                                {
+                                    limitedResponse = (cookieState == DnsCookieState.ClientOnly) || (cookieState == DnsCookieState.Invalid) ? UdpLimitedResponse.BadCookie : UdpLimitedResponse.Truncation;
                                 }
                                 else
                                 {
@@ -1948,7 +2022,7 @@ namespace ZenitiumDns.Core.Dns
                             }
                             else
                             {
-                                sendTruncationResponse = false;
+                                limitedResponse = UdpLimitedResponse.None;
                             }
 
                             if (enableSocketBindingToSourceEP)
@@ -2007,13 +2081,13 @@ namespace ZenitiumDns.Core.Dns
 
                                 if (newUdpListener is not null)
                                 {
-                                    _ = ProcessUdpRequestAsync(newUdpListener, remoteEP, returnEP, protocol, request, sendTruncationResponse);
+                                    _ = ProcessUdpRequestAsync(newUdpListener, remoteEP, returnEP, protocol, request, limitedResponse);
 
                                     continue;
                                 }
                             }
 
-                            _ = ProcessUdpRequestAsync(udpListener, remoteEP, returnEP, protocol, request, sendTruncationResponse);
+                            _ = ProcessUdpRequestAsync(udpListener, remoteEP, returnEP, protocol, request, limitedResponse);
                         }
                         catch (EndOfStreamException)
                         {
@@ -2053,7 +2127,7 @@ namespace ZenitiumDns.Core.Dns
             }
         }
 
-        private async Task ProcessUdpRequestAsync(Socket udpListener, IPEndPoint remoteEP, IPEndPoint returnEP, DnsTransportProtocol protocol, DnsDatagram request, bool sendTruncationResponse)
+        private async Task ProcessUdpRequestAsync(Socket udpListener, IPEndPoint remoteEP, IPEndPoint returnEP, DnsTransportProtocol protocol, DnsDatagram request, UdpLimitedResponse limitedResponse)
         {
             long startTimestamp = Stopwatch.GetTimestamp();
 
@@ -2062,18 +2136,27 @@ namespace ZenitiumDns.Core.Dns
                 bool recursionAllowed = IsRecursionAllowed(remoteEP.Address);
                 DnsDatagram response;
 
-                if (sendTruncationResponse)
+                switch (limitedResponse)
                 {
-                    response = new DnsDatagram(request.Identifier, true, request.OPCODE, false, true, request.RecursionDesired, recursionAllowed, false, request.CheckingDisabled, DnsResponseCode.NoError, request.Question, null, null, null, request.EDNS is null ? ushort.MinValue : _udpPayloadSize, _dnssecValidation && request.DnssecOk ? EDnsHeaderFlags.DNSSEC_OK : EDnsHeaderFlags.None) { Tag = ResponseTypeTags.Authoritative };
-                }
-                else
-                {
-                    response = await ProcessRequestAsync(request, remoteEP, protocol, recursionAllowed);
-                    if (response is null)
-                    {
-                        _statsManager.QueueUpdate(null, remoteEP, protocol, null, false);
-                        return;
-                    }
+                    case UdpLimitedResponse.Truncation:
+                        response = new DnsDatagram(request.Identifier, true, request.OPCODE, false, true, request.RecursionDesired, recursionAllowed, false, request.CheckingDisabled, DnsResponseCode.NoError, request.Question, null, null, null, request.EDNS is null ? ushort.MinValue : _udpPayloadSize, _dnssecValidation && request.DnssecOk ? EDnsHeaderFlags.DNSSEC_OK : EDnsHeaderFlags.None) { Tag = ResponseTypeTags.Authoritative };
+                        response = ApplyDnsCookie(request, remoteEP.Address, response);
+                        break;
+
+                    case UdpLimitedResponse.BadCookie:
+                        response = new DnsDatagram(request.Identifier, true, request.OPCODE, false, false, request.RecursionDesired, recursionAllowed, false, request.CheckingDisabled, DnsResponseCode.BADCOOKIE, request.Question, null, null, null, _udpPayloadSize, EDnsHeaderFlags.None, [DnsCookie.CreateServerCookieOption(DnsCookie.GetCookieOption(request).ClientCookie, remoteEP.Address, _dnsCookieSecret)]) { Tag = ResponseTypeTags.Authoritative };
+                        break;
+
+                    default:
+                        response = await ProcessRequestAsync(request, remoteEP, protocol, recursionAllowed);
+                        if (response is null)
+                        {
+                            _statsManager.QueueUpdate(null, remoteEP, protocol, null, false);
+                            return;
+                        }
+
+                        response = ApplyDnsCookie(request, remoteEP.Address, response);
+                        break;
                 }
 
                 int sendBufferSize;
@@ -2380,6 +2463,8 @@ namespace ZenitiumDns.Core.Dns
 
                 if (protocol == DnsTransportProtocol.Tls)
                     response = ApplyEDnsPadding(request, response);
+                else
+                    response = ApplyDnsCookie(request, remoteEP.Address, response);
 
                 int responseSize = -1;
 
@@ -2970,6 +3055,9 @@ namespace ZenitiumDns.Core.Dns
 
                 return new DnsDatagram(request.Identifier, true, request.OPCODE, false, false, request.RecursionDesired, isRecursionAllowed, false, request.CheckingDisabled, DnsResponseCode.FormatError, request.Question, null, null, null, request.EDNS is null ? ushort.MinValue : _udpPayloadSize, _dnssecValidation && request.DnssecOk ? EDnsHeaderFlags.DNSSEC_OK : EDnsHeaderFlags.None) { Tag = ResponseTypeTags.Authoritative };
             }
+
+            if (_enableDnsCookies && DnsCookie.IsMalformed(request))
+                return new DnsDatagram(request.Identifier, true, request.OPCODE, false, false, request.RecursionDesired, isRecursionAllowed, false, request.CheckingDisabled, DnsResponseCode.FormatError, request.Question, null, null, null, _udpPayloadSize, EDnsHeaderFlags.None) { Tag = ResponseTypeTags.Authoritative };
 
             for (int i = 0; i < request.Question.Count; i++)
             {
@@ -3856,7 +3944,12 @@ namespace ZenitiumDns.Core.Dns
                     }
                 }
 
-                if (_allowedZoneManager.IsAllowed(request) || _blockListZoneManager.IsAllowed(request))
+                DnsClientIdentity client = _clientProfileManager.Resolve(remoteEP.Address, request);
+
+                if ((client.Profile is not null) && !client.Profile.BlockingEnabled)
+                    return true;
+
+                if (_allowedZoneManager.IsAllowed(request) || _blockListZoneManager.IsAllowed(request, client))
                     return true;
             }
 
@@ -3883,7 +3976,7 @@ namespace ZenitiumDns.Core.Dns
                 DnsDatagram response = _blockedZoneManager.Query(request);
                 if (response is null)
                 {
-                    response = _blockListZoneManager.Query(request);
+                    response = _blockListZoneManager.Query(request, _clientProfileManager.Resolve(remoteEP.Address, request));
                     if (response is not null)
                     {
                         response.Tag = ResponseTypeTags.Blocked;
@@ -4094,6 +4187,16 @@ namespace ZenitiumDns.Core.Dns
                         }
                     }
                 }
+
+                if (!isAllowed && _enableBlocking)
+                {
+                    DnsDatagram ipBlockedResponse = _blockListZoneManager.QueryAnswerAddresses(request, response, _clientProfileManager.Resolve(remoteEP.Address, request));
+                    if (ipBlockedResponse is not null)
+                    {
+                        ipBlockedResponse.Tag = ResponseTypeTags.Blocked;
+                        return ipBlockedResponse;
+                    }
+                }
             }
 
             if (response.Tag is null)
@@ -4203,7 +4306,9 @@ namespace ZenitiumDns.Core.Dns
                 }
             }
 
-            if (!cachePrefetchOperation)
+            bool cacheEnabled = _cacheZoneManager.Enabled;
+
+            if (!cachePrefetchOperation && cacheEnabled)
             {
                 DnsDatagram cacheResponse = QueryCache(request, false, false, conditionalForwarders is null);
                 if (cacheResponse is not null)
@@ -4253,7 +4358,7 @@ namespace ZenitiumDns.Core.Dns
             if (cachePrefetchOperation)
                 return null;
 
-            if (_serveStale)
+            if (_serveStale && cacheEnabled)
             {
                 int waitTimeout = Math.Min(_serveStaleMaxWaitTime, clientTimeout - SERVE_STALE_TIME_DIFFERENCE);
                 using CancellationTokenSource timeoutCancellationTokenSource = new CancellationTokenSource();
@@ -4320,7 +4425,9 @@ namespace ZenitiumDns.Core.Dns
                 IDnsCache dnsCache;
                 bool aggressiveNsec = conditionalForwarders is null;
 
-                if (cachePrefetchOperation)
+                if (!_cacheZoneManager.Enabled)
+                    dnsCache = new ResolverDnsCache(this, skipDnsAppAuthoritativeRequestHandlers || advancedForwardingClientSubnet, false, false, new ResolutionScratchCache());
+                else if (cachePrefetchOperation)
                     dnsCache = new ResolverPrefetchDnsCache(this, skipDnsAppAuthoritativeRequestHandlers, question, aggressiveNsec);
                 else if (skipDnsAppAuthoritativeRequestHandlers || advancedForwardingClientSubnet)
                     dnsCache = aggressiveNsec ? _dnsCacheSkipDnsApps : _forwarderDnsCacheSkipDnsApps;
@@ -4403,7 +4510,7 @@ namespace ZenitiumDns.Core.Dns
                 }
 
                 DnsDatagram cacheRequest = new DnsDatagram(0, false, DnsOpcode.StandardQuery, false, false, true, false, false, dnssecValidation, DnsResponseCode.NoError, [question], null, null, null, _udpPayloadSize, dnssecValidation ? EDnsHeaderFlags.DNSSEC_OK : EDnsHeaderFlags.None, EDnsClientSubnetOptionData.GetEDnsClientSubnetOption(eDnsClientSubnet));
-                DnsDatagram cacheResponse = QueryCache(cacheRequest, _serveStale, _serveStale, conditionalForwarders is null);
+                DnsDatagram cacheResponse = _cacheZoneManager.Enabled ? QueryCache(cacheRequest, _serveStale, _serveStale, conditionalForwarders is null) : null;
                 if (cacheResponse is not null)
                 {
                     if (!dnssecValidation || cacheResponse.AuthenticData)
@@ -5721,6 +5828,18 @@ namespace ZenitiumDns.Core.Dns
             }
         }
 
+        private DnsDatagram ApplyDnsCookie(DnsDatagram request, IPAddress clientAddress, DnsDatagram response)
+        {
+            if (!_enableDnsCookies || (request.EDNS is null) || (response.EDNS is null))
+                return response;
+
+            EDnsCookieOptionData requestCookie = DnsCookie.GetCookieOption(request, out int count);
+            if ((requestCookie is null) || (count > 1) || requestCookie.IsMalformed)
+                return response;
+
+            return response.CloneWithEDnsOptions(DnsCookie.ReplaceCookieOption(response.EDNS.Options, DnsCookie.CreateServerCookieOption(requestCookie.ClientCookie, clientAddress, _dnsCookieSecret)));
+        }
+
         private bool SendRateLimitedTruncationResponse()
         {
             switch (_rateLimitUdpTruncationPercentage)
@@ -5901,6 +6020,8 @@ namespace ZenitiumDns.Core.Dns
                 _dohWebService.UseRouting();
                 _dohWebService.MapGet("/dns-query", ProcessDoHRequestAsync);
                 _dohWebService.MapPost("/dns-query", ProcessDoHRequestAsync);
+                _dohWebService.MapGet("/dns-query/{clientId}", ProcessDoHRequestAsync);
+                _dohWebService.MapPost("/dns-query/{clientId}", ProcessDoHRequestAsync);
 
                 await _dohWebService.StartAsync();
 
@@ -6548,6 +6669,9 @@ namespace ZenitiumDns.Core.Dns
 
         public BlockListZoneManager BlockListZoneManager
         { get { return _blockListZoneManager; } }
+
+        public ClientProfileManager ClientProfileManager
+        { get { return _clientProfileManager; } }
 
         public CacheZoneManager CacheZoneManager
         { get { return _cacheZoneManager; } }
@@ -7297,10 +7421,78 @@ namespace ZenitiumDns.Core.Dns
             set { _randomizeName = value; }
         }
 
+        public string HttpUserAgent
+        {
+            get { return _httpUserAgent; }
+            set
+            {
+                if (string.IsNullOrWhiteSpace(value))
+                {
+                    _httpUserAgent = null;
+                }
+                else
+                {
+                    value = value.Trim();
+
+                    if (value.Length > 255)
+                        throw new ArgumentException(Lang.T("Der User-Agent darf höchstens 255 Zeichen lang sein.", "The User-Agent cannot exceed 255 characters."), nameof(HttpUserAgent));
+
+                    foreach (char c in value)
+                    {
+                        if ((c < ' ') || (c > '~'))
+                            throw new ArgumentException(Lang.T("Der User-Agent darf nur sichtbare ASCII-Zeichen und Leerzeichen enthalten.", "The User-Agent may only contain visible ASCII characters and spaces."), nameof(HttpUserAgent));
+                    }
+
+                    _httpUserAgent = value;
+                }
+
+                HttpClientNetworkHandler.DefaultUserAgent = _httpUserAgent ?? DefaultHttpUserAgent;
+            }
+        }
+
+        public bool EnableDnsCookies
+        {
+            get { return _enableDnsCookies; }
+            set
+            {
+                _enableDnsCookies = value;
+                DnsCookie.ClientEnabled = value;
+            }
+        }
+
+        public byte[] DnsCookieSecret
+        {
+            get { return _dnsCookieSecretConfigured ? _dnsCookieSecret : null; }
+            set
+            {
+                if (value is null)
+                {
+                    if (_dnsCookieSecretConfigured)
+                        _dnsCookieSecret = RandomNumberGenerator.GetBytes(DnsCookie.SECRET_LENGTH);
+
+                    _dnsCookieSecretConfigured = false;
+                }
+                else
+                {
+                    if (value.Length != DnsCookie.SECRET_LENGTH)
+                        throw new ArgumentException(Lang.T("Das Cookie-Geheimnis muss aus 32 Hexadezimalzeichen (16 Byte) bestehen.", "The cookie secret must consist of 32 hexadecimal characters (16 bytes)."), nameof(DnsCookieSecret));
+
+                    _dnsCookieSecret = value;
+                    _dnsCookieSecretConfigured = true;
+                }
+            }
+        }
+
         public bool QnameMinimization
         {
             get { return _qnameMinimization; }
             set { _qnameMinimization = value; }
+        }
+
+        public bool QnameMinimizationFallback
+        {
+            get { return ZenitiumLibrary.Net.Dns.QnameMinimizationFallback.Enabled; }
+            set { ZenitiumLibrary.Net.Dns.QnameMinimizationFallback.Enabled = value; }
         }
 
         public bool LocallyServedDnsZones
@@ -7354,6 +7546,46 @@ namespace ZenitiumDns.Core.Dns
                     throw new ArgumentOutOfRangeException(nameof(ResolverMaxStackCount), "Valid range is from 10 to 30.");
 
                 _resolverMaxStackCount = value;
+            }
+        }
+
+        public bool EnableCache
+        {
+            get { return _cacheZoneManager.Enabled; }
+            set
+            {
+                if (_cacheZoneManager.Enabled == value)
+                    return;
+
+                _cacheZoneManager.Enabled = value;
+
+                if (!value)
+                {
+                    try
+                    {
+                        _cacheZoneManager.DeleteCacheZoneFile();
+                    }
+                    catch (Exception ex)
+                    {
+                        _log.Write(ex);
+                    }
+                }
+
+                _log.Write(value ? "DNS Server cache was enabled." : "DNS Server cache was disabled; every query is resolved without cached answers and the local root and arpa zones are not used.");
+
+                _ = ApplyCacheStateToIanaDataAsync();
+            }
+        }
+
+        private async Task ApplyCacheStateToIanaDataAsync()
+        {
+            try
+            {
+                await _ianaDataManager.ApplyCacheStateAsync();
+            }
+            catch (Exception ex)
+            {
+                _log.Write(ex);
             }
         }
 

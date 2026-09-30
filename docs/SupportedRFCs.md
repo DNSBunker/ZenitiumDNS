@@ -50,6 +50,7 @@ The following list contains the RFCs that ZenitiumDNS implements.
 | RFC 7816 | DNS Query Name Minimisation to Improve Privacy
 | RFC 7830 | The EDNS(0) Padding Option
 | RFC 7871 | Client Subnet in DNS Queries
+| RFC 7873 | Domain Name System (DNS) Cookies
 | RFC 7958 | DNSSEC Trust Anchor Publication for the Root Zone
 | RFC 7858 | Specification for DNS over Transport Layer Security (TLS)
 | RFC 8080 | Edwards-Curve Digital Security Algorithm (EdDSA) for DNSSEC
@@ -63,6 +64,7 @@ The following list contains the RFCs that ZenitiumDNS implements.
 | RFC 8806 | Running a Root Server Local to a Resolver
 | RFC 8914 | Extended DNS Errors
 | RFC 8976 | Message Digest for DNS Zones
+| RFC 9018 | Interoperable Domain Name System (DNS) Server Cookies
 | RFC 9077 | NSEC and NSEC3: TTLs and Aggressive Use
 | RFC 9156 | DNS Query Name Minimisation to Improve Privacy
 | RFC 9250 | DNS over Dedicated QUIC Connections 

@@ -44,8 +44,6 @@ namespace ZenitiumLibrary.Net.Dns.ResourceRecords
         string _signersName;
         byte[] _signature;
 
-        byte[] _rData;
-
         #endregion
 
         #region constructors
@@ -264,16 +262,6 @@ namespace ZenitiumLibrary.Net.Dns.ResourceRecords
             return trimmedDomain;
         }
 
-        private void Serialize()
-        {
-            using (MemoryStream mS = new MemoryStream(2 + 1 + 1 + 4 + 4 + 4 + 2 + DnsDatagram.GetSerializeDomainNameLength(_signersName) + _signature.Length))
-            {
-                WriteTo(mS, true);
-
-                _rData = mS.ToArray();
-            }
-        }
-
         #endregion
 
         #region protected
@@ -296,10 +284,7 @@ namespace ZenitiumLibrary.Net.Dns.ResourceRecords
 
         protected override void WriteRecordData(Stream s, List<DnsDomainOffset> domainEntries, bool canonicalForm)
         {
-            if (_rData is null)
-                Serialize();
-
-            s.Write(_rData);
+            WriteTo(s, true);
         }
 
         #endregion
@@ -347,7 +332,7 @@ namespace ZenitiumLibrary.Net.Dns.ResourceRecords
 
         #region private
 
-        private void WriteTo(MemoryStream s, bool includeSignature)
+        private void WriteTo(Stream s, bool includeSignature)
         {
             DnsDatagram.WriteUInt16NetworkOrder((ushort)_typeCovered, s);
             s.WriteByte((byte)_algorithm);

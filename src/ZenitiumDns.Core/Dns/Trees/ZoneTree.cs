@@ -36,33 +36,27 @@ namespace ZenitiumDns.Core.Dns.Trees
             {
                 if ((current.K != 0) || (current.Depth == baseDepth))
                 {
-                    Node[] children = current.Children;
-                    if (children is not null)
+                    Node child = current.GetNextChild(k);
+
+                    while (child is not null)
                     {
-                        Node child = null;
+                        if (child.Value is not null)
+                            return child;
 
-                        for (int i = k; i < children.Length; i++)
-                        {
-                            child = Volatile.Read(ref children[i]);
-                            if (child is not null)
-                            {
-                                if (child.Value is not null)
-                                    return child;
+                        if (child.K == 0)
+                            return child;
 
-                                if (child.K == 0)
-                                    return child;
+                        if (child.CanHaveChildren)
+                            break;
 
-                                if (child.Children is not null)
-                                    break;
-                            }
-                        }
+                        child = current.GetNextChild(child.K + 1);
+                    }
 
-                        if (child is not null)
-                        {
-                            k = 0;
-                            current = child;
-                            continue;
-                        }
+                    if (child is not null)
+                    {
+                        k = 0;
+                        current = child;
+                        continue;
                     }
                 }
 
@@ -231,24 +225,22 @@ namespace ZenitiumDns.Core.Dns.Trees
                 if (i == key.Length)
                     break;
 
-                Node[] children = currentNode.Children;
-                if (children is null)
+                if (!currentNode.CanHaveChildren)
                     break;
 
                 Node childNode;
 
                 if (matchWildcard && (key[i] != 1))
                 {
-                    childNode = Volatile.Read(ref children[1]);
+                    childNode = currentNode.GetChild(1);
                     if (childNode is not null)
                     {
                         NodeValue wValue = childNode.Value;
                         if (wValue is null)
                         {
-                            Node[] wChildren = childNode.Children;
-                            if (wChildren is not null)
+                            if (childNode.CanHaveChildren)
                             {
-                                Node wChildNode = Volatile.Read(ref wChildren[0]);
+                                Node wChildNode = childNode.GetChild(0);
                                 if (wChildNode is not null)
                                 {
                                     wValue = wChildNode.Value;
@@ -264,7 +256,7 @@ namespace ZenitiumDns.Core.Dns.Trees
                     }
                 }
 
-                childNode = Volatile.Read(ref children[key[i]]);
+                childNode = currentNode.GetChild(key[i]);
                 if (childNode is null)
                 {
                     if (wildcardNode is null)

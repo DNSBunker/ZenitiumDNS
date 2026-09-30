@@ -3472,3 +3472,127 @@ tr.rate-limited .top-name {
     color: var(--ink-3);
 }
 
+
+.settings-fieldset {
+    min-width: 0;
+    margin: 0;
+    padding: 0;
+    border: 0;
+}
+
+.settings-fieldset[disabled] .settings-section {
+    opacity: 0.72;
+}
+
+.settings-lock-note {
+    background-color: var(--warn-soft);
+}
+
+.theme-color-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+    gap: 6px 14px;
+}
+
+.theme-color-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0;
+    font-weight: 400;
+    cursor: pointer;
+}
+
+.theme-color-item input[type=color] {
+    flex: none;
+    width: 34px;
+    height: 26px;
+    padding: 0;
+    border: 1px solid var(--line-2);
+    border-radius: 6px;
+    background: none;
+    cursor: pointer;
+}
+
+.custom-theme-edit {
+    margin-left: 6px;
+    font-size: 12px;
+}
+
+.imported-languages {
+    padding-top: 7px;
+}
+
+.imported-language-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 4px;
+}
+
+.import-language-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+}
+
+.blocklist-status-table {
+    margin-bottom: 6px;
+    font-size: 13px;
+}
+
+.blocklist-status-table > thead > tr > th {
+    white-space: nowrap;
+}
+
+.blocklist-status-table td {
+    vertical-align: top !important;
+}
+
+.blocklist-name-cell {
+    min-width: 220px;
+    max-width: 420px;
+}
+
+.blocklist-url,
+.blocklist-path {
+    margin-top: 3px;
+    font-size: 12px;
+    color: var(--ink-3);
+    overflow-wrap: anywhere;
+}
+
+.blocklist-path {
+    font-family: var(--font-mono);
+    font-size: 11px;
+}
+
+.blocklist-error {
+    margin-top: 3px;
+    font-size: 12px;
+    color: var(--bad);
+    overflow-wrap: anywhere;
+}
+
+.blocklist-disabled td {
+    opacity: 0.6;
+}
+
+.blocklist-actions {
+    white-space: nowrap;
+}
+
+.client-profile-identifiers code,
+.client-profile-usage code {
+    word-break: break-all;
+    white-space: normal;
+}
+
+.client-profile-usage div + div {
+    margin-top: 4px;
+}
+
+.settings-section-inactive {
+    opacity: 0.55;
+}

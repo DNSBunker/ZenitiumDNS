@@ -19,7 +19,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 var zdnsI18n = (function () {
     var config = window.zdnsLanguage || {};
-    var language = (config.language === "en") ? "en" : "de";
+    var language = ((typeof config.language === "string") && /^[a-z]{2,3}(-[A-Za-z0-9]{2,8})?$/.test(config.language)) ? config.language : "de";
     var dictionary = ((language !== "de") && (config.dictionary != null)) ? config.dictionary : {};
     var missing = {};
 
@@ -248,7 +248,7 @@ var zdnsI18n = (function () {
     return {
         language: language,
         chosen: config.chosen === true,
-        locale: (language === "de") ? "de-DE" : "en-US",
+        locale: (language === "de") ? "de-DE" : ((language === "en") ? "en-US" : language),
         translate: translate,
         translateTree: translateTree,
         setLanguageCookie: setLanguageCookie,

@@ -35,8 +35,6 @@ namespace ZenitiumLibrary.Net.Dns.ResourceRecords
 
         IPAddress _address;
 
-        byte[] _rData;
-
         #endregion
 
         #region constructor
@@ -59,16 +57,16 @@ namespace ZenitiumLibrary.Net.Dns.ResourceRecords
 
         protected override void ReadRecordData(Stream s)
         {
-            _rData = s.ReadExactly(4);
-            _address = new IPAddress(_rData);
+            Span<byte> buffer = stackalloc byte[4];
+            s.ReadExactly(buffer);
+            _address = new IPAddress(buffer);
         }
 
         protected override void WriteRecordData(Stream s, List<DnsDomainOffset> domainEntries, bool canonicalForm)
         {
-            if (_rData is null)
-                _rData = _address.GetAddressBytes();
-
-            s.Write(_rData);
+            Span<byte> buffer = stackalloc byte[4];
+            _address.TryWriteBytes(buffer, out _);
+            s.Write(buffer);
         }
 
         #endregion

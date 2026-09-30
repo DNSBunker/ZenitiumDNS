@@ -566,7 +566,7 @@ namespace ZenitiumDns.Core.Dns
 
         private static void AddWithSignatures(List<DnsResourceRecord> authority, DnsResourceRecord record, DnsResourceRecord[] rrsigRecords, uint ttl, bool dnssecOk)
         {
-            DnsResourceRecord copy = new DnsResourceRecord(record.Name, record.Type, record.Class, ttl, record.RDATA);
+            DnsResourceRecord copy = record.CloneWithTtl(ttl);
             copy.SetDnssecStatus(DnssecStatus.Secure);
             authority.Add(copy);
 
@@ -575,7 +575,7 @@ namespace ZenitiumDns.Core.Dns
 
             foreach (DnsResourceRecord rrsigRecord in rrsigRecords)
             {
-                DnsResourceRecord rrsigCopy = new DnsResourceRecord(rrsigRecord.Name, rrsigRecord.Type, rrsigRecord.Class, ttl, rrsigRecord.RDATA);
+                DnsResourceRecord rrsigCopy = rrsigRecord.CloneWithTtl(ttl);
                 rrsigCopy.SetDnssecStatus(DnssecStatus.Secure);
                 authority.Add(rrsigCopy);
             }

@@ -2,6 +2,60 @@
 
 [Deutsche Version](CHANGELOG.de.md)
 
+## ZenitiumDNS 15.5.1 (package 15.5.1-11)
+Released: 30 September 2026
+
+### New
+- Block lists understand the rule syntax of AdGuard Home and Adblock next to hosts files, plain domain lists and wildcard lists: `||domain^`, exceptions with `@@`, `|domain^` for exactly this name, `||*.domain^` for subdomains only, `*` wildcards, regular expressions `/…/` and the modifiers `$important`, `$badfilter`, `$dnstype`, `$denyallow` and `$client`. Lists in the format of Pi-hole's regex filters (with `;querytype=`) work as well; POSIX character classes are translated. Regular expressions run without backtracking and with a time limit, so a list cannot slow down the server. Rules for web page elements and modifiers without meaning for DNS are skipped and counted. Details in [docs/BlockLists.md](docs/BlockLists.md).
+- IP addresses and networks in a block list block answers whose A or AAAA records point to them, also from the cache; allow lists exempt addresses again.
+- The quick selection of HaGeZi's lists now uses the Adblock format from `hagezi-mirror.dnsbunker.org`.
+- Client profiles (Filter > Clients) in the style of AdGuard Home: devices are recognized by IP address, network or ClientID and get additional block or allow lists, use only their own lists or are not filtered at all. The ClientID comes from the DoH path (`/dns-query/<id>`) or the server name of DoT and DoQ (`<id>.<server name>`). All profiles share one loaded rule set that is filtered per query, so a list used by several profiles is loaded only once.
+- DNS cookies (RFC 7873, RFC 9018), switched on by default: the server answers client cookies with interoperable server cookies (SipHash-2-4, valid for one hour) and sends its own cookies to name servers and forwarders; answers with a wrong or missing cookie from a server that used cookies before are discarded. Clients over the UDP rate limit that present a valid cookie are still answered as long as they stay within the TCP limit; others get a truncated response or `BADCOOKIE`. Malformed cookies are answered with `FORMERR`. The secret is random at every start or can be set (32 hexadecimal characters) so that several servers behind one address accept each other's cookies.
+- Automatic fallback for QNAME minimization: if a name server answers a minimized query incorrectly or not at all, the resolver repeats it with the longer or full name and remembers the zone for one hour (at most 10,000 zones). The option is under Settings > Resolver and switched on by default.
+- The cache can be switched off completely (Settings > Cache > Use cache), for running ZenitiumDNS as a filtering front end with DoH, DoT and DoQ in front of a resolver with its own cache such as Unbound, without caching twice. Switched off, no answers are stored and there is no prefetch, no serve stale, no aggressive use of NSEC and no local root and arpa zone; the existing cache is flushed and `cache.bin` deleted. TTLs are passed through unchanged, identical concurrent queries are still merged, and each resolution only keeps what it learns on the way in a short-lived buffer. Without forwarders every query is resolved starting at the root servers; the self-test points this out.
+- Memory limit for the cache (Settings > Cache, off by default): when the used memory of the server exceeds the limit, the cache maintenance that runs every minute removes the least recently used entries until usage is back at about 90 % of the limit, keeping at least 10,000 entries. After a large cut the memory is compacted at most every 15 minutes, so the process also returns memory to the system.
+- Status of every block list (upstream issue #2198): when it was last checked and changed, the result, errors, the number of domains, exceptions, patterns and IP entries and skipped lines. Lists can be switched on and off, named, updated one by one and removed in the table.
+- Color schemes of your own: every user can create, change and apply schemes in the theme menu; they are stored on the server per user.
+- Write protection for the settings: a lock per user prevents accidental changes; it can be lifted temporarily and locks again when the settings are left.
+- Further interface languages can be imported as JSON dictionaries (German text to translation, up to 4 MB) under Settings > Server > Language; missing texts fall back to English.
+- The HTTP user agent for block list downloads and other outgoing HTTP requests can be set (default `ZenitiumDNS/<version>`).
+- The console shows the version and the start time when the server has started (upstream issue #2195).
+- If `admin` is the only user, the sign-in form fills in the user name.
+
+### Memory
+- A cache entry needs about half the memory. With 1.2 million cached names the managed heap shrank from 1,506 to 789 MB and the resident memory from 1.94 to 1.26 GB:
+  - the records of a name are kept in a small array instead of a concurrent dictionary per name (about 240 bytes less per name),
+  - the name server of the response is shared between entries instead of being copied for every answer (about 210 bytes less),
+  - the domain tree uses exactly sized child arrays for nodes with up to 8 children instead of 41 slots (39 instead of 157 MB for the tree arrays),
+  - A and AAAA records and signatures (RRSIG) no longer keep a second raw copy of their data, and rarely used fields of cache records are only allocated when needed.
+- The CPU time per query is unchanged (20.3 µs at 40,000 queries/s on 4 cores); 400,000 queries/s of cache hits and blocked names did not saturate the server.
+
+### Security
+- systemd service: system call filter (`@system-service` without `@privileged`), allowed address families limited to Unix, IPv4, IPv6 and netlink, `ProtectProc=invisible`. `ProtectClock` was removed because it also blocked reading the NTP state for the self-test; the service still cannot set the clock. `systemd-analyze security` rates the unit 1.9 instead of 3.6.
+- The file `/etc/zenitiumdns/admin.password` with the initial password is deleted as soon as the password of `admin` differs from it, right after the change or at the next start.
+- Web interface: the content security policy no longer allows `unsafe-eval`, requests without a valid session may carry at most 1 MB, `Strict-Transport-Security` is sent when HTTPS with redirection is active, `X-Content-Type-Options: nosniff` and `Referrer-Policy: same-origin` on every response, and the short-lived token cookie of single sign-on is `SameSite=Strict` and `Secure` over HTTPS.
+- Random letter case of the QNAME (0x20) is switched on by default; installations updated from older versions switch it on once.
+- Container image: GitHub Actions and base images are pinned by commit hash and digest, the image gets an SBOM and build provenance and is signed with cosign (keyless).
+
+### Fixed
+- Aggressive use of NSEC: names with characters that are not allowed in host names, such as `securel~.ikea.com`, raised an exception while building synthesized answers.
+- Restoring a backup with log files could fail with "ZipArchiveEntry does not support reading", because the log files were extracted in the background while the archive was already closed.
+- Updates of block lists could run at the same time (for example after quick changes of the settings) and collide on the temporary download file; they now run one after another.
+- The installer of the Debian package prints its messages in English only.
+
+### Tests
+- Rule parser: 106 checks including Pi-hole lists, `$client`, filters per profile and IP rules; HaGeZi Pro and TIF in Adblock format (2.6 million domains) load in 1.4 s into about 107 MB.
+- In the isolated test network: list syntax 44 of 44, client profiles including DoH ClientID, DoT server name and restart 52 of 52, general regression tests 88 of 88, web interface in German and English 27 and 28 checks, DNSSEC and aggressive NSEC with signed Knot zones 35 of 35.
+- Domain tree: 600,096 checks against a reference, including order of enumeration and parallel changes, with identical results for the old and the new implementation.
+- Without cache in front of Unbound: 23 of 23 checks (every repeated query reaches Unbound, TTLs unchanged, blocking and profiles work, the setting survives a restart, no `cache.bin`); with signed Knot zones, answers without cache are still validated (AD) and denials of existence are proved.
+- Memory limit: at 400 MB and 12,000 new names per second the cache was trimmed from 1.2 million to 577,000 entries in one step, and the resident memory dropped from 1.25 GB to 574 MB after a compaction of 312 ms.
+
+### Other changes
+- DNS settings file format version 17. Older versions of ZenitiumDNS cannot read it. Existing settings are taken over with DNS cookies, 0x20 and the QNAME minimization fallback switched on, the cache on and without a memory limit.
+- Client profiles are stored in `clients.json`, per-user preferences in `userprefs.json` and imported languages in the folder `lang`; all of them are part of the backup.
+- New Prometheus metrics for DNS cookies, the QNAME minimization fallback, the cache switch and the memory limit of the cache, see [docs/Metrics.md](docs/Metrics.md).
+- Supported RFCs: RFC 7873 and RFC 9018 added.
+
 ## ZenitiumDNS 15.5.1 (package 15.5.1-10)
 Released: 28 September 2026
 

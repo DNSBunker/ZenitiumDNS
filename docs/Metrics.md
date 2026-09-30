@@ -54,6 +54,7 @@ A scrape interval of 15 to 60 seconds is enough. A scrape takes a few millisecon
 | `zenitiumdns_clients` | gauge | | Estimated number of different client addresses since the start (HyperLogLog). |
 | `zenitiumdns_dnssec_validation_enabled` | gauge | | 1 if DNSSEC validation is switched on. |
 | `zenitiumdns_blocking_enabled` | gauge | | 1 if blocking is switched on. |
+| `zenitiumdns_dns_cookies_enabled` | gauge | | 1 if DNS cookies (RFC 7873, RFC 9018) are switched on. |
 | `zenitiumdns_query_logging_suspended` | gauge | | 1 if the watchdog has paused the logging of queries for the rest of the day. |
 
 ### Queries from clients
@@ -62,8 +63,8 @@ A scrape interval of 15 to 60 seconds is enough. A scrape takes a few millisecon
 | ------ | ---- | ------ | ------- |
 | `zenitiumdns_requests_total` | counter | `protocol`, `family` | Received queries including dropped ones. `protocol`: `udp`, `tcp`, `tls`, `https`, `quic`, `udp_proxy`, `tcp_proxy`; `family`: `ipv4`, `ipv6` of the client. |
 | `zenitiumdns_request_types_total` | counter | `type` | Queries per query type (`A`, `AAAA`, `HTTPS` …, unknown types as `other`). |
-| `zenitiumdns_request_flags_total` | counter | `flag` | Queries with the flag or feature: `rd` (recursion desired), `cd` (checking disabled), `do` (DNSSEC OK), `edns`, `ecs` (EDNS Client Subnet). |
-| `zenitiumdns_responses_total` | counter | `rcode` | Sent responses per response code (`NoError`, `NxDomain`, `ServerFailure`, `Refused` …). |
+| `zenitiumdns_request_flags_total` | counter | `flag` | Queries with the flag or feature: `rd` (recursion desired), `cd` (checking disabled), `do` (DNSSEC OK), `edns`, `ecs` (EDNS Client Subnet), `cookie` (DNS cookie option). |
+| `zenitiumdns_responses_total` | counter | `rcode` | Sent responses per response code (`NoError`, `NxDomain`, `ServerFailure`, `Refused`, `BADCOOKIE` …). |
 | `zenitiumdns_response_sources_total` | counter | `source` | Origin of the answer: `authoritative` (local zones, request filter, special names), `recursive`, `cached`, `blocked`, `upstream_blocked`, `upstream_blocked_cached`. |
 | `zenitiumdns_response_flags_total` | counter | `flag` | Responses with the flag: `aa`, `tc` (truncated), `ad` (DNSSEC validated), `ra`. |
 | `zenitiumdns_nodata_responses_total` | counter | | `NOERROR` responses without answer records. |
@@ -87,13 +88,22 @@ Counted since the start of the server, even without the endpoint: `zenitiumdns_c
 | `zenitiumdns_upstream_truncated_total` | counter | | Truncated responses; the resolver then repeats the query over TCP. |
 | `zenitiumdns_upstream_response_time_seconds` | histogram | `family` | Round trip time of the responses, buckets from 1 ms to 5 s. |
 | `zenitiumdns_ipv6_upstream_available` | gauge | | 1 while queries to name servers over IPv6 are used, 0 while the IPv6 fallback has paused them. |
+| `zenitiumdns_upstream_cookies_sent_total` | counter | | Queries to name servers and forwarders that carried a DNS cookie. |
+| `zenitiumdns_upstream_cookie_errors_total` | counter | | Responses discarded because the server cookie was wrong or missing from a server that sent cookies before. |
+| `zenitiumdns_upstream_cookie_servers` | gauge | | Name servers whose server cookie is currently known. |
+| `zenitiumdns_qname_minimization_fallbacks_total` | counter | | Minimized queries that were repeated with a longer or the full name because the name server answered them incorrectly or not at all. |
+| `zenitiumdns_qname_minimization_fallback_zones` | gauge | | Zones currently resolved without QNAME minimization because their name servers mishandled it (remembered for one hour, at most 10,000). |
+| `zenitiumdns_qname_minimization_skipped_total` | counter | | Resolutions that skipped QNAME minimization for such a remembered zone. |
 
 ### Cache, filters and protection
 
 | Metric | Type | Labels | Meaning |
 | ------ | ---- | ------ | ------- |
+| `zenitiumdns_cache_enabled` | gauge | | 1 if the cache is used, 0 if it is switched off and every query is resolved without cached answers. |
 | `zenitiumdns_cache_entries` | gauge | | Records in the cache. |
 | `zenitiumdns_cache_max_entries` | gauge | | Configured maximum of the cache (0 = unlimited). |
+| `zenitiumdns_cache_max_memory_bytes` | gauge | | Configured memory limit that triggers cache trimming (0 = no limit). |
+| `zenitiumdns_cache_memory_trimmed_entries_total` | counter | | Cache records removed because the memory limit was exceeded. |
 | `zenitiumdns_aggressive_nsec_enabled` | gauge | | 1 if the aggressive use of the DNSSEC-validated cache (RFC 8198) is switched on. |
 | `zenitiumdns_aggressive_nsec_entries` | gauge | | NSEC and NSEC3 records kept for it. |
 | `zenitiumdns_aggressive_nsec_synthesized_total` | counter | | Negative answers synthesized from them. |

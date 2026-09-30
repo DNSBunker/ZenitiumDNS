@@ -54,6 +54,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
     <script src="js/dnsclient.js"></script>
     <script src="js/logs.js"></script>
     <script src="js/selftest.js"></script>
+    <script src="js/preferences.js"></script>
+    <script src="js/clients.js"></script>
 </head>
 <body>
     <div class="AlertPlaceholder toast-region" role="status" aria-live="polite"></div>
@@ -662,6 +664,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
                                     <ul class="nav nav-pills sub-nav" role="tablist">
                                         <li id="filterTabListBlocked" role="presentation" class="active"><a href="#filterTabPaneBlocked" aria-controls="filterTabPaneBlocked" role="tab" data-toggle="tab">Blockierte Domains</a></li>
                                         <li id="filterTabListAllowed" role="presentation"><a href="#filterTabPaneAllowed" aria-controls="filterTabPaneAllowed" role="tab" data-toggle="tab">Erlaubte Domains</a></li>
+                                        <li id="filterTabListClients" role="presentation"><a href="#filterTabPaneClients" aria-controls="filterTabPaneClients" role="tab" data-toggle="tab">Clients</a></li>
                                         <li id="filterTabListLists" role="presentation"><a href="#" onclick="showSettingsSection('settingsTabListBlocking'); return false;">Blocklisten &amp; Blockierverhalten <span class="glyphicon glyphicon-share-alt" aria-hidden="true"></span></a></li>
                                     </ul>
 
@@ -742,6 +745,20 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
                                                     </div>
                                                 </div>
                                             </div>
+                                        </div>
+
+                                        <div id="filterTabPaneClients" role="tabpanel" class="tab-pane">
+                                            <div class="section-intro">
+                                                <div style="max-width: 110ch;">Clientprofile legen fest, welche Blocklisten für bestimmte Geräte gelten. Ein Gerät wird über seine IP-Adresse, ein Netz in CIDR-Schreibweise oder eine ClientID erkannt. Die ClientID steht bei DNS-over-HTTPS im Pfad (<code>/dns-query/kinder</code>), bei DNS-over-TLS und DNS-over-QUIC im Servernamen (<code>kinder.dns.example.com</code>). Ein Profil kann eigene Listen ergänzen, die Standard-Blocklisten auslassen oder die Blockierung ganz abschalten. In eigenen Listen wirkt außerdem der Modifikator <code>$client</code>.</div>
+                                            </div>
+
+                                            <div style="margin-bottom: 10px;">
+                                                <button id="btnAddClientProfile" type="button" class="btn btn-primary btn-sm" onclick="showClientProfileModal(null);">Profil hinzufügen</button>
+                                                <button type="button" class="btn btn-default btn-sm" onclick="refreshClientProfiles();">Aktualisieren</button>
+                                            </div>
+
+                                            <div id="divClientProfilesLoader" style="display: none; height: 120px;"></div>
+                                            <div id="divClientProfiles"></div>
                                         </div>
                                     </div>
                                 </div>
@@ -1155,6 +1172,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
                                 </ul>
                                                 </div>
                                                 <div class="col-md-9">
+                                                    <div id="divSettingsLockedNote" class="settings-note settings-lock-note" style="display: none;"><span class="fa fa-lock" aria-hidden="true"></span> Die Einstellungen sind schreibgeschützt. Zum Ändern auf „Entsperren“ klicken; nach dem Speichern oder beim Verlassen der Seite wird wieder gesperrt. <a href="#" onclick="setSettingsLockPreference(false); return false;">Schreibschutz ausschalten</a></div>
+                                                    <fieldset id="fsSettings" class="settings-fieldset">
                                                     <div class="tab-content settings-content">
                                 <div id="settingsTabPaneGeneral" role="tabpanel" class="tab-pane active">
                                 <div class="well well-sm form-horizontal settings-section" id="divSettingsGeneralLanguage">
@@ -1168,6 +1187,26 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
                                         </select>
                                     </div>
                                     <div class="col-sm-offset-3 col-sm-8 help-block-text">Gilt für alle Benutzer: Weboberfläche, Selbsttest, Meldungen des Servers, App-Beschreibungen und die Startseite für DNS-over-HTTPS. Nach dem Speichern wird die Seite in der neuen Sprache geladen.</div>
+                                </div>
+
+                                <div class="form-group">
+                                    <label class="col-sm-3 control-label">Weitere Sprachen</label>
+                                    <div class="col-sm-8">
+                                        <div id="divImportedLanguages" class="imported-languages"></div>
+                                    </div>
+                                </div>
+
+                                <div class="form-group">
+                                    <label for="txtImportLanguageCode" class="col-sm-3 control-label">Sprache importieren</label>
+                                    <div class="col-sm-8">
+                                        <div class="import-language-row">
+                                            <input type="text" class="form-control" id="txtImportLanguageCode" placeholder="fr" maxlength="12" spellcheck="false" autocomplete="off" style="width: 90px;" aria-label="Sprachcode">
+                                            <input type="text" class="form-control" id="txtImportLanguageName" placeholder="Français" maxlength="40" autocomplete="off" style="width: 180px;" aria-label="Name der Sprache">
+                                            <input type="file" id="fileImportLanguage" accept=".json,application/json" style="display: inline-block; max-width: 260px;" aria-label="Sprachdatei">
+                                            <button id="btnImportLanguage" type="button" class="btn btn-default btn-sm" data-loading-text="Importiere..." onclick="importLanguage(this);">Importieren</button>
+                                        </div>
+                                    </div>
+                                    <div class="col-sm-offset-3 col-sm-8 help-block-text">JSON-Datei im Format von <a href="lang/en.json" target="_blank" download="zenitiumdns-lang-template.json">lang/en.json</a> (Vorlage): Schlüssel sind die deutschen Originaltexte, Werte die Übersetzung. HTML-Markup und Platzhalter wie <code>{0}</code> müssen exakt wie im Original bleiben, sonst wird der Eintrag verworfen. Fehlende Texte erscheinen auf Englisch, ebenso Meldungen des Servers. Ein erneuter Import mit demselben Code ersetzt die Sprache.</div>
                                 </div>
                                 </div>
 
@@ -1484,15 +1523,31 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
                                             <label><input id="chkQnameMinimization" type="checkbox"> QNAME-Minimierung</label>
                                         </div>
                                         <div class="option-help">Übermittelt jedem Nameserver nur den Teil des Namens, den er für seine Antwort braucht (<a href="https://datatracker.ietf.org/doc/rfc9156/" target="_blank">RFC 9156</a>). Das verbessert die Privatsphäre der Nutzer.</div>
+                                        <div class="checkbox" style="margin-left: 20px;">
+                                            <label><input id="chkQnameMinimizationFallback" type="checkbox"> Nameserver ohne korrekte Minimierung merken</label>
+                                        </div>
+                                        <div class="option-help" style="margin-left: 20px;">Beantwortet ein Nameserver eine minimierte Anfrage falsch (z. B. mit NXDOMAIN, Fehler oder gar nicht) und klappt es danach mit dem vollen Namen, fragt der Resolver diese Zone eine Stunde lang gleich mit dem vollen Namen. Das spart bei fehlerhaften Nameservern je Anfrage eine Runde. Standardmäßig an; Cache leeren setzt die Liste zurück. Aktuell gemerkt: <span id="lblQnameMinimizationFallbackZones">0</span> Zonen.</div>
                                         <div class="checkbox">
                                             <label><input id="chkRandomizeName" type="checkbox"> Groß-/Kleinschreibung randomisieren (0x20)</label>
                                         </div>
-                                        <div class="option-help">Zufällige Groß-/Kleinschreibung im Namen erschwert Cache-Poisoning über UDP (<a href="https://datatracker.ietf.org/doc/draft-vixie-dnsext-dns0x20/" target="_blank">draft-vixie-dnsext-dns0x20</a>). Einzelne fehlerhafte Nameserver antworten darauf nicht korrekt; der Resolver erkennt Spoofing-Versuche aber auch ohne diese Option und wechselt dann auf TCP.</div>
+                                        <div class="option-help">Zufällige Groß-/Kleinschreibung im Namen erschwert Cache-Poisoning über UDP (<a href="https://datatracker.ietf.org/doc/draft-vixie-dnsext-dns0x20/" target="_blank">draft-vixie-dnsext-dns0x20</a>). Standardmäßig an. Antwortet ein Nameserver mit anderer Schreibung, wiederholt der Resolver die Anfrage über TCP, sodass auch fehlerhafte Nameserver erreichbar bleiben.</div>
+                                        <div class="checkbox">
+                                            <label><input id="chkEnableDnsCookies" type="checkbox" onchange="$('#txtDnsCookieSecret').prop('disabled', !this.checked);"> DNS-Cookies</label>
+                                        </div>
+                                        <div class="option-help">Schützt vor gefälschten Antworten und vor dem Missbrauch fremder Absenderadressen (<a href="https://datatracker.ietf.org/doc/rfc7873/" target="_blank">RFC 7873</a>, <a href="https://datatracker.ietf.org/doc/rfc9018/" target="_blank">RFC 9018</a>). Standardmäßig an. Der Resolver schickt Nameservern ein Cookie und verwirft Antworten mit falschem Cookie; Clients erhalten ein Server-Cookie. Wer über UDP ein gültiges Server-Cookie mitschickt, hat seine Adresse bewiesen und fällt bei der Ratenbegrenzung unter die Grenzen für TCP; gedrosselte Clients mit Cookie erhalten statt einer TC-Antwort <code>BADCOOKIE</code> mit einem neuen Cookie.</div>
                                         <div class="checkbox">
                                             <label><input id="chkLocallyServedDnsZones" type="checkbox"> Lokal bediente Zonen</label>
                                         </div>
                                         <div class="option-help">Beantwortet private Reverse-Zonen und Spezialdomains wie <code>localhost</code> oder <code>.local</code> lokal (<a href="https://datatracker.ietf.org/doc/rfc6303/" target="_blank">RFC 6303</a>, <a href="https://datatracker.ietf.org/doc/rfc6761/" target="_blank">RFC 6761</a>), statt sie an die Root-Server zu senden. Soll eine solche Domain extern aufgelöst werden, legt man dafür eine Weiterleitungszone an.</div>
                                     </div>
+                                </div>
+
+                                <div class="form-group">
+                                    <label for="txtDnsCookieSecret" class="col-sm-3 control-label">Cookie-Geheimnis</label>
+                                    <div class="col-sm-6">
+                                        <input type="text" class="form-control" id="txtDnsCookieSecret" placeholder="zufällig bei jedem Start" maxlength="32" spellcheck="false" autocomplete="off">
+                                    </div>
+                                    <div class="col-sm-offset-3 col-sm-8 help-block-text">32 Hexadezimalzeichen. Nur nötig, wenn mehrere Server unter derselben Anycast-Adresse antworten: Dann überall dasselbe Geheimnis eintragen, damit ein Server-Cookie von jedem Server anerkannt wird. Bleibt das Feld leer, wird bei jedem Start ein neues Geheimnis erzeugt.</div>
                                 </div>
 
                                 <div class="form-group">
@@ -1790,10 +1845,30 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
                                     </div>
                                     <div class="col-sm-offset-3 col-sm-8 help-block-text">IP-Adressen, Netze oder Domainnamen, die nie über den Proxy laufen sollen.</div>
                                 </div>
+
+                                <div class="form-group">
+                                    <label for="txtHttpUserAgent" class="col-sm-3 control-label">HTTP-User-Agent</label>
+                                    <div class="col-sm-6">
+                                        <input type="text" class="form-control" id="txtHttpUserAgent" maxlength="255" spellcheck="false" autocomplete="off">
+                                    </div>
+                                    <div class="col-sm-offset-3 col-sm-8 help-block-text">Kennung, die der Server bei allen HTTP-Abrufen mitschickt: Blocklisten, Client-Sperrlisten, IANA-Daten, Update-Prüfung, Weiterleitung über DNS-over-HTTPS und Apps. Leer lassen für den Standardwert. Nützlich, wenn ein Listenanbieter unbekannte Kennungen abweist.</div>
+                                </div>
                                 </div>
                                 </div>
                                 <div id="settingsTabPaneCache" role="tabpanel" class="tab-pane">
                                 <div class="well well-sm form-horizontal settings-section">
+                                    <h4 class="settings-section-title">Cache verwenden</h4>
+                                <div class="form-group">
+                                    <div class="col-sm-offset-3 col-sm-8">
+                                        <div class="checkbox">
+                                            <label><input id="chkEnableCache" type="checkbox"> Antworten zwischenspeichern</label>
+                                        </div>
+                                    </div>
+                                    <div class="col-sm-offset-3 col-sm-8 help-block-text">Ausgeschaltet speichert ZenitiumDNS keine Antworten: kein Cache, kein Prefetch, kein Serve Stale, keine aggressive Nutzung von NSEC und keine lokale Root- und arpa-Zone, der vorhandene Cache wird geleert und <code>cache.bin</code> gelöscht. Jede Anfrage geht an die Forwarder oder wird neu aufgelöst. Gedacht für den Betrieb vor einem Resolver mit eigenem Cache wie Unbound, damit nicht doppelt gecacht wird; Filter, Blocklisten, Clientprofile und verschlüsselte Protokolle arbeiten weiter. Ohne Forwarder wird jede Anfrage ab den Root-Servern aufgelöst, das ist langsam. Gleichzeitige gleiche Anfragen werden weiterhin zusammengefasst.</div>
+                                </div>
+                                </div>
+
+                                <div class="well well-sm form-horizontal settings-section cache-dependent">
                                     <h4 class="settings-section-title">Cache-Größe & TTL-Grenzen</h4>
                                     <p class="settings-section-desc">Der Cache ist der wichtigste Hebel für kurze Antwortzeiten. Die Trefferquote zeigt die Übersicht.</p>
                                 <div class="form-group">
@@ -1802,6 +1877,14 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
                                         <input type="number" class="form-control" id="txtCacheMaximumEntries" placeholder="Einträge" style="width: 125px; display: inline;"> <span class="unit">(Standard 100000, 0 = unbegrenzt)</span>
                                     </div>
                                     <div class="col-sm-offset-3 col-sm-8 help-block-text">Ein Eintrag ist ein vollständiges RRset, also alle Einträge eines Typs zu einem Namen. Bei Überschreitung entfernt der Server regelmäßig die am längsten ungenutzten Einträge. Den Wert anhand der Cache-Einträge in der Übersicht und des Speicherverbrauchs festlegen.</div>
+                                </div>
+
+                                <div class="form-group">
+                                    <label for="txtCacheMaximumMemory" class="col-sm-3 control-label">Speichergrenze</label>
+                                    <div class="col-sm-8">
+                                        <input type="number" class="form-control" id="txtCacheMaximumMemory" min="0" placeholder="MB" style="width: 125px; display: inline;"> <span class="unit">MB (Standard 0 = keine Grenze)</span>
+                                    </div>
+                                    <div class="col-sm-offset-3 col-sm-8 help-block-text">Überschreitet der belegte Arbeitsspeicher des Servers diesen Wert, entfernt die minütliche Cache-Wartung die am längsten ungenutzten Einträge, bis wieder etwa 90 % der Grenze erreicht sind. Mindestens 10.000 Einträge bleiben erhalten. Gezählt wird der gesamte verwaltete Speicher einschließlich Blocklisten und Statistik, der Prozess belegt im System meist 30 bis 60 % mehr. Richtwert: etwa ein Drittel des Arbeitsspeichers der Maschine.</div>
                                 </div>
 
                                 <div class="form-group">
@@ -1845,7 +1928,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
                                 </div>
                                 </div>
 
-                                <div class="well well-sm form-horizontal settings-section">
+                                <div class="well well-sm form-horizontal settings-section cache-dependent">
                                     <h4 class="settings-section-title">Prefetch</h4>
                                     <p class="settings-section-desc">Häufig abgefragte Einträge werden kurz vor ihrem Ablauf im Hintergrund erneuert, damit der Cache warm bleibt und Clients nie auf eine Neuauflösung warten.</p>
                                 <div class="form-group">
@@ -1873,7 +1956,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
                                 </div>
                                 </div>
 
-                                <div class="well well-sm form-horizontal settings-section">
+                                <div class="well well-sm form-horizontal settings-section cache-dependent">
                                     <h4 class="settings-section-title">Veraltete Antworten (Serve Stale)</h4>
                                     <p class="settings-section-desc">Liefert abgelaufene Einträge aus, wenn die Nameserver nicht rechtzeitig erreichbar sind (<a href="https://datatracker.ietf.org/doc/rfc8767/" target="_blank">RFC 8767</a>). Erhöht die Ausfallsicherheit bei gestörten Upstream-Verbindungen deutlich.</p>
                                 <div class="form-group">
@@ -1918,7 +2001,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
                                 </div>
                                 </div>
 
-                                <div class="well well-sm form-horizontal settings-section">
+                                <div class="well well-sm form-horizontal settings-section cache-dependent">
                                     <h4 class="settings-section-title">Persistenz</h4>
 
                                 <div class="form-group">
@@ -2050,7 +2133,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
                                         <label for="optQuickBlockList" class="control-label" style="padding-top: 8px;">Schnell hinzufügen</label>
                                         <select id="optQuickBlockList" class="form-control" style="width: 100%;"></select>
                                     </div>
-                                    <div class="col-sm-offset-3 col-sm-8 help-block-text">Eine URL pro Zeile. Unterstützt werden das hosts-Format, reine Domainlisten, Wildcard-Listen und das Adblock-Plus-Format. Lokale Dateien lassen sich per <code>file:///pfad/zur/liste.txt</code> einbinden. Ein vorangestelltes <code>!</code> macht die Liste zur Erlaubnisliste (nicht für Adblock-Plus-Listen). Zeilen, die mit <code>#</code> beginnen, sind Kommentare. Die Schnellauswahl bietet die Listen von HaGeZi im Wildcard-Domain-Format vom Build-Mirror <code>hagezi-mirror.dnsbunker.org</code>, der jede neue Version sofort veröffentlicht, etwa alle 4 bis 8 Stunden. Aus der Gruppe „Multi“ genügt eine Stufe, die Threat Intelligence Feeds ergänzen sie.</div>
+                                    <div class="col-sm-offset-3 col-sm-8 help-block-text">Eine URL pro Zeile. Verstanden werden hosts-Dateien, reine Domainlisten und <code>*.domain</code> (jeweils samt Subdomains) sowie die Regelsyntax von AdGuard Home und Adblock: <code>||domain^</code>, Ausnahmen mit <code>@@</code>, <code>|domain^</code> für genau diese Domain, <code>||*.domain^</code> nur für Subdomains, Platzhalter <code>*</code>, reguläre Ausdrücke <code>/…/</code> und die Modifikatoren <code>$important</code>, <code>$badfilter</code>, <code>$dnstype</code> und <code>$denyallow</code>. Listen im Pi-hole-Regex-Format (ein Ausdruck pro Zeile, optional <code>;querytype=</code>) funktionieren ebenfalls. IP-Adressen und Netze wie <code>192.0.2.1</code> oder <code>198.51.100.0/24</code> blockieren Antworten, deren A- oder AAAA-Einträge darauf zeigen. Lokale Dateien lassen sich per <code>file:///pfad/zur/liste.txt</code> einbinden. Ein vorangestelltes <code>!</code> macht die Liste zur Erlaubnisliste, <code>#</code> schaltet eine Zeile ab. Die Schnellauswahl bietet die Listen von HaGeZi im Adblock-Format vom Build-Mirror <code>hagezi-mirror.dnsbunker.org</code>, der jede neue Version sofort veröffentlicht, etwa alle 4 bis 8 Stunden. Aus der Gruppe „Multi“ genügt eine Stufe, die Threat Intelligence Feeds ergänzen sie.</div>
                                 </div>
 
                                 <div class="form-group">
@@ -2068,6 +2151,14 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
                                         <button id="btnUpdateBlockListsNow" type="button" class="btn btn-default btn-sm" data-loading-text="Aktualisiere..." onclick="forceUpdateBlockLists();">Jetzt aktualisieren</button>
                                     </div>
 
+                                </div>
+
+                                <div class="form-group">
+                                    <label class="col-sm-3 control-label">Status der Listen</label>
+                                    <div class="col-sm-9">
+                                        <div id="divBlockListStatus" class="blocklist-status"></div>
+                                        <div class="option-help" style="padding-left: 0;">Änderungen in dieser Tabelle (aktiv, Name, Entfernen) werden sofort gespeichert. „Geprüft“ ist der letzte Abruf, „Geändert“ der letzte Abruf mit neuem Inhalt. Änderungen an den Listen-URLs oben erscheinen hier nach dem Speichern.</div>
+                                    </div>
                                 </div>
                                 </div>
                                 </div>
@@ -2768,6 +2859,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
                                 </div>
                                 </div>
                                                     </div>
+                                                    </fieldset>
                                                 </div>
                                             </div>
 
@@ -2777,6 +2869,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
                                                     <button id="btnSettingsFlushCache" type="button" class="btn btn-danger" data-loading-text="Leere..." onclick="flushDnsCache(this);" style="margin-left: 6px;">Cache leeren</button>
                                                 </div>
                                                 <div class="pull-right">
+                                                    <button id="btnSettingsLock" type="button" class="btn btn-default" onclick="toggleSettingsLock();" style="margin-right: 6px;"><span class="fa fa-lock" aria-hidden="true"></span> <span id="lblSettingsLock">Schreibschutz einschalten</span></button>
                                                     <button id="btnShowBackupSettingsModal" type="button" class="btn btn-default" onclick="resetBackupSettingsModal();" data-toggle="modal" data-target="#modalBackupSettings">Sicherung erstellen</button>
                                                     <button id="btnShowRestoreSettingsModal" type="button" class="btn btn-default" onclick="resetRestoreSettingsModal();" data-toggle="modal" data-target="#modalRestoreSettings" style="margin-left: 6px;">Sicherung wiederherstellen</button>
                                                 </div>
@@ -3212,7 +3305,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
                                             <button type="button" class="btn btn-default btn-sm" onclick="checkForUpdate(true);">Nach Updates suchen</button>
                                         </div>
                                         <p style="max-width: 800px; margin: 0 auto 10px auto;">
-                                            ZenitiumDNS ist ein Fork des <a href="https://github.com/TechnitiumSoftware/DnsServer" target="_blank">Technitium DNS Server</a>.<br /> Copyright (C) 2026 Shreyas Zare (shreyas@technitium.com)<br /> Für dieses Programm besteht KEINERLEI GARANTIE. Es ist freie Software und darf unter bestimmten Bedingungen weitergegeben werden.<br />
+                                            ZenitiumDNS ist ein Fork des <a href="https://github.com/TechnitiumSoftware/DnsServer" target="_blank">Technitium DNS Server</a>.<br /> Copyright (C) 2026 Shreyas Zare (shreyas@technitium.com)<br /> Copyright (C) 2026 xRuffKez<br /> Für dieses Programm besteht KEINERLEI GARANTIE. Es ist freie Software und darf unter bestimmten Bedingungen weitergegeben werden.<br />
                                         </p>
                                         <p>Der Quellcode steht unter der <a href="https://www.gnu.org/licenses/gpl-3.0.html" target="_blank">GNU General Public License v3.0</a>.</p>
 
@@ -3461,14 +3554,15 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
     </div>
 
     <div id="modalChangeTheme" class="modal fade" tabindex="-1" role="dialog">
-        <form class="form-horizontal">
-            <div class="modal-dialog" role="document">
+        <form class="form-horizontal" onsubmit="return false;">
+            <div class="modal-dialog" role="document" style="max-width: 720px; width: auto;">
                 <div class="modal-content">
                     <div class="modal-header">
                         <button type="button" class="close" data-dismiss="modal" aria-label="Schließen"><span aria-hidden="true">&times;</span></button>
                         <h4 class="modal-title">Farbschema</h4>
                     </div>
                     <div class="modal-body">
+                        <div id="divChangeThemeAlert"></div>
                         <div class="form-group">
                             <label class="col-sm-4 control-label">Farbschema</label>
                             <div class="col-sm-8">
@@ -3495,6 +3589,43 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
                                         <input type="radio" name="rdChangeTheme" id="rdChangeThemeAmber" onclick="changeTheme('amber');">
                                         Bernstein
                                     </label>
+                                </div>
+                                <div id="divCustomThemeList"></div>
+                                <div style="padding-top: 6px;"><button id="btnNewCustomTheme" type="button" class="btn btn-default btn-sm" onclick="newCustomTheme();"><span class="fa fa-plus" aria-hidden="true"></span> Eigenes Farbschema erstellen</button></div>
+                                <div class="option-help" style="padding-left: 0;">Eigene Farbschemata werden in deinem Konto gespeichert und gelten auf jedem Gerät, an dem du dich anmeldest.</div>
+                            </div>
+                        </div>
+
+                        <div id="divCustomThemeEditor" style="display: none;">
+                            <hr />
+                            <div class="form-group">
+                                <label for="txtCustomThemeName" class="col-sm-4 control-label">Name</label>
+                                <div class="col-sm-7">
+                                    <input type="text" class="form-control" id="txtCustomThemeName" maxlength="40" autocomplete="off">
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label for="optCustomThemeBase" class="col-sm-4 control-label">Grundlage</label>
+                                <div class="col-sm-7">
+                                    <select id="optCustomThemeBase" class="form-control" onchange="changeCustomThemeBase();">
+                                        <option value="light">Hell</option>
+                                        <option value="dark">Dunkel</option>
+                                        <option value="amber">Bernstein</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label class="col-sm-4 control-label">Farben</label>
+                                <div class="col-sm-8">
+                                    <div id="divCustomThemeColors" class="theme-color-grid"></div>
+                                    <div class="option-help" style="padding-left: 0;">Änderungen sind sofort als Vorschau zu sehen. Nicht angepasste Farben kommen aus der Grundlage.</div>
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <div class="col-sm-offset-4 col-sm-8">
+                                    <button type="button" class="btn btn-primary btn-sm" onclick="saveCustomTheme();">Speichern und anwenden</button>
+                                    <button type="button" class="btn btn-default btn-sm" onclick="cancelCustomTheme();">Abbrechen</button>
+                                    <button id="btnDeleteCustomTheme" type="button" class="btn btn-danger btn-sm" onclick="deleteCustomTheme();">Löschen</button>
                                 </div>
                             </div>
                         </div>
@@ -4397,6 +4528,83 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
                     <div class="modal-footer">
                         <button id="btnCloneZone" type="submit" class="btn btn-primary" data-loading-text="Klone..." onclick="cloneZone(this); return false;">Zone klonen</button>
                         <button type="button" class="btn btn-default" data-dismiss="modal">Schließen</button>
+                    </div>
+                </div>
+            </div>
+        </form>
+    </div>
+
+    <div id="modalClientProfile" class="modal fade" tabindex="-1" role="dialog">
+        <form class="form-horizontal" onsubmit="saveClientProfile(); return false;">
+            <div class="modal-dialog" role="document" style="max-width: 760px; width: auto;">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <button type="button" class="close" data-dismiss="modal" aria-label="Schließen"><span aria-hidden="true">&times;</span></button>
+                        <h4 class="modal-title" id="lblClientProfileTitle">Clientprofil</h4>
+                    </div>
+                    <div class="modal-body">
+                        <div id="divClientProfileAlert"></div>
+                        <input type="hidden" id="txtClientProfileOriginalName">
+
+                        <div class="form-group">
+                            <label for="txtClientProfileName" class="col-sm-3 control-label">Name</label>
+                            <div class="col-sm-8">
+                                <input type="text" class="form-control" id="txtClientProfileName" maxlength="60" placeholder="Kinder">
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="txtClientProfileIdentifiers" class="col-sm-3 control-label">Kennungen</label>
+                            <div class="col-sm-8">
+                                <textarea class="form-control" id="txtClientProfileIdentifiers" rows="4" placeholder="192.168.1.20&#10;192.168.2.0/24&#10;kinder"></textarea>
+                            </div>
+                            <div class="col-sm-offset-3 col-sm-8 help-block-text">Eine Kennung pro Zeile: IP-Adresse, Netz in CIDR-Schreibweise oder ClientID aus Kleinbuchstaben, Ziffern und Bindestrichen. Eine ClientID hat Vorrang vor der IP-Adresse, eine einzelne IP-Adresse vor einem Netz, ein kleineres Netz vor einem größeren.</div>
+                        </div>
+
+                        <div class="form-group">
+                            <label class="col-sm-3 control-label">Blockierung</label>
+                            <div class="col-sm-8">
+                                <div class="checkbox">
+                                    <label>
+                                        <input type="checkbox" id="chkClientProfileBlockingEnabled">
+                                        Blockierung für diese Geräte aktiv
+                                    </label>
+                                </div>
+                                <div class="checkbox">
+                                    <label>
+                                        <input type="checkbox" id="chkClientProfileUseDefaultLists">
+                                        Standard-Blocklisten verwenden
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="col-sm-offset-3 col-sm-8 help-block-text">Ohne Blockierung werden alle Anfragen dieser Geräte ungefiltert beantwortet, auch manuell blockierte Domains. Ohne Standard-Blocklisten gelten nur die eigenen Listen des Profils; manuell blockierte und erlaubte Domains bleiben wirksam.</div>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="txtClientProfileBlockListUrls" class="col-sm-3 control-label">Eigene Listen</label>
+                            <div class="col-sm-8">
+                                <textarea class="form-control" id="txtClientProfileBlockListUrls" rows="5" placeholder="https://hagezi-mirror.dnsbunker.org/adblock/gambling.txt"></textarea>
+                            </div>
+                            <div class="col-sm-offset-3 col-sm-8 help-block-text">Eine URL pro Zeile, dieselben Formate wie bei den Standard-Blocklisten. Ein vorangestelltes <code>!</code> macht die Liste zur Erlaubnisliste. Jede Liste wird nur einmal geladen, auch wenn mehrere Profile sie nutzen.</div>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="optClientProfileQuickBlockList" class="col-sm-3 control-label">Schnell hinzufügen</label>
+                            <div class="col-sm-8">
+                                <select id="optClientProfileQuickBlockList" class="form-control"></select>
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label class="col-sm-3 control-label">Verbindung</label>
+                            <div class="col-sm-8">
+                                <div id="divClientProfileUsage" class="form-control-static client-profile-usage"></div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="submit" class="btn btn-primary" id="btnSaveClientProfile" data-loading-text="Speichern">Speichern</button>
+                        <button type="button" class="btn btn-default" data-dismiss="modal">Abbrechen</button>
                     </div>
                 </div>
             </div>

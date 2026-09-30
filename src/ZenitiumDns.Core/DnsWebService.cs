@@ -83,6 +83,8 @@ namespace ZenitiumDns.Core
 
         readonly LogManager _log;
         readonly AuthManager _authManager;
+        internal readonly UserPreferencesManager _userPreferences;
+        internal readonly LanguageManager _languages;
 
         readonly WebServiceApi _api;
         readonly WebServiceDashboardApi _dashboardApi;
@@ -141,9 +143,8 @@ namespace ZenitiumDns.Core
         string _metricsToken;
 
         string _wwwFolderPath;
-        readonly Lock _languageScriptLock = new Lock();
-        DateTime _languageDictionaryLastModified;
-        byte[] _languageDictionary;
+
+        const int UNAUTHENTICATED_MAX_REQUEST_BODY_SIZE = 1024 * 1024;
 
         Timer _tlsCertificateUpdateTimer;
         const int TLS_CERTIFICATE_UPDATE_TIMER_INITIAL_INTERVAL = 60000;
@@ -193,6 +194,12 @@ namespace ZenitiumDns.Core
             Directory.CreateDirectory(Path.Combine(_configFolder, "zones"));
 
             _log = new LogManager(isPortableApp, _configFolder);
+            _userPreferences = new UserPreferencesManager(_configFolder, _log);
+            _userPreferences.Load();
+
+            _languages = new LanguageManager(_configFolder, delegate () { return _wwwFolderPath ?? Path.Combine(_appFolder, "www"); }, _log);
+            _languages.Load();
+
             _authManager = new AuthManager(this, _configFolder, _log);
 
             string updateCheckUrl = Environment.GetEnvironmentVariable("DNS_SERVER_UPDATE_CHECK_URL") ?? DEFAULT_UPDATE_CHECK_URL;
@@ -537,7 +544,7 @@ namespace ZenitiumDns.Core
             if (version >= 6)
             {
                 string webServiceLanguage = s.ReadShortString();
-                SetLanguage(Lang.IsSupported(webServiceLanguage) ? webServiceLanguage : null);
+                SetLanguage(_languages.IsAvailable(webServiceLanguage) ? webServiceLanguage : null);
             }
             else
             {
@@ -658,7 +665,7 @@ namespace ZenitiumDns.Core
         internal void SetLanguage(string language)
         {
             _webServiceLanguage = language;
-            Lang.Code = language ?? Lang.English;
+            Lang.Code = language == Lang.German ? Lang.German : Lang.English;
         }
 
         #endregion
@@ -677,6 +684,11 @@ namespace ZenitiumDns.Core
 
                     if (File.Exists(authConfigFile))
                         backupZip.CreateEntryFromFile(authConfigFile, "auth.config");
+
+                    string userPreferencesFile = Path.Combine(_configFolder, UserPreferencesManager.FILE_NAME);
+
+                    if (File.Exists(userPreferencesFile))
+                        backupZip.CreateEntryFromFile(userPreferencesFile, UserPreferencesManager.FILE_NAME);
                 }
 
                 if (webServiceSettings)
@@ -687,6 +699,14 @@ namespace ZenitiumDns.Core
 
                     if (File.Exists(webServiceConfigFile))
                         backupZip.CreateEntryFromFile(webServiceConfigFile, "webservice.config");
+
+                    string languagesFolder = Path.Combine(_configFolder, LanguageManager.FOLDER_NAME);
+
+                    if (Directory.Exists(languagesFolder))
+                    {
+                        foreach (string languageFile in Directory.GetFiles(languagesFolder, "*.json", SearchOption.TopDirectoryOnly))
+                            backupZip.CreateEntryFromFile(languageFile, LanguageManager.FOLDER_NAME + "/" + Path.GetFileName(languageFile));
+                    }
 
                     if (!string.IsNullOrEmpty(_webServiceTlsCertificatePath))
                     {
@@ -772,6 +792,11 @@ namespace ZenitiumDns.Core
                     if (File.Exists(blockListConfigFile))
                         backupZip.CreateEntryFromFile(blockListConfigFile, "blocklist.config");
 
+                    string clientProfilesFile = Path.Combine(_configFolder, ClientProfileManager.FILE_NAME);
+
+                    if (File.Exists(clientProfilesFile))
+                        backupZip.CreateEntryFromFile(clientProfilesFile, ClientProfileManager.FILE_NAME);
+
                     string[] blockListFiles = Directory.GetFiles(Path.Combine(_configFolder, "blocklists"), "*", SearchOption.TopDirectoryOnly);
                     foreach (string blockListFile in blockListFiles)
                     {
@@ -851,7 +876,7 @@ namespace ZenitiumDns.Core
 
                 if (logs)
                 {
-                    _log.BulkManipulateLogFiles(async delegate ()
+                    _log.BulkManipulateLogFiles(delegate ()
                     {
                         if (deleteExistingFiles)
                         {
@@ -876,7 +901,7 @@ namespace ZenitiumDns.Core
                             {
                                 try
                                 {
-                                    await ExtractBackupEntryToFolderAsync(entry, _log.LogFolderAbsolutePath);
+                                    ExtractBackupEntryToFolder(entry, _log.LogFolderAbsolutePath);
                                 }
                                 catch (Exception ex)
                                 {
@@ -896,6 +921,13 @@ namespace ZenitiumDns.Core
                         {
                             _authManager.LoadConfig(stream, out _, implantSession);
                         }
+                    }
+
+                    ZipArchiveEntry userPreferencesEntry = backupZip.GetEntry(UserPreferencesManager.FILE_NAME);
+                    if (userPreferencesEntry is not null)
+                    {
+                        userPreferencesEntry.ExtractToFile(Path.Combine(_configFolder, UserPreferencesManager.FILE_NAME), true);
+                        _userPreferences.Load();
                     }
                 }
 
@@ -928,6 +960,26 @@ namespace ZenitiumDns.Core
 
                 if (webServiceSettings)
                 {
+                    string languagesFolder = Path.Combine(_configFolder, LanguageManager.FOLDER_NAME);
+                    bool languagesRestored = false;
+
+                    foreach (ZipArchiveEntry languageEntry in backupZip.Entries)
+                    {
+                        if (!languageEntry.FullName.StartsWith(LanguageManager.FOLDER_NAME + "/", StringComparison.Ordinal) || !languageEntry.FullName.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
+                            continue;
+
+                        string languageFileName = Path.GetFileName(languageEntry.FullName);
+                        if ((languageFileName.Length == 0) || (languageEntry.Length > LanguageManager.MAX_FILE_SIZE))
+                            continue;
+
+                        Directory.CreateDirectory(languagesFolder);
+                        languageEntry.ExtractToFile(Path.Combine(languagesFolder, languageFileName), true);
+                        languagesRestored = true;
+                    }
+
+                    if (languagesRestored)
+                        _languages.Load();
+
                     ZipArchiveEntry entry = backupZip.GetEntry("webservice.config");
                     if (entry is not null)
                     {
@@ -1069,6 +1121,18 @@ namespace ZenitiumDns.Core
                         }
                     }
 
+                    ZipArchiveEntry clientProfilesEntry = backupZip.GetEntry(ClientProfileManager.FILE_NAME);
+                    if (clientProfilesEntry is not null)
+                    {
+                        ExtractBackupEntryToFolder(clientProfilesEntry, _configFolder);
+                        _dnsServer.ClientProfileManager.LoadConfigFile(true);
+                    }
+                    else if (deleteExistingFiles)
+                    {
+                        File.Delete(Path.Combine(_configFolder, ClientProfileManager.FILE_NAME));
+                        _dnsServer.ClientProfileManager.LoadConfigFile(true);
+                    }
+
                     ZipArchiveEntry blockListConfigEntry = backupZip.GetEntry("blocklist.config");
                     if (blockListConfigEntry is not null)
                     {
@@ -1185,6 +1249,20 @@ namespace ZenitiumDns.Core
                     _dnsServer.StatsManager.ReloadStats();
                 }
             }
+        }
+
+        private static void ExtractBackupEntryToFolder(ZipArchiveEntry entry, string folder)
+        {
+            if (entry.Name.Length == 0)
+                return;
+
+            string folderPath = Path.GetFullPath(folder).TrimEnd(['/', '\\']) + Path.DirectorySeparatorChar;
+            string filePath = Path.GetFullPath(Path.Combine(folderPath, entry.Name));
+
+            if (!filePath.StartsWith(folderPath, StringComparison.Ordinal))
+                throw new IOException("Extracting Zip entry would have resulted in a file outside the specified destination directory.");
+
+            entry.ExtractToFile(filePath, true);
         }
 
         private static async Task ExtractBackupEntryToFolderAsync(ZipArchiveEntry entry, string folder)
@@ -1588,7 +1666,7 @@ namespace ZenitiumDns.Core
                 }
 
                 serverOptions.AddServerHeader = false;
-                serverOptions.Limits.MaxRequestBodySize = int.MaxValue;
+                serverOptions.Limits.MaxRequestBodySize = UNAUTHENTICATED_MAX_REQUEST_BODY_SIZE;
             });
 
             builder.Services.Configure(delegate (FormOptions options)
@@ -1627,6 +1705,19 @@ namespace ZenitiumDns.Core
                 _webService.UseAuthorization();
             }
 
+            _webService.Use(delegate (HttpContext context, Func<Task> next)
+            {
+                IHeaderDictionary headers = context.Response.Headers;
+
+                headers.XContentTypeOptions = "nosniff";
+                headers["Referrer-Policy"] = "same-origin";
+
+                if (context.Request.IsHttps && _webServiceHttpToTlsRedirect && _webServiceEnableTls)
+                    headers.StrictTransportSecurity = "max-age=31536000";
+
+                return next();
+            });
+
             _webService.UseResponseCompression();
 
             if (!httpOnlyMode && _webServiceHttpToTlsRedirect && _webServiceEnableTls && (_webServiceSslServerAuthenticationOptions is not null))
@@ -1643,7 +1734,7 @@ namespace ZenitiumDns.Core
                     ctx.Context.Response.Headers["Referrer-Policy"] = "same-origin";
                     ctx.Context.Response.Headers.ContentSecurityPolicy =
                         "default-src 'self'; " +
-                        "script-src 'self' 'unsafe-inline' 'unsafe-eval'; " +
+                        "script-src 'self' 'unsafe-inline'; " +
                         "style-src 'self' 'unsafe-inline'; " +
                         "img-src 'self' data:; " +
                         $"frame-ancestors {_webServiceCspFrameAncestorsHeader};";
@@ -1777,6 +1868,10 @@ namespace ZenitiumDns.Core
             _webService.MapGetAndPost("/api/user/2fa/disable", _authApi.Disable2FA);
             _webService.MapGetAndPost("/api/user/profile/get", _authApi.GetProfile);
             _webService.MapGetAndPost("/api/user/profile/set", _authApi.SetProfile);
+            _webService.MapGetAndPost("/api/user/preferences/get", _authApi.GetPreferences);
+            _webService.MapGetAndPost("/api/user/preferences/set", _authApi.SetPreferences);
+            _webService.MapPost("/api/settings/languages/import", _settingsApi.ImportLanguageAsync);
+            _webService.MapGetAndPost("/api/settings/languages/delete", _settingsApi.DeleteLanguage);
             _webService.MapGetAndPost("/api/user/checkForUpdate", _api.CheckForUpdateAsync);
 
             _webService.MapGetAndPost("/api/dashboard/metrics/json", _dashboardApi.GetMetricsJson);
@@ -1835,6 +1930,14 @@ namespace ZenitiumDns.Core
             _webService.MapGetAndPost("/api/settings/get", _settingsApi.GetDnsSettings);
             _webService.MapGetAndPost("/api/settings/set", _settingsApi.SetDnsSettingsAsync);
             _webService.MapGetAndPost("/api/settings/forceUpdateBlockLists", _settingsApi.ForceUpdateBlockLists);
+            _webService.MapGetAndPost("/api/settings/blockLists/status", _settingsApi.GetBlockListStatus);
+            _webService.MapGetAndPost("/api/settings/blockLists/update", _settingsApi.UpdateBlockListAsync);
+            _webService.MapGetAndPost("/api/settings/blockLists/setEnabled", _settingsApi.SetBlockListEnabled);
+            _webService.MapGetAndPost("/api/settings/blockLists/remove", _settingsApi.RemoveBlockList);
+            _webService.MapGetAndPost("/api/settings/blockLists/setName", _settingsApi.SetBlockListName);
+            _webService.MapGetAndPost("/api/settings/clients/list", _settingsApi.GetClientProfiles);
+            _webService.MapGetAndPost("/api/settings/clients/set", _settingsApi.SetClientProfile);
+            _webService.MapGetAndPost("/api/settings/clients/delete", _settingsApi.DeleteClientProfile);
             _webService.MapGetAndPost("/api/settings/forceUpdateClientBlockLists", _settingsApi.ForceUpdateClientBlockLists);
             _webService.MapGetAndPost("/api/settings/iana/update", _settingsApi.UpdateIanaDataAsync);
             _webService.MapGetAndPost("/api/settings/iana/get", _settingsApi.GetIanaDataAsync);
@@ -1952,6 +2055,7 @@ namespace ZenitiumDns.Core
                         if (!TryValidateSession(context, out UserSession _))
                             throw new InvalidTokenWebServiceException("Invalid token or session expired.");
 
+                        AllowLargeRequestBody(context);
                         needsJsonResponseObject = true;
                     }
                     else if (request.Path.Value.StartsWith("/sso/", StringComparison.OrdinalIgnoreCase))
@@ -2028,7 +2132,7 @@ namespace ZenitiumDns.Core
         private string GetRequestLanguage(HttpContext context)
         {
             string cookieLanguage = context.Request.Cookies["zdnsLanguage"];
-            if (Lang.IsSupported(cookieLanguage))
+            if (_languages.IsAvailable(cookieLanguage))
                 return cookieLanguage;
 
             string bestLanguage = null;
@@ -2041,7 +2145,7 @@ namespace ZenitiumDns.Core
                     continue;
 
                 string language = value.Split('-')[0].ToLowerInvariant();
-                if (!Lang.IsSupported(language))
+                if (!_languages.IsAvailable(language))
                     continue;
 
                 double quality = entry.Quality ?? 1;
@@ -2053,39 +2157,6 @@ namespace ZenitiumDns.Core
             }
 
             return bestLanguage ?? Lang.English;
-        }
-
-        private byte[] GetLanguageDictionary()
-        {
-            string dictionaryFile = Path.Combine(_wwwFolderPath ?? Path.Combine(_appFolder, "www"), "lang", "en.json");
-
-            lock (_languageScriptLock)
-            {
-                try
-                {
-                    DateTime lastModified = File.GetLastWriteTimeUtc(dictionaryFile);
-                    if ((_languageDictionary is null) || (lastModified != _languageDictionaryLastModified))
-                    {
-                        byte[] dictionary = File.ReadAllBytes(dictionaryFile);
-                        using (JsonDocument.Parse(dictionary))
-                        { }
-
-                        _languageDictionary = dictionary;
-                        _languageDictionaryLastModified = lastModified;
-                    }
-                }
-                catch (Exception ex)
-                {
-                    if (_languageDictionary is null)
-                    {
-                        _log.Write("Web Service failed to load the English dictionary: " + dictionaryFile, ex);
-                        _languageDictionary = Encoding.UTF8.GetBytes("{}");
-                        _languageDictionaryLastModified = DateTime.MinValue;
-                    }
-                }
-
-                return _languageDictionary;
-            }
         }
 
         private async Task WriteLanguageScriptAsync(HttpContext context)
@@ -2110,10 +2181,10 @@ namespace ZenitiumDns.Core
                 byte[] head = Encoding.UTF8.GetBytes("window.zdnsLanguage={\"language\":\"" + language + "\",\"chosen\":" + (chosen ? "true" : "false") + ",\"dictionary\":");
                 mS.Write(head);
 
-                if (language == Lang.English)
-                    mS.Write(GetLanguageDictionary());
-                else
+                if (language == Lang.German)
                     mS.Write("{}"u8);
+                else
+                    mS.Write(_languages.GetDictionary(language));
 
                 mS.Write("};\n"u8);
 
@@ -2172,6 +2243,13 @@ namespace ZenitiumDns.Core
                     }
                 }
             });
+        }
+
+        private static void AllowLargeRequestBody(HttpContext context)
+        {
+            IHttpMaxRequestBodySizeFeature feature = context.Features.Get<IHttpMaxRequestBodySizeFeature>();
+            if ((feature is not null) && !feature.IsReadOnly)
+                feature.MaxRequestBodySize = int.MaxValue;
         }
 
         private static string GetAuthorizationToken(HttpRequest request)
@@ -2449,6 +2527,7 @@ namespace ZenitiumDns.Core
 
                 _dnsServer.AllowedZoneManager.LoadAllowedZoneFile();
                 _dnsServer.BlockedZoneManager.LoadBlockedZoneFile();
+                _dnsServer.ClientProfileManager.LoadConfigFile(true);
                 _dnsServer.BlockListZoneManager.LoadConfigFile();
 
                 if (throwIfBindFails)
@@ -2458,12 +2537,12 @@ namespace ZenitiumDns.Core
 
                 await _dnsServer.StartAsync(throwIfBindFails);
 
-                _log.Write("DNS Server (v" + _currentVersion.ToString() + ") was started successfully.");
+                _log.Write("DNS Server (v" + GetServerVersion() + ") was started successfully.");
                 _isRunning = true;
             }
             catch (Exception ex)
             {
-                _log.Write("Failed to start DNS Server (v" + _currentVersion.ToString() + ").", ex);
+                _log.Write("Failed to start DNS Server (v" + GetServerVersion() + ").", ex);
                 throw;
             }
         }
@@ -2480,12 +2559,12 @@ namespace ZenitiumDns.Core
                 if (_dnsServer is not null)
                     await _dnsServer.DisposeAsync();
 
-                _log.Write("DNS Server (v" + _currentVersion.ToString() + ") was stopped successfully.");
+                _log.Write("DNS Server (v" + GetServerVersion() + ") was stopped successfully.");
                 _isRunning = false;
             }
             catch (Exception ex)
             {
-                _log.Write("Failed to stop DNS Server (v" + _currentVersion.ToString() + ").", ex);
+                _log.Write("Failed to stop DNS Server (v" + GetServerVersion() + ").", ex);
                 throw;
             }
         }
@@ -2502,6 +2581,12 @@ namespace ZenitiumDns.Core
 
         public int WebServiceHttpPort
         { get { return _webServiceHttpPort; } }
+
+        public string ServerVersion
+        { get { return GetServerVersion(); } }
+
+        public DateTime StartTime
+        { get { return _uptimestamp; } }
 
         #endregion
     }

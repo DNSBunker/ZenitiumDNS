@@ -62,7 +62,6 @@ namespace ZenitiumDns.Core.Dns
         const string TRUST_ANCHORS_SIGNATURE_URL = "https://data.iana.org/root-anchors/root-anchors.p7s";
 
         const long MAX_DOWNLOAD_SIZE = 16L * 1024 * 1024;
-        static readonly string USER_AGENT = "ZenitiumDNS/" + (typeof(IanaDataManager).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "1.0");
         const int TIMER_INTERVAL = 60000;
         const int TIMER_INITIAL_DELAY = 30000;
 
@@ -200,7 +199,6 @@ namespace ZenitiumDns.Core.Dns
             using (HttpClient http = new HttpClient(handler))
             {
                 http.Timeout = TimeSpan.FromSeconds(10);
-                http.DefaultRequestHeaders.UserAgent.ParseAdd(USER_AGENT);
 
                 Uri uri = new Uri(TRUST_ANCHORS_URL);
 
@@ -239,7 +237,6 @@ namespace ZenitiumDns.Core.Dns
             using (HttpClient http = new HttpClient(handler))
             {
                 http.Timeout = TimeSpan.FromMinutes(2);
-                http.DefaultRequestHeaders.UserAgent.ParseAdd(USER_AGENT);
 
                 using (HttpRequestMessage request = new HttpRequestMessage(HttpMethod.Get, url))
                 {
@@ -483,10 +480,18 @@ namespace ZenitiumDns.Core.Dns
             return null;
         }
 
+        private IanaDataMode GetEffectiveMode(IanaDataItem item)
+        {
+            if ((item != IanaDataItem.TrustAnchors) && !_dnsServer.CacheZoneManager.Enabled)
+                return IanaDataMode.Disabled;
+
+            return GetMode(item);
+        }
+
         private async Task ApplyZoneAsync(IanaDataItem item, bool download)
         {
             ItemStatus status = GetStatus(item);
-            IanaDataMode mode = GetMode(item);
+            IanaDataMode mode = GetEffectiveMode(item);
             string zoneName = item == IanaDataItem.RootZone ? "" : "arpa";
 
             status.LastCheck = DateTime.UtcNow;
@@ -636,7 +641,7 @@ namespace ZenitiumDns.Core.Dns
 
                     foreach (IanaDataItem item in new[] { IanaDataItem.RootZone, IanaDataItem.ArpaZone })
                     {
-                        if (GetMode(item) != IanaDataMode.Automatic)
+                        if (GetEffectiveMode(item) != IanaDataMode.Automatic)
                             continue;
 
                         LocalZone zone = item == IanaDataItem.RootZone ? _rootZone : _arpaZone;
@@ -822,6 +827,23 @@ namespace ZenitiumDns.Core.Dns
                     await ApplyTrustAnchorsAsync(false);
                 else
                     await ApplyZoneAsync(item, false);
+            }
+            finally
+            {
+                _lock.Release();
+            }
+        }
+
+        public async Task ApplyCacheStateAsync()
+        {
+            if (!_initialized)
+                return;
+
+            await _lock.WaitAsync();
+            try
+            {
+                await ApplyZoneAsync(IanaDataItem.RootZone, false);
+                await ApplyZoneAsync(IanaDataItem.ArpaZone, false);
             }
             finally
             {

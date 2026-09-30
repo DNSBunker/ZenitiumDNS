@@ -271,11 +271,14 @@ namespace ZenitiumLibrary.ByteTree
         {
             #region variables
 
+            const int SPARSE_MAX_CHILDREN = 8;
+
             readonly Node? _parent;
             readonly int _depth;
             readonly byte _k;
+            readonly ushort _keySpace;
 
-            readonly Node[]? _children;
+            Node[]? _children;
             volatile NodeValue? _value;
 
             #endregion
@@ -297,7 +300,10 @@ namespace ZenitiumLibrary.ByteTree
                 }
 
                 if (keySpace > 0)
-                    _children = new Node[keySpace];
+                {
+                    _keySpace = (ushort)keySpace;
+                    _children = keySpace <= SPARSE_MAX_CHILDREN ? new Node[keySpace] : [];
+                }
 
                 _value = value;
 
@@ -323,9 +329,205 @@ namespace ZenitiumLibrary.ByteTree
                 return true;
             }
 
+            private void InitializeChild(Node child)
+            {
+                Node[] children = _children!;
+
+                if (children.Length == _keySpace)
+                    children[child._k] = child;
+                else
+                    _children = [child];
+            }
+
+            private Node? AddChild(byte k, Node newChild)
+            {
+                while (true)
+                {
+                    Node[] children = Volatile.Read(ref _children)!;
+
+                    if (children.Length == _keySpace)
+                        return Interlocked.CompareExchange(ref children[k], newChild, null);
+
+                    int insertAt = children.Length;
+
+                    for (int i = 0; i < children.Length; i++)
+                    {
+                        Node child = children[i];
+
+                        if (child._k == k)
+                            return child;
+
+                        if (child._k > k)
+                        {
+                            insertAt = i;
+                            break;
+                        }
+                    }
+
+                    Node[] updated;
+
+                    if (children.Length < SPARSE_MAX_CHILDREN)
+                    {
+                        updated = new Node[children.Length + 1];
+                        Array.Copy(children, 0, updated, 0, insertAt);
+                        updated[insertAt] = newChild;
+                        Array.Copy(children, insertAt, updated, insertAt + 1, children.Length - insertAt);
+                    }
+                    else
+                    {
+                        updated = new Node[_keySpace];
+
+                        foreach (Node child in children)
+                            updated[child._k] = child;
+
+                        updated[k] = newChild;
+                    }
+
+                    if (ReferenceEquals(Interlocked.CompareExchange(ref _children, updated, children), children))
+                        return null;
+                }
+            }
+
+            private Node? CompareExchangeChild(byte k, Node? replacement, Node expected)
+            {
+                while (true)
+                {
+                    Node[]? children = Volatile.Read(ref _children);
+                    if (children is null)
+                        return null;
+
+                    if (children.Length == _keySpace)
+                        return Interlocked.CompareExchange(ref children[k]!, replacement, expected);
+
+                    int index = -1;
+
+                    for (int i = 0; i < children.Length; i++)
+                    {
+                        if (children[i]._k == k)
+                        {
+                            index = i;
+                            break;
+                        }
+                    }
+
+                    if (index < 0)
+                        return null;
+
+                    Node current = children[index];
+                    if (!ReferenceEquals(current, expected))
+                        return current;
+
+                    Node[] updated;
+
+                    if (replacement is null)
+                    {
+                        updated = new Node[children.Length - 1];
+                        Array.Copy(children, 0, updated, 0, index);
+                        Array.Copy(children, index + 1, updated, index, children.Length - index - 1);
+                    }
+                    else
+                    {
+                        updated = (Node[])children.Clone();
+                        updated[index] = replacement;
+                    }
+
+                    if (ReferenceEquals(Interlocked.CompareExchange(ref _children, updated, children), children))
+                        return expected;
+                }
+            }
+
             #endregion
 
             #region public
+
+            public Node? GetChild(int k)
+            {
+                Node[]? children = Volatile.Read(ref _children);
+                if (children is null)
+                    return null;
+
+                if (children.Length == _keySpace)
+                {
+                    if ((k < 0) || (k >= children.Length))
+                        return null;
+
+                    return Volatile.Read(ref children[k]);
+                }
+
+                for (int i = 0; i < children.Length; i++)
+                {
+                    Node child = children[i];
+
+                    if (child._k == k)
+                        return child;
+
+                    if (child._k > k)
+                        break;
+                }
+
+                return null;
+            }
+
+            public Node? GetNextChild(int k)
+            {
+                Node[]? children = Volatile.Read(ref _children);
+                if (children is null)
+                    return null;
+
+                if (k < 0)
+                    k = 0;
+
+                if (children.Length == _keySpace)
+                {
+                    for (int i = k; i < children.Length; i++)
+                    {
+                        Node? child = Volatile.Read(ref children[i]);
+                        if (child is not null)
+                            return child;
+                    }
+
+                    return null;
+                }
+
+                for (int i = 0; i < children.Length; i++)
+                {
+                    Node child = children[i];
+
+                    if (child._k >= k)
+                        return child;
+                }
+
+                return null;
+            }
+
+            public Node? GetPreviousChild(int k)
+            {
+                Node[]? children = Volatile.Read(ref _children);
+                if ((children is null) || (k < 0))
+                    return null;
+
+                if (children.Length == _keySpace)
+                {
+                    for (int i = Math.Min(k, children.Length - 1); i > -1; i--)
+                    {
+                        Node? child = Volatile.Read(ref children[i]);
+                        if (child is not null)
+                            return child;
+                    }
+
+                    return null;
+                }
+
+                for (int i = children.Length - 1; i > -1; i--)
+                {
+                    Node child = children[i];
+
+                    if (child._k <= k)
+                        return child;
+                }
+
+                return null;
+            }
 
             public bool AddNodeValue(byte[] key, Func<NodeValue> newValue, int keySpace, out NodeValue? addedValue, out NodeValue? existingValue)
             {
@@ -335,15 +537,15 @@ namespace ZenitiumLibrary.ByteTree
                 {
                     while (current._depth < key.Length)
                     {
-                        if (current._children is null)
+                        if (!current.CanHaveChildren)
                             break;
 
                         byte k = key[current._depth];
-                        Node child = Volatile.Read(ref current._children[k]);
+                        Node? child = current.GetChild(k);
                         if (child is null)
                         {
                             Node addNewNode = new Node(current, k, 0, newValue());
-                            Node originalChild = Interlocked.CompareExchange(ref current._children[k], addNewNode, null);
+                            Node? originalChild = current.AddChild(k, addNewNode);
                             if (originalChild is null)
                             {
                                 addedValue = addNewNode._value;
@@ -367,7 +569,7 @@ namespace ZenitiumLibrary.ByteTree
                     }
                     else
                     {
-                        if ((current._children is null) && (value is not null))
+                        if (!current.CanHaveChildren && (value is not null))
                         {
                             Node stemNode;
 
@@ -380,16 +582,16 @@ namespace ZenitiumLibrary.ByteTree
                                 stemNode = new Node(current._parent, current._k, keySpace, null);
 
                                 byte k = value.Key[current._depth];
-                                stemNode._children![k] = new Node(stemNode, k, 0, value);
+                                stemNode.InitializeChild(new Node(stemNode, k, 0, value));
                             }
 
-                            if ((current._parent is null) || (current._parent._children is null))
+                            if ((current._parent is null) || !current._parent.CanHaveChildren)
                             {
                                 current = this;
                             }
                             else
                             {
-                                Node originalNode = Interlocked.CompareExchange(ref current._parent._children[current._k], stemNode, current);
+                                Node? originalNode = current._parent.CompareExchangeChild(current._k, stemNode, current);
                                 if (ReferenceEquals(originalNode, current))
                                 {
                                     current = stemNode;
@@ -436,10 +638,10 @@ namespace ZenitiumLibrary.ByteTree
 
                 while (currentNode._depth < key.Length)
                 {
-                    if (currentNode._children is null)
+                    if (!currentNode.CanHaveChildren)
                         break;
 
-                    Node child = Volatile.Read(ref currentNode._children[key[currentNode._depth]]);
+                    Node? child = currentNode.GetChild(key[currentNode._depth]);
                     if (child is null)
                         return null;
 
@@ -462,10 +664,10 @@ namespace ZenitiumLibrary.ByteTree
                 {
                     while (currentNode._depth < key.Length)
                     {
-                        if (currentNode._children is null)
+                        if (!currentNode.CanHaveChildren)
                             break;
 
-                        Node child = Volatile.Read(ref currentNode._children[key[currentNode._depth]]);
+                        Node? child = currentNode.GetChild(key[currentNode._depth]);
                         if (child is null)
                             return null;
 
@@ -476,12 +678,12 @@ namespace ZenitiumLibrary.ByteTree
 
                     if ((value is not null) && KeyEquals(currentNode._depth, value.Key, key))
                     {
-                        if (currentNode._children is null)
+                        if (!currentNode.CanHaveChildren)
                         {
-                            if ((currentNode._parent is null) || (currentNode._parent._children is null))
+                            if ((currentNode._parent is null) || !currentNode._parent.CanHaveChildren)
                                 return null;
 
-                            Node? originalNode = Interlocked.CompareExchange(ref currentNode._parent._children[currentNode._k]!, null, currentNode);
+                            Node? originalNode = currentNode._parent.CompareExchangeChild(currentNode._k, null, currentNode);
                             if (ReferenceEquals(originalNode, currentNode))
                                 return value;
 
@@ -517,16 +719,13 @@ namespace ZenitiumLibrary.ByteTree
 
                 while (current._parent is not null)
                 {
-                    if (current._children is null)
-                    {
-                    }
-                    else
+                    if (current.CanHaveChildren)
                     {
                         if (!current.IsEmpty)
                             return;
 
-                        if (current._parent._children is not null)
-                            Volatile.Write(ref current._parent._children[current._k]!, null);
+                        if (current._parent.CanHaveChildren)
+                            current._parent.CompareExchangeChild(current._k, null, current);
                     }
 
                     current = current._parent;
@@ -537,10 +736,18 @@ namespace ZenitiumLibrary.ByteTree
             {
                 _value = null;
 
-                if (_children is not null)
+                Node[]? children = Volatile.Read(ref _children);
+                if (children is null)
+                    return;
+
+                if (children.Length == _keySpace)
                 {
-                    for (int i = 0; i < _children.Length; i++)
-                        Volatile.Write(ref _children[i]!, null);
+                    for (int i = 0; i < children.Length; i++)
+                        Volatile.Write(ref children[i]!, null);
+                }
+                else
+                {
+                    Volatile.Write(ref _children, []);
                 }
             }
 
@@ -551,29 +758,24 @@ namespace ZenitiumLibrary.ByteTree
 
                 while ((current is not null) && (current._depth >= baseDepth))
                 {
-                    if (current._children is not null)
+                    Node? child = current.GetNextChild(k);
+
+                    while (child is not null)
                     {
-                        Node? child = null;
+                        if (child._value is not null)
+                            return child;
 
-                        for (int i = k; i < current._children.Length; i++)
-                        {
-                            child = Volatile.Read(ref current._children[i]);
-                            if (child is not null)
-                            {
-                                if (child._value is not null)
-                                    return child;
+                        if (child.CanHaveChildren)
+                            break;
 
-                                if (child._children is not null)
-                                    break;
-                            }
-                        }
+                        child = current.GetNextChild(child._k + 1);
+                    }
 
-                        if (child is not null)
-                        {
-                            k = 0;
-                            current = child;
-                            continue;
-                        }
+                    if (child is not null)
+                    {
+                        k = 0;
+                        current = child;
+                        continue;
                     }
 
                     k = current._k + 1;
@@ -593,18 +795,11 @@ namespace ZenitiumLibrary.ByteTree
                     if (current._value is not null)
                         lastNode = current;
 
-                    if (current._children is null)
+                    Node? child = current.GetPreviousChild(int.MaxValue);
+                    if (child is null)
                         break;
 
-                    for (int i = current._children.Length - 1; i > -1; i--)
-                    {
-                        Node child = Volatile.Read(ref current._children[i]);
-                        if (child is not null)
-                        {
-                            current = child;
-                            break;
-                        }
-                    }
+                    current = child;
                 }
 
                 return lastNode;
@@ -617,29 +812,24 @@ namespace ZenitiumLibrary.ByteTree
 
                 while ((current is not null) && (current._depth >= baseDepth))
                 {
-                    if (current._children is not null)
+                    Node? child = current.GetPreviousChild(k);
+
+                    while (child is not null)
                     {
-                        Node? child = null;
+                        if (child.CanHaveChildren)
+                            break;
 
-                        for (int i = k; i > -1; i--)
-                        {
-                            child = Volatile.Read(ref current._children[i]);
-                            if (child is not null)
-                            {
-                                if (child._children is not null)
-                                    break;
+                        if (child._value is not null)
+                            return child;
 
-                                if (child._value is not null)
-                                    return child;
-                            }
-                        }
+                        child = current.GetPreviousChild(child._k - 1);
+                    }
 
-                        if (child is not null)
-                        {
-                            k = current._children.Length - 1;
-                            current = child;
-                            continue;
-                        }
+                    if (child is not null)
+                    {
+                        k = int.MaxValue;
+                        current = child;
+                        continue;
                     }
 
                     if (current._value is not null)
@@ -665,8 +855,8 @@ namespace ZenitiumLibrary.ByteTree
             public byte K
             { get { return _k; } }
 
-            public Node[]? Children
-            { get { return _children; } }
+            public bool CanHaveChildren
+            { get { return Volatile.Read(ref _children) is not null; } }
 
             public NodeValue? Value
             { get { return _value; } }
@@ -678,34 +868,13 @@ namespace ZenitiumLibrary.ByteTree
                     if (_value is not null)
                         return false;
 
-                    if (_children is not null)
-                    {
-                        for (int i = 0; i < _children.Length; i++)
-                        {
-                            if (Volatile.Read(ref _children[i]) is not null)
-                                return false;
-                        }
-                    }
-
-                    return true;
+                    return GetNextChild(0) is null;
                 }
             }
 
             public bool HasChildren
             {
-                get
-                {
-                    if (_children is null)
-                        return false;
-
-                    for (int i = 0; i < _children.Length; i++)
-                    {
-                        if (Volatile.Read(ref _children[i]) is not null)
-                            return true;
-                    }
-
-                    return false;
-                }
+                get { return GetNextChild(0) is not null; }
             }
 
             #endregion

@@ -20,6 +20,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 using ZenitiumDns.Core;
 using System;
+using System.Globalization;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Runtime.InteropServices;
@@ -90,7 +91,7 @@ namespace ZenitiumDns
                     });
                 }
 
-                Console.WriteLine("ZenitiumDNS was started successfully.\r\nUsing config folder: " + service.ConfigFolder + "\r\n\r\nNote: Open http://" + Environment.MachineName.ToLowerInvariant() + ":" + service.WebServiceHttpPort + "/ in web browser to access web console.\r\n\r\nPress [CTRL + C] to stop...");
+                Console.WriteLine("ZenitiumDNS " + service.ServerVersion + " was started successfully at " + service.StartTime.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture) + " UTC.\r\nRuntime: " + RuntimeInformation.FrameworkDescription + ", " + RuntimeInformation.OSArchitecture.ToString().ToLowerInvariant() + "\r\nUsing config folder: " + service.ConfigFolder + "\r\n\r\nNote: Open http://" + Environment.MachineName.ToLowerInvariant() + ":" + service.WebServiceHttpPort + "/ in web browser to access web console.\r\n\r\nPress [CTRL + C] to stop...");
 
                 waitHandle.WaitOne();
             }
@@ -105,7 +106,7 @@ namespace ZenitiumDns
                 service?.Dispose();
                 psr?.Dispose();
 
-                Console.WriteLine("ZenitiumDNS was stopped successfully.");
+                Console.WriteLine("ZenitiumDNS was stopped successfully at " + DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture) + " UTC.");
                 exitHandle.Set();
             }
         }

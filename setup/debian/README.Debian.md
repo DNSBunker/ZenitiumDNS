@@ -23,11 +23,7 @@ The service runs as the unprivileged system user `zenitiumdns` and is enabled an
 
 ## First sign-in
 
-On the first installation a random password is generated for the user `admin`. The installer prints it and stores it in `/etc/zenitiumdns/admin.password`. Open `http://<server-ip-address>:5380/`, sign in, choose the interface language (English or German), change the password and then delete the file:
-
-```
-sudo rm /etc/zenitiumdns/admin.password
-```
+On the first installation a random password is generated for the user `admin`. The installer prints it and stores it in `/etc/zenitiumdns/admin.password`. Open `http://<server-ip-address>:5380/`, sign in, choose the interface language (English or German) and change the password under the account menu. As soon as the password of `admin` differs from the one in the file, the server deletes `/etc/zenitiumdns/admin.password` itself, right after the change or at the next start.
 
 The language applies to all users of the server and can be changed at any time under Settings > Server > Language. Existing installations that are upgraded keep German.
 
@@ -99,6 +95,8 @@ The dashboard of the web interface shows queries per second, response times, cac
 ## Memory
 
 Most of the memory is taken by the block lists, the cache and the statistics of the current hour. With HaGeZi TIF and PRO (2.5 million domains, about 80 MB) and a steady 2,000 queries/s, around 1 GB of resident memory is normal; part of it is free space inside the heap that the garbage collection reuses without pausing queries. The size of the cache is set under Settings > Cache, and the watchdog trims the cache when memory runs short.
+
+A cache entry takes roughly 600 to 700 bytes plus its records; with DNSSEC signatures, delegations and negative answers it is often 2 to 4 KB. With a very large or unlimited number of entries, set a memory limit under Settings > Cache (for example about a third of the machine's memory). Once the used memory exceeds it, the cache maintenance removes the least recently used entries every minute and compacts the heap after large cuts.
 
 If memory is tight, the garbage collection can be told to compact the heap more often in `/etc/default/zenitiumdns`:
 

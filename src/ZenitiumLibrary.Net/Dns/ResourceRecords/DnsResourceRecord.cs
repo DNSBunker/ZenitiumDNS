@@ -472,6 +472,20 @@ namespace ZenitiumLibrary.Net.Dns.ResourceRecords
 
         #region public
 
+        public DnsResourceRecord CloneWithTtl(uint ttl)
+        {
+            DnsResourceRecord newRecord = new DnsResourceRecord();
+
+            newRecord._name = _name;
+            newRecord._type = _type;
+            newRecord._class = _class;
+            newRecord._ttl = ttl;
+            newRecord._rData = _rData;
+            newRecord._dnssecStatus = _dnssecStatus;
+
+            return newRecord;
+        }
+
         public DnsResourceRecord CloneAs(DnsResourceRecordType type)
         {
             DnsResourceRecord newRecord = new DnsResourceRecord();

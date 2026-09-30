@@ -1189,8 +1189,6 @@ namespace AdvancedBlocking
                             if (File.Exists(_listFilePath))
                                 http.DefaultRequestHeaders.IfModifiedSince = File.GetLastWriteTimeUtc(_listFilePath);
 
-                            http.DefaultRequestHeaders.UserAgent.TryParseAdd("ZenitiumDNS");
-
                             HttpResponseMessage httpResponse = await http.GetAsync(_listUrl, HttpCompletionOption.ResponseHeadersRead);
                             switch (httpResponse.StatusCode)
                             {
