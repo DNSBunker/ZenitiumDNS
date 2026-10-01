@@ -190,6 +190,17 @@ namespace ZenitiumDns.Core.Dns
 
         #region properties
 
+        public long LatestSequence
+        {
+            get
+            {
+                lock (_lock)
+                {
+                    return _sequence;
+                }
+            }
+        }
+
         public bool Enabled
         {
             get

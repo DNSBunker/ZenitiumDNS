@@ -102,6 +102,8 @@ namespace ZenitiumDns.Core
         HttpClient _ssoHttpClient;
 
         DnsServer _dnsServer;
+        Dhcp.DhcpServer _dhcpServer;
+        readonly WebServiceDhcpApi _dhcpApi;
 
         int _webServiceHttpPort = 5380;
         int _webServiceTlsPort = 53443;
@@ -213,6 +215,7 @@ namespace ZenitiumDns.Core
             _otherZonesApi = new WebServiceOtherZonesApi(this);
             _appsApi = new WebServiceAppsApi(this);
             _settingsApi = new WebServiceSettingsApi(this);
+            _dhcpApi = new WebServiceDhcpApi(this);
             _authApi = new WebServiceAuthApi(this);
             _logsApi = new WebServiceLogsApi(this);
 
@@ -672,6 +675,78 @@ namespace ZenitiumDns.Core
 
         #region backup and restore config
 
+        private static async Task WriteBackupEntryAsync(ZipArchive backupZip, string entryName, byte[] data)
+        {
+            ZipArchiveEntry entry = backupZip.CreateEntry(entryName);
+
+            await using (Stream stream = entry.Open())
+            {
+                await stream.WriteAsync(data);
+            }
+        }
+
+        private static async Task<byte[]> ReadBackupEntryAsync(ZipArchiveEntry entry, int maxLength)
+        {
+            if (entry.Length > maxLength)
+                throw new InvalidDataException("The backup entry is too large: " + entry.FullName);
+
+            await using (Stream stream = entry.Open())
+            {
+                using (MemoryStream mS = new MemoryStream((int)entry.Length))
+                {
+                    await stream.CopyToAsync(mS);
+
+                    if (mS.Length > maxLength)
+                        throw new InvalidDataException("The backup entry is too large: " + entry.FullName);
+
+                    return mS.ToArray();
+                }
+            }
+        }
+
+        private async Task RestoreDhcpFromBackupAsync(ZipArchive backupZip)
+        {
+            Dhcp.DhcpServer dhcpServer = _dhcpServer;
+            if (dhcpServer is null)
+                return;
+
+            ZipArchiveEntry settingsEntry = backupZip.GetEntry(Dhcp.DhcpServer.SETTINGS_FILE);
+            ZipArchiveEntry leasesEntry = backupZip.GetEntry(Dhcp.DhcpServer.LEASES_FILE);
+
+            if ((settingsEntry is null) && (leasesEntry is null))
+                return;
+
+            if (settingsEntry is not null)
+            {
+                try
+                {
+                    List<Dhcp.DhcpConfigError> errors = dhcpServer.RestoreSettings(await ReadBackupEntryAsync(settingsEntry, Dhcp.DhcpSettings.MAX_EXPERT_LENGTH * 2));
+
+                    if (errors.Count > 0)
+                        _log.Write("DHCP settings of the backup were not restored because the configuration has errors: " + errors[0]);
+                    else
+                        _log.Write("DHCP settings were restored from the backup.");
+                }
+                catch (Exception ex)
+                {
+                    _log.Write("DHCP settings of the backup could not be restored.", ex);
+                }
+            }
+
+            if (leasesEntry is not null)
+            {
+                try
+                {
+                    int count = dhcpServer.RestoreLeases(await ReadBackupEntryAsync(leasesEntry, 64 * 1024 * 1024));
+                    _log.Write("DHCP leases were restored from the backup: " + count);
+                }
+                catch (Exception ex)
+                {
+                    _log.Write("DHCP leases of the backup could not be restored.", ex);
+                }
+            }
+        }
+
         internal async Task BackupConfigAsync(Stream zipStream, bool authConfig, bool webServiceSettings, bool dnsSettings, bool logSettings, bool zones, bool allowedZones, bool blockedZones, bool blockLists, bool apps, bool stats, bool logs)
         {
             await using (ZipArchive backupZip = new ZipArchive(zipStream, ZipArchiveMode.Create, true, Encoding.UTF8))
@@ -728,6 +803,16 @@ namespace ZenitiumDns.Core
 
                     if (File.Exists(dnsConfigFile))
                         backupZip.CreateEntryFromFile(dnsConfigFile, "dns.config");
+
+                    Dhcp.DhcpServer dhcpServer = _dhcpServer;
+                    if (dhcpServer is not null)
+                    {
+                        if (File.Exists(Path.Combine(_configFolder, Dhcp.DhcpServer.SETTINGS_FILE)))
+                            await WriteBackupEntryAsync(backupZip, Dhcp.DhcpServer.SETTINGS_FILE, dhcpServer.ExportSettings());
+
+                        if (File.Exists(Path.Combine(_configFolder, Dhcp.DhcpServer.LEASES_FILE)))
+                            await WriteBackupEntryAsync(backupZip, Dhcp.DhcpServer.LEASES_FILE, dhcpServer.ExportLeases());
+                    }
 
                     if (!string.IsNullOrEmpty(_dnsServer.DnsTlsCertificatePath))
                     {
@@ -992,6 +1077,8 @@ namespace ZenitiumDns.Core
 
                 if (dnsSettings)
                 {
+                    await RestoreDhcpFromBackupAsync(backupZip);
+
                     ZipArchiveEntry entry = backupZip.GetEntry("dns.config");
                     if (entry is not null)
                     {
@@ -1935,6 +2022,15 @@ namespace ZenitiumDns.Core
             _webService.MapGetAndPost("/api/settings/blockLists/setEnabled", _settingsApi.SetBlockListEnabled);
             _webService.MapGetAndPost("/api/settings/blockLists/remove", _settingsApi.RemoveBlockList);
             _webService.MapGetAndPost("/api/settings/blockLists/setName", _settingsApi.SetBlockListName);
+            _webService.MapGetAndPost("/api/dhcp/status", _dhcpApi.GetStatus);
+            _webService.MapGetAndPost("/api/dhcp/settings/get", _dhcpApi.GetSettings);
+            _webService.MapGetAndPost("/api/dhcp/settings/validate", _dhcpApi.ValidateSettings);
+            _webService.MapGetAndPost("/api/dhcp/settings/set", _dhcpApi.SetSettings);
+            _webService.MapGetAndPost("/api/dhcp/leases/list", _dhcpApi.ListLeases);
+            _webService.MapGetAndPost("/api/dhcp/leases/delete", _dhcpApi.DeleteLease);
+            _webService.MapGetAndPost("/api/dhcp/leases/reserve", _dhcpApi.ReserveLease);
+            _webService.MapGetAndPost("/api/dhcp/probe", _dhcpApi.ProbeAsync);
+            _webService.MapGetAndPost("/api/dhcp/foreign/clear", _dhcpApi.ClearForeignServers);
             _webService.MapGetAndPost("/api/settings/clients/list", _settingsApi.GetClientProfiles);
             _webService.MapGetAndPost("/api/settings/clients/set", _settingsApi.SetClientProfile);
             _webService.MapGetAndPost("/api/settings/clients/delete", _settingsApi.DeleteClientProfile);
@@ -2537,6 +2633,8 @@ namespace ZenitiumDns.Core
 
                 await _dnsServer.StartAsync(throwIfBindFails);
 
+                StartDhcpServer();
+
                 _log.Write("DNS Server (v" + GetServerVersion() + ") was started successfully.");
                 _isRunning = true;
             }
@@ -2544,6 +2642,21 @@ namespace ZenitiumDns.Core
             {
                 _log.Write("Failed to start DNS Server (v" + GetServerVersion() + ").", ex);
                 throw;
+            }
+        }
+
+        private void StartDhcpServer()
+        {
+            try
+            {
+                _dhcpServer = new Dhcp.DhcpServer(_configFolder, Dhcp.DhcpServer.LoadOrCreateNodeId(_configFolder), delegate (string message) { _log.Write(message); }, delegate (string message, Exception ex) { _log.Write(message, ex); });
+                _dhcpServer.LoadSettings();
+                _dnsServer.DhcpServer = _dhcpServer;
+                _dhcpServer.Start();
+            }
+            catch (Exception ex)
+            {
+                _log.Write("Failed to start the DHCP server.", ex);
             }
         }
 
@@ -2555,6 +2668,13 @@ namespace ZenitiumDns.Core
             try
             {
                 await StopWebServiceAsync();
+
+                if (_dhcpServer is not null)
+                {
+                    _dnsServer.DhcpServer = null;
+                    _dhcpServer.Dispose();
+                    _dhcpServer = null;
+                }
 
                 if (_dnsServer is not null)
                     await _dnsServer.DisposeAsync();
@@ -2575,6 +2695,9 @@ namespace ZenitiumDns.Core
 
         public DnsServer DnsServer
         { get { return _dnsServer; } }
+
+        public Dhcp.DhcpServer DhcpServer
+        { get { return _dhcpServer; } }
 
         public string ConfigFolder
         { get { return _configFolder; } }

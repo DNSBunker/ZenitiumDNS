@@ -36,8 +36,6 @@ namespace ZenitiumDns.Core.Dns
         const long DISK_CRITICAL_BYTES = 256L * 1024 * 1024;
         const long LOG_FILE_MAX_BYTES = 512L * 1024 * 1024;
         const long LOG_FILE_HARD_MAX_BYTES = 1024L * 1024 * 1024;
-        const double MEMORY_LOAD_CRITICAL = 0.92;
-        const double CACHE_TRIM_RATIO = 0.3;
         const int STATS_QUEUE_MAX = StatsManager.MAX_QUEUE_LENGTH;
         const long THREAD_POOL_QUEUE_HIGH = 2000;
         const int THREAD_POOL_STREAK = 3;
@@ -46,7 +44,6 @@ namespace ZenitiumDns.Core.Dns
         const int MAX_LISTENER_RESTARTS = 3;
 
         static readonly TimeSpan DISK_COOLDOWN = TimeSpan.FromMinutes(10);
-        static readonly TimeSpan MEMORY_COOLDOWN = TimeSpan.FromMinutes(5);
         static readonly TimeSpan STATS_QUEUE_COOLDOWN = TimeSpan.FromMinutes(1);
         static readonly TimeSpan THREAD_POOL_COOLDOWN = TimeSpan.FromMinutes(5);
         static readonly TimeSpan LISTENER_COOLDOWN = TimeSpan.FromMinutes(10);
@@ -59,7 +56,6 @@ namespace ZenitiumDns.Core.Dns
         int _checking;
 
         DateTime _lastDiskAction;
-        DateTime _lastMemoryAction;
         DateTime _lastStatsQueueAction;
         DateTime _lastThreadPoolAction;
         DateTime _lastListenerRestart;
@@ -227,34 +223,6 @@ namespace ZenitiumDns.Core.Dns
             AddEvent(WatchdogSeverity.Warning, Lang.L("Protokoll", "Log"), Lang.L("Die heutige Protokolldatei hat " + FormatMegabytes(size, Lang.German) + " erreicht, obwohl das Protokollieren der Anfragen pausiert ist. Das Datei-Protokoll ist bis Mitternacht vollständig pausiert.", "Today's log file reached " + FormatMegabytes(size, Lang.English) + " although query logging is paused. File logging is paused completely until midnight."), "today's log file reached " + FormatMegabytes(size) + "; file logging suspended until midnight.");
         }
 
-        private void CheckMemory(DateTime utcNow)
-        {
-            if ((utcNow - _lastMemoryAction) < MEMORY_COOLDOWN)
-                return;
-
-            GCMemoryInfo memoryInfo = GC.GetGCMemoryInfo();
-            long total = memoryInfo.TotalAvailableMemoryBytes;
-            long load = memoryInfo.MemoryLoadBytes;
-
-            if ((total <= 0) || (load < (total * MEMORY_LOAD_CRITICAL)))
-                return;
-
-            long cacheEntries = _dnsServer.CacheZoneManager.TotalEntries;
-            if (cacheEntries < 10000)
-                return;
-
-            _lastMemoryAction = utcNow;
-
-            long workingSetBefore = Environment.WorkingSet;
-            int removed = _dnsServer.CacheZoneManager.TrimEntries((long)(cacheEntries * CACHE_TRIM_RATIO));
-
-            GC.Collect(2, GCCollectionMode.Aggressive, true, true);
-
-            long workingSetAfter = Environment.WorkingSet;
-
-            AddEvent(WatchdogSeverity.Critical, Lang.L("Arbeitsspeicher", "Memory"), Lang.L("Der Arbeitsspeicher war zu " + (load * 100 / total) + " % belegt. " + FormatCount(removed, Lang.German) + " selten genutzte Cache-Einträge wurden entfernt, der Prozess belegt jetzt " + FormatMegabytes(workingSetAfter, Lang.German) + " statt " + FormatMegabytes(workingSetBefore, Lang.German) + ". Dauerhaft hilft ein kleinerer Höchstwert für Cache-Einträge.", "Memory was " + (load * 100 / total) + " % full. " + FormatCount(removed, Lang.English) + " rarely used cache entries were removed, the process now uses " + FormatMegabytes(workingSetAfter, Lang.English) + " instead of " + FormatMegabytes(workingSetBefore, Lang.English) + ". A lower maximum for cache entries helps permanently."), "memory load at " + (load * 100 / total) + "%; removed " + removed + " cache entries, working set " + FormatMegabytes(workingSetBefore) + " -> " + FormatMegabytes(workingSetAfter) + ".");
-        }
-
         private void CheckStatsQueue(DateTime utcNow)
         {
             StatsManager statsManager = _dnsServer.StatsManager;
@@ -353,7 +321,6 @@ namespace ZenitiumDns.Core.Dns
 
                 CheckDiskSpace(utcNow);
                 CheckLogFileSize();
-                CheckMemory(utcNow);
                 CheckStatsQueue(utcNow);
                 CheckThreadPool(utcNow);
                 await CheckListenersAsync(utcNow);
@@ -371,6 +338,33 @@ namespace ZenitiumDns.Core.Dns
         #endregion
 
         #region public
+
+        internal void ReportMemoryPressure(MemoryPressureReading reading, int removed, long remaining, long workingSetBefore, long workingSetAfter)
+        {
+            string percent = ((int)(reading.Ratio * 100)).ToString();
+            string scopeGerman;
+            string scopeEnglish;
+
+            switch (reading.Source)
+            {
+                case "cgroup":
+                    scopeGerman = "der Speichergrenze des Dienstes oder Containers";
+                    scopeEnglish = "the memory limit of the service or container";
+                    break;
+
+                case "heap":
+                    scopeGerman = "der Heap-Grenze von .NET";
+                    scopeEnglish = "the .NET heap limit";
+                    break;
+
+                default:
+                    scopeGerman = "des Arbeitsspeichers";
+                    scopeEnglish = "the system memory";
+                    break;
+            }
+
+            AddEvent(WatchdogSeverity.Critical, Lang.L("Arbeitsspeicher", "Memory"), Lang.L(percent + " % " + scopeGerman + " waren belegt (" + FormatMegabytes(reading.Used, Lang.German) + " von " + FormatMegabytes(reading.Limit, Lang.German) + "). Um einen Absturz durch Speichermangel zu verhindern, wurden " + FormatCount(removed, Lang.German) + " selten genutzte Cache-Einträge entfernt, " + FormatCount(remaining, Lang.German) + " bleiben; der Prozess belegt jetzt " + FormatMegabytes(workingSetAfter, Lang.German) + " statt " + FormatMegabytes(workingSetBefore, Lang.German) + ". Bis sich der Speicher erholt, wächst der Cache nicht weiter. Dauerhaft helfen eine Speichergrenze für den Cache oder weniger Einträge.", percent + " % of " + scopeEnglish + " was in use (" + FormatMegabytes(reading.Used, Lang.English) + " of " + FormatMegabytes(reading.Limit, Lang.English) + "). To prevent an out-of-memory crash, " + FormatCount(removed, Lang.English) + " rarely used cache entries were removed, " + FormatCount(remaining, Lang.English) + " remain; the process now uses " + FormatMegabytes(workingSetAfter, Lang.English) + " instead of " + FormatMegabytes(workingSetBefore, Lang.English) + ". The cache does not grow until memory recovers. A cache memory limit or fewer entries help permanently."), "memory at " + percent + "% of " + reading.Source + " (" + FormatMegabytes(reading.Used) + " of " + FormatMegabytes(reading.Limit) + "); removed " + removed + " cache entries, " + remaining + " left, working set " + FormatMegabytes(workingSetBefore) + " -> " + FormatMegabytes(workingSetAfter) + ".");
+        }
 
         public IReadOnlyList<WatchdogEvent> GetEvents()
         {

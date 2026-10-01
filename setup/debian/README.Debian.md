@@ -19,11 +19,11 @@ The package contains the .NET runtime; a separate .NET installation is not neede
 | `/usr/share/zenitiumdns/apps` | Bundled DNS apps as ZIP files, installed disabled on start and updated with package updates |
 | `/usr/lib/systemd/system/zenitiumdns.service` | systemd service |
 
-The service runs as the unprivileged system user `zenitiumdns` and is enabled and started automatically after installation.
+The service runs as the unprivileged system user `zenitiumdns` and is enabled and started automatically after installation. It only receives the capabilities `CAP_NET_BIND_SERVICE` (ports below 1024 such as 53, 67, 443 and 853) and `CAP_NET_RAW` (DHCP replies directly to the MAC address of a device that has no address yet, through an `AF_PACKET` socket).
 
 ## First sign-in
 
-On the first installation a random password is generated for the user `admin`. The installer prints it and stores it in `/etc/zenitiumdns/admin.password`. Open `http://<server-ip-address>:5380/`, sign in, choose the interface language (English or German) and change the password under the account menu. As soon as the password of `admin` differs from the one in the file, the server deletes `/etc/zenitiumdns/admin.password` itself, right after the change or at the next start.
+On the first installation a random password is generated for the user `admin`. The installer prints it and stores it in `/etc/zenitiumdns/admin.password`. Open `http://<server-ip-address>:5380/`, sign in, choose the interface language (English or German) and change the password under the account menu. As soon as the password of `admin` differs from the one in the file, the server deletes `/etc/zenitiumdns/admin.password` itself, right after the change or at the next start. The same happens when the user `admin` is deleted or renamed.
 
 The language applies to all users of the server and can be changed at any time under Settings > Server > Language. Existing installations that are upgraded keep German.
 
@@ -94,9 +94,11 @@ The dashboard of the web interface shows queries per second, response times, cac
 
 ## Memory
 
-Most of the memory is taken by the block lists, the cache and the statistics of the current hour. With HaGeZi TIF and PRO (2.5 million domains, about 80 MB) and a steady 2,000 queries/s, around 1 GB of resident memory is normal; part of it is free space inside the heap that the garbage collection reuses without pausing queries. The size of the cache is set under Settings > Cache, and the watchdog trims the cache when memory runs short.
+Most of the memory is taken by the block lists, the cache and the statistics of the current hour. With HaGeZi TIF and PRO (2.5 million domains, about 80 MB) and a steady 2,000 queries/s, around 1 GB of resident memory is normal; part of it is free space inside the heap that the garbage collection reuses without pausing queries. The size of the cache is set under Settings > Cache. When memory runs short, the server protects itself against an out-of-memory crash: it checks every 2 seconds the system memory, a `MemoryMax` of the service and the .NET heap limit; from 85 % the cache stops growing, from 90 % the least recently used entries are cut and memory is compacted. The cap is lifted once memory stays below 75 % for five minutes.
 
 A cache entry takes roughly 600 to 700 bytes plus its records; with DNSSEC signatures, delegations and negative answers it is often 2 to 4 KB. With a very large or unlimited number of entries, set a memory limit under Settings > Cache (for example about a third of the machine's memory). Once the used memory exceeds it, the cache maintenance removes the least recently used entries every minute and compacts the heap after large cuts.
+
+If ZenitiumDNS forwards to a caching resolver such as Unbound, the cache can be turned off completely under Settings > Cache > Use cache. Answers are then only held for the duration of a single resolution, the root zone and arpa zone copies are not kept in memory, and the cache takes practically no memory.
 
 If memory is tight, the garbage collection can be told to compact the heap more often in `/etc/default/zenitiumdns`:
 

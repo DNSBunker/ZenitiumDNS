@@ -1906,6 +1906,16 @@ namespace ZenitiumDns.Core
                 Utf8JsonWriter jsonWriter = context.GetCurrentJsonWriter();
 
                 jsonWriter.WriteString("serverDomain", dnsServer.ServerDomain);
+                jsonWriter.WriteBoolean("hasTlsCertificate", dnsServer.DnsTlsCertificate is not null);
+                jsonWriter.WriteString("tlsHostName", dnsServer.TlsHostName);
+
+                jsonWriter.WriteStartArray("tlsWildcardDomains");
+
+                foreach (string domain in dnsServer.GetTlsWildcardDomains())
+                    jsonWriter.WriteStringValue(domain);
+
+                jsonWriter.WriteEndArray();
+
                 jsonWriter.WriteBoolean("enableDnsOverHttps", dnsServer.EnableDnsOverHttps);
                 jsonWriter.WriteBoolean("enableDnsOverTls", dnsServer.EnableDnsOverTls);
                 jsonWriter.WriteBoolean("enableDnsOverQuic", dnsServer.EnableDnsOverQuic);

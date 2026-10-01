@@ -146,6 +146,49 @@ namespace ZenitiumDns.Core
             return true;
         }
 
+        private static string NeutralizeQuotes(string value)
+        {
+            if ((value.IndexOf('"') < 0) && (value.IndexOf('\'') < 0) && (value.IndexOf('`') < 0))
+                return value;
+
+            StringBuilder sb = new StringBuilder(value.Length);
+            int last = 0;
+
+            foreach (Match tag in TagRegex().Matches(value))
+            {
+                AppendNeutralized(sb, value, last, tag.Index);
+                sb.Append(tag.Value);
+                last = tag.Index + tag.Length;
+            }
+
+            AppendNeutralized(sb, value, last, value.Length);
+            return sb.ToString();
+        }
+
+        private static void AppendNeutralized(StringBuilder sb, string value, int start, int end)
+        {
+            for (int i = start; i < end; i++)
+            {
+                char c = value[i];
+
+                switch (c)
+                {
+                    case '"':
+                        sb.Append('\u201D');
+                        break;
+
+                    case '\'':
+                    case '`':
+                        sb.Append('\u2019');
+                        break;
+
+                    default:
+                        sb.Append(c);
+                        break;
+                }
+            }
+        }
+
         private Dictionary<string, string> GetEnglishDictionary()
         {
             string file = Path.Combine(_getWwwFolder(), "lang", "en.json");
@@ -265,7 +308,7 @@ namespace ZenitiumDns.Core
                     foreach (KeyValuePair<string, string> entry in imported)
                     {
                         if (merged.ContainsKey(entry.Key) && (entry.Value is not null) && HasSameMarkup(entry.Key, entry.Value))
-                            merged[entry.Key] = entry.Value;
+                            merged[entry.Key] = NeutralizeQuotes(entry.Value);
                     }
 
                     byte[] bytes = JsonSerializer.SerializeToUtf8Bytes(merged);
@@ -355,7 +398,7 @@ namespace ZenitiumDns.Core
                         continue;
                     }
 
-                    accepted[entry.Key] = value;
+                    accepted[entry.Key] = NeutralizeQuotes(value);
                 }
 
                 if (accepted.Count == 0)

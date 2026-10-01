@@ -1,0 +1,28 @@
+kind=technitium
+cpus=0-3
+idle_rss_mb=113
+cache_hits_40k_answers=sent=1199996 recv=1199996 noerror=1199996 servfail=0 nxdomain=0 refused=0
+cache_hits_40k_latency=latency_us mean=145 p50=145 p90=195 p99=285 p999=875 max=3156 samples=1079999 over2s=0
+cache_hits_40k_cpu_us_per_query=32.6
+cache_hits_40k_rss_mb=168
+cache_hits_max_offered_per_second=647717
+cache_hits_max_answers_per_second=227078
+dot_8k_answers=sent=239428 recv=239428 errors=0
+dot_8k_latency=latency_us mean=204 p50=145 p90=415 p99=935 p999=1495 samples=239428
+dot_8k_cpu_us_per_query=121.7
+resolve_2k_answers=sent=59999 recv=59999 noerror=59999 servfail=0 nxdomain=0 refused=0
+resolve_2k_latency=latency_us mean=351 p50=235 p90=345 p99=3735 p999=8005 max=15729 samples=54000 over2s=0
+resolve_2k_cpu_us_per_query=836.8
+resolve_2k_rss_mb=272
+fill_1m_answers=sent=999995 recv=877506 noerror=877506 servfail=0 nxdomain=0 refused=0
+fill_1m_latency=latency_us mean=1144974 p50=1142685 p90=1309715 p99=1522335 p999=1552865 max=1585661 samples=823838 over2s=0
+fill_1m_cpu_us_per_query=101.6
+fill_1m_rss_mb=3321
+fill_1m_entries=877508
+fill_1m_rss_after_20s_mb=3947
+blocklist_domains=2493399
+blocklist_rss_mb=537
+blocked_40k_answers=sent=1199994 recv=1198558 noerror=599732 servfail=0 nxdomain=598826 refused=0
+blocked_40k_latency=latency_us mean=155 p50=145 p90=205 p99=365 p999=1455 max=5142 samples=1080006 over2s=0
+blocked_40k_cpu_us_per_query=38.6
+blocked_40k_rss_mb=638

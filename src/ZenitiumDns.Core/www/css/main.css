@@ -3091,17 +3091,152 @@ tr.rate-limited .top-name {
     }
 
 .selftest-summary {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 6px;
     margin: 0 0 18px 0;
 }
 
-.selftest-time {
+.selftest-overview {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 14px;
+    padding: 14px 16px;
+    background-color: var(--surface);
+    border: 1px solid var(--line);
+    border-left-width: 4px;
+    border-radius: var(--r-surface);
+}
+
+.selftest-overview-ok {
+    border-left-color: var(--ok);
+}
+
+.selftest-overview-warning {
+    border-left-color: var(--warn);
+}
+
+.selftest-overview-error {
+    border-left-color: var(--bad);
+}
+
+.selftest-overview-icon {
+    font-size: 26px;
+}
+
+.selftest-overview-ok .selftest-overview-icon {
+    color: var(--ok);
+}
+
+.selftest-overview-warning .selftest-overview-icon {
+    color: var(--warn);
+}
+
+.selftest-overview-error .selftest-overview-icon {
+    color: var(--bad);
+}
+
+.selftest-overview-text {
+    flex: 1 1 240px;
+    min-width: 0;
+}
+
+.selftest-overview-title {
+    font-family: var(--font-display);
+    font-size: 17px;
+    font-weight: 600;
+    color: var(--ink);
+}
+
+.selftest-overview-meta {
     color: var(--ink-3);
     font-size: 12.5px;
-    margin-left: 6px;
+    margin-top: 2px;
+}
+
+.selftest-filter .badge {
+    margin-left: 4px;
+}
+
+.selftest-details > summary {
+    list-style: none;
+    cursor: pointer;
+}
+
+    .selftest-details > summary::-webkit-details-marker {
+        display: none;
+    }
+
+.selftest-group-summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin: 0 0 8px 0;
+}
+
+    .selftest-group-summary::before {
+        content: "\f105";
+        font-family: FontAwesome;
+        color: var(--ink-3);
+        width: 12px;
+        transition: transform 0.15s;
+    }
+
+.selftest-details[open] > .selftest-group-summary::before {
+    transform: rotate(90deg);
+}
+
+.selftest-group-name {
+    flex: 1 1 auto;
+    font-family: var(--font-display);
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--ink-2);
+}
+
+.selftest-counts {
+    display: flex;
+    gap: 10px;
+    font-size: 12.5px;
+}
+
+.selftest-count-ok {
+    color: var(--ok);
+}
+
+.selftest-count-info {
+    color: var(--info);
+}
+
+.selftest-count-warning {
+    color: var(--warn);
+}
+
+.selftest-count-error {
+    color: var(--bad);
+}
+
+.selftest-group-label {
+    font-weight: 500;
+    color: var(--ink-3);
+}
+
+    .selftest-group-label::after {
+        content: " \203A";
+    }
+
+.selftest-action {
+    margin-left: auto;
+    align-self: center;
+    white-space: nowrap;
+}
+
+.selftest-empty {
+    color: var(--ok);
+    margin: 0 0 20px 0;
+}
+
+.dashboard-health-action {
+    white-space: nowrap;
 }
 
 .selftest-group {
@@ -3166,6 +3301,7 @@ tr.rate-limited .top-name {
 
 .selftest-body {
     min-width: 0;
+    flex: 1 1 auto;
 }
 
 .selftest-title {
@@ -3595,4 +3731,165 @@ tr.rate-limited .top-name {
 
 .settings-section-inactive {
     opacity: 0.55;
+}
+
+.dhcp-status-cards {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-bottom: 16px;
+}
+
+.dhcp-card {
+    min-width: 170px;
+    padding: 10px 14px;
+    background-color: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--r-surface);
+}
+
+.dhcp-card-title {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--ink-3);
+    margin-bottom: 4px;
+}
+
+.dhcp-card-value {
+    font-family: var(--font-display);
+    font-size: 18px;
+    font-weight: 600;
+}
+
+.dhcp-heading {
+    margin-top: 22px;
+    font-size: 15px;
+    font-weight: 600;
+}
+
+.dhcp-counters td {
+    white-space: nowrap;
+}
+
+.dhcp-leases-table td {
+    vertical-align: middle !important;
+}
+
+.dhcp-vendor {
+    max-width: 220px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.dhcp-reservations input {
+    min-width: 120px;
+}
+
+.dhcp-generated {
+    min-height: 34px;
+    max-height: 220px;
+    overflow: auto;
+    font-family: var(--font-mono);
+    font-size: 12.5px;
+    background-color: var(--surface-2);
+}
+
+.dhcp-expert-editor {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    line-height: 1.5;
+    white-space: pre;
+    overflow-wrap: normal;
+    overflow-x: auto;
+    tab-size: 4;
+}
+
+.dhcp-errors {
+    margin: 6px 0 0 0;
+    padding-left: 18px;
+}
+
+.dhcp-reference summary {
+    cursor: pointer;
+    font-weight: 600;
+    margin-bottom: 8px;
+}
+
+.dhcp-reference td:first-child {
+    width: 55%;
+}
+
+.dhcp-reference code {
+    white-space: normal;
+    word-break: break-word;
+}
+
+.dhcp-option-name {
+    display: inline-block;
+    margin: 0 10px 4px 0;
+    font-family: var(--font-mono);
+    font-size: 12px;
+}
+
+.dhcp-option-name.managed {
+    opacity: 0.45;
+}
+
+@media (max-width: 767px) {
+    .dhcp-card {
+        flex: 1 1 100%;
+    }
+
+    .dhcp-leases-table,
+    .dhcp-counters {
+        display: block;
+        overflow-x: auto;
+    }
+}
+
+.connection-banner {
+    position: fixed;
+    left: 50%;
+    bottom: 20px;
+    transform: translateX(-50%);
+    z-index: 2000;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    max-width: calc(100vw - 32px);
+    padding: 10px 14px;
+    border-radius: 10px;
+    border: 1px solid var(--line);
+    background-color: var(--surface);
+    color: var(--ink);
+    box-shadow: var(--shadow-pop);
+    font-size: 14px;
+}
+
+.connection-banner-lost {
+    border-color: var(--warn-fill);
+    background-color: var(--warn-soft);
+}
+
+.connection-banner-ok {
+    border-color: var(--ok-fill);
+    background-color: var(--ok-soft);
+}
+
+.connection-banner-lost .connection-banner-icon {
+    color: var(--warn);
+}
+
+.connection-banner-ok .connection-banner-icon {
+    color: var(--ok);
+}
+
+.connection-banner-text {
+    flex: 1 1 auto;
+}
+
+.connection-banner-retry {
+    flex: 0 0 auto;
 }

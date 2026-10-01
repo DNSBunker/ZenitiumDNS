@@ -19,8 +19,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
 using System;
+using System.Collections.Concurrent;
 using System.Threading;
-using System.Threading.Channels;
 using System.Threading.Tasks;
 
 namespace ZenitiumLibrary
@@ -31,9 +31,11 @@ namespace ZenitiumLibrary
 
         readonly int _queueSize;
         readonly int _maximumConcurrencyLevel;
+        readonly TaskScheduler? _taskScheduler;
 
-        readonly Channel<(Func<object?, Task>, object?)> _channel;
-        readonly ChannelWriter<(Func<object?, Task>, object?)> _channelWriter;
+        readonly ConcurrentQueue<(Func<object?, Task> Task, object? State)> _queue = new ConcurrentQueue<(Func<object?, Task>, object?)>();
+        int _queued;
+        int _running;
 
         #endregion
 
@@ -44,45 +46,90 @@ namespace ZenitiumLibrary
             if (maximumConcurrencyLevel < 1)
                 maximumConcurrencyLevel = Environment.ProcessorCount;
 
-            if (taskScheduler is null)
-                taskScheduler = TaskScheduler.Default;
-
             _queueSize = queueSize;
             _maximumConcurrencyLevel = maximumConcurrencyLevel;
 
-            if (_queueSize < 1)
-                _channel = Channel.CreateUnbounded<(Func<object?, Task>, object?)>();
-            else
-                _channel = Channel.CreateBounded<(Func<object?, Task>, object?)>(_queueSize);
-
-            _channelWriter = _channel.Writer;
-            ChannelReader<(Func<object?, Task>, object?)> channelReader = _channel.Reader;
-
-            for (int i = 0; i < _maximumConcurrencyLevel; i++)
-            {
-                _ = Task.Factory.StartNew(async delegate ()
-                {
-                    await foreach ((Func<object?, Task> task, object? state) in channelReader.ReadAllAsync())
-                        await task(state);
-                }, CancellationToken.None, TaskCreationOptions.DenyChildAttach, taskScheduler);
-            }
+            if ((taskScheduler is not null) && !ReferenceEquals(taskScheduler, TaskScheduler.Default))
+                _taskScheduler = taskScheduler;
         }
 
         #endregion
 
         #region IDisposable
 
-        bool _disposed;
+        volatile bool _disposed;
 
         public void Dispose()
         {
             if (_disposed)
                 return;
 
-            _channelWriter?.TryComplete();
-
             _disposed = true;
             GC.SuppressFinalize(this);
+        }
+
+        #endregion
+
+        #region private
+
+        private bool TryAcquireSlot()
+        {
+            if (Interlocked.Increment(ref _running) <= _maximumConcurrencyLevel)
+                return true;
+
+            Interlocked.Decrement(ref _running);
+            return false;
+        }
+
+        private void Start((Func<object?, Task> Task, object? State) item)
+        {
+            if (_taskScheduler is null)
+            {
+                ThreadPool.UnsafeQueueUserWorkItem(static delegate ((TaskPool Pool, (Func<object?, Task> Task, object? State) Item) state)
+                {
+                    _ = state.Pool.RunAsync(state.Item);
+                }, (this, item), false);
+            }
+            else
+            {
+                _ = Task.Factory.StartNew(delegate ()
+                {
+                    return RunAsync(item);
+                }, CancellationToken.None, TaskCreationOptions.DenyChildAttach, _taskScheduler);
+            }
+        }
+
+        private async Task RunAsync((Func<object?, Task> Task, object? State) item)
+        {
+            try
+            {
+                await item.Task(item.State);
+            }
+            catch
+            { }
+            finally
+            {
+                Interlocked.Decrement(ref _running);
+                Drain();
+            }
+        }
+
+        private void Drain()
+        {
+            while (!_queue.IsEmpty)
+            {
+                if (!TryAcquireSlot())
+                    return;
+
+                if (!_queue.TryDequeue(out (Func<object?, Task> Task, object? State) item))
+                {
+                    Interlocked.Decrement(ref _running);
+                    return;
+                }
+
+                Interlocked.Decrement(ref _queued);
+                Start(item);
+            }
         }
 
         #endregion
@@ -96,7 +143,26 @@ namespace ZenitiumLibrary
 
         public bool TryQueueTask(Func<object?, Task> task, object? state)
         {
-            return _channelWriter.TryWrite((task, state));
+            if (_disposed)
+                return false;
+
+            if (_queue.IsEmpty && TryAcquireSlot())
+            {
+                Start((task, state));
+                return true;
+            }
+
+            int queued = Interlocked.Increment(ref _queued);
+
+            if ((_queueSize > 0) && (queued > _queueSize))
+            {
+                Interlocked.Decrement(ref _queued);
+                return false;
+            }
+
+            _queue.Enqueue((task, state));
+            Drain();
+            return true;
         }
 
         #endregion
@@ -108,6 +174,9 @@ namespace ZenitiumLibrary
 
         public int MaximumConcurrencyLevel
         { get { return _maximumConcurrencyLevel; } }
+
+        public int QueuedTasks
+        { get { return Math.Max(0, Volatile.Read(ref _queued)); } }
 
         #endregion
     }

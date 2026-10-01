@@ -249,3 +249,8 @@ Other/
 setup/debian/dist/
 
 __pycache__/
+
+tools/benchmark/results/
+tools/benchmark/dnsload
+tools/benchmark/tlsload/bin/
+tools/benchmark/tlsload/obj/

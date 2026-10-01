@@ -54,6 +54,57 @@ namespace DropRequests
 
         #endregion
 
+        #region private
+
+        private bool IsAllowedLocalEndPoint(DnsDatagram request)
+        {
+            if ((request.Metadata is null) || (request.Metadata.NameServer is null))
+                return false;
+
+            Uri requestLocalUriEP = request.Metadata.NameServer.DoHEndPoint;
+            if (requestLocalUriEP is not null)
+            {
+                foreach (EndPoint localEP in _allowedLocalEndPoints)
+                {
+                    if (localEP is DomainEndPoint ep)
+                    {
+                        if (((ep.Port == 0) || (ep.Port == requestLocalUriEP.Port)) && ep.Address.Equals(requestLocalUriEP.Host, StringComparison.OrdinalIgnoreCase))
+                            return true;
+                    }
+                }
+            }
+
+            DomainEndPoint requestLocalDomainEP = request.Metadata.NameServer.DomainEndPoint;
+            if (requestLocalDomainEP is not null)
+            {
+                foreach (EndPoint localEP in _allowedLocalEndPoints)
+                {
+                    if (localEP is DomainEndPoint ep)
+                    {
+                        if (((ep.Port == 0) || (ep.Port == requestLocalDomainEP.Port)) && ep.Address.Equals(requestLocalDomainEP.Address, StringComparison.OrdinalIgnoreCase))
+                            return true;
+                    }
+                }
+            }
+
+            IPEndPoint requestLocalEP = request.Metadata.NameServer.IPEndPoint;
+            if (requestLocalEP is not null)
+            {
+                foreach (EndPoint localEP in _allowedLocalEndPoints)
+                {
+                    if (localEP is IPEndPoint ep)
+                    {
+                        if (((ep.Port == 0) || (ep.Port == requestLocalEP.Port)) && ep.Address.Equals(requestLocalEP.Address))
+                            return true;
+                    }
+                }
+            }
+
+            return false;
+        }
+
+        #endregion
+
         #region public
 
         public async Task InitializeAsync(IDnsServer dnsServer, string? config)
@@ -134,52 +185,8 @@ namespace DropRequests
                     return Task.FromResult(DnsRequestControllerAction.DropSilently);
             }
 
-            if (_allowedLocalEndPoints.Length > 0)
-            {
-                if ((request.Metadata is not null) && (request.Metadata.NameServer is not null))
-                {
-                    Uri requestLocalUriEP = request.Metadata.NameServer.DoHEndPoint;
-                    if (requestLocalUriEP is not null)
-                    {
-                        foreach (EndPoint localEP in _allowedLocalEndPoints)
-                        {
-                            if (localEP is DomainEndPoint ep)
-                            {
-                                if (((ep.Port == 0) || (ep.Port == requestLocalUriEP.Port)) && ep.Address.Equals(requestLocalUriEP.Host, StringComparison.OrdinalIgnoreCase))
-                                    return Task.FromResult(DnsRequestControllerAction.Allow);
-                            }
-                        }
-                    }
-
-                    DomainEndPoint requestLocalDomainEP = request.Metadata.NameServer.DomainEndPoint;
-                    if (requestLocalDomainEP is not null)
-                    {
-                        foreach (EndPoint localEP in _allowedLocalEndPoints)
-                        {
-                            if (localEP is DomainEndPoint ep)
-                            {
-                                if (((ep.Port == 0) || (ep.Port == requestLocalDomainEP.Port)) && ep.Address.Equals(requestLocalDomainEP.Address, StringComparison.OrdinalIgnoreCase))
-                                    return Task.FromResult(DnsRequestControllerAction.Allow);
-                            }
-                        }
-                    }
-
-                    IPEndPoint requestLocalEP = request.Metadata.NameServer.IPEndPoint;
-                    if (requestLocalEP is not null)
-                    {
-                        foreach (EndPoint localEP in _allowedLocalEndPoints)
-                        {
-                            if (localEP is IPEndPoint ep)
-                            {
-                                if (((ep.Port == 0) || (ep.Port == requestLocalEP.Port)) && ep.Address.Equals(requestLocalEP.Address))
-                                    return Task.FromResult(DnsRequestControllerAction.Allow);
-                            }
-                        }
-                    }
-                }
-
+            if ((_allowedLocalEndPoints.Length > 0) && !IsAllowedLocalEndPoint(request))
                 return Task.FromResult(DnsRequestControllerAction.DropSilently);
-            }
 
             if (request.Question.Count > 0)
             {

@@ -23,6 +23,29 @@ var reverseProxyDetected = false;
 var quickBlockLists = null;
 var quickForwardersList = null;
 
+function onServerReconnected() {
+    if (typeof resetLiveSystem === "function")
+        resetLiveSystem();
+
+    switch ($("ul.main-nav li.active").attr("id")) {
+        case "mainPanelTabListDashboard":
+            refreshDashboard(true);
+            break;
+
+        case "mainPanelTabListSelfTest":
+            refreshSelfTest(false);
+            break;
+
+        case "mainPanelTabListDhcp":
+            if ($("#dhcpTabListStatus").hasClass("active"))
+                refreshDhcpStatus();
+            else if ($("#dhcpTabListLeases").hasClass("active"))
+                refreshDhcpLeases();
+
+            break;
+    }
+}
+
 function showPageLogin(autoLogin) {
     hideAlert();
 
@@ -160,6 +183,7 @@ function showPageMain() {
         { list: "#mainPanelTabListDashboard", pane: "#mainPanelTabPaneDashboard", visible: permissions.Dashboard.canView, open: function () { refreshDashboard(); } },
         { list: "#mainPanelTabListResolver", pane: "#mainPanelTabPaneResolver", visible: canViewResolver, open: function () { refreshResolverTab(); } },
         { list: "#mainPanelTabListFilter", pane: "#mainPanelTabPaneFilter", visible: canViewFilter, open: null },
+        { list: "#mainPanelTabListDhcp", pane: "#mainPanelTabPaneDhcp", visible: (permissions.DhcpServer != null) && permissions.DhcpServer.canView, open: function () { refreshDhcpTab(); } },
         { list: "#mainPanelTabListApps", pane: "#mainPanelTabPaneApps", visible: permissions.Apps.canView, open: function () { refreshApps(); } },
         { list: "#mainPanelTabListDnsClient", pane: "#mainPanelTabPaneDnsClient", visible: permissions.DnsClient.canView, open: null },
         { list: "#mainPanelTabListLogs", pane: "#mainPanelTabPaneLogs", visible: permissions.Logs.canView, open: function () { refreshLogsTab(); } },

@@ -6,7 +6,7 @@ ZenitiumDNS liest Block- und Erlaubnislisten in mehreren Formaten und kann versc
 
 ## Listenformate
 
-Alle Formate lassen sich in einer Liste mischen. Zeilen, die mit `!`, `#` oder `[` beginnen, sind Kommentare.
+Alle Formate lassen sich in einer Liste mischen. Zeilen, die mit `!` oder `#` beginnen, Kopfzeilen wie `[Adblock Plus 2.0]` und Text nach ` #` in einer Hosts- oder Domainzeile sind Kommentare.
 
 | Format | Beispiel | Wirkung |
 | ------ | -------- | ------- |
@@ -77,13 +77,13 @@ Die ClientID kommt aus verschlüsseltem DNS:
 | DNS-over-TLS | Servername `kinder.dns.example.com` |
 | DNS-over-QUIC | Servername `kinder.dns.example.com` |
 
-Für DoT und DoQ muss das TLS-Zertifikat auch für `*.dns.example.com` gelten. Der erste Teil des Servernamens zählt nur als ClientID, wenn ein Profil sie verwendet; der normale Servername funktioniert also weiter. Hinter einem Reverse Proxy für DoH muss der Pfad unverändert weitergegeben werden. Normales DNS über Port 53 kennt nur die IP-Adresse.
+Für DoT und DoQ muss das TLS-Zertifikat auch für `*.dns.example.com` gelten; der Dialog der Client-Profile und der Selbsttest warnen, wenn das nicht der Fall ist. Der erste Teil des Servernamens zählt nur als ClientID, wenn ein Profil sie verwendet; der normale Servername funktioniert also weiter. Hinter einem Reverse Proxy für DoH muss der Pfad unverändert weitergegeben werden. Normales DNS über Port 53 kennt nur die IP-Adresse.
 
 ### API
 
 | Aufruf | Parameter |
 | ------ | --------- |
-| `api/settings/clients/list` | keine; liefert die Profile, die Standardlisten sowie Servername und Ports, die für ClientIDs gebraucht werden |
+| `api/settings/clients/list` | keine; liefert die Profile, die Standardlisten, Servername und Ports, die für ClientIDs gebraucht werden, und ob das Zertifikat die Servernamen mit ClientID abdeckt (`hasTlsCertificate`, `tlsHostName`, `tlsWildcardDomains`) |
 | `api/settings/clients/set` | `name`, `identifiers` (zeilen- oder kommagetrennt), `blockingEnabled`, `useDefaultLists`, `blockListUrls` (zeilen- oder kommagetrennt), `originalName` zum Ändern eines vorhandenen Profils |
 | `api/settings/clients/delete` | `name` |
 

@@ -31,6 +31,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using ZenitiumDns.ApplicationCommon;
+using ZenitiumDns.Core.Dhcp;
 using ZenitiumDns.Core.Dns;
 using ZenitiumLibrary.Net;
 using ZenitiumLibrary.Net.Dns;
@@ -463,6 +464,21 @@ namespace ZenitiumDns.Core
                 w.Header("zenitiumdns_cache_memory_trimmed_entries_total", "counter", "Cache records removed because the memory limit was exceeded");
                 w.Sample("zenitiumdns_cache_memory_trimmed_entries_total", dnsServer.CacheZoneManager.MemoryTrimmedEntries);
 
+                w.Header("zenitiumdns_memory_pressure_ratio", "gauge", "Highest memory usage ratio of the system, the service or container memory limit and the .NET heap limit, measured every 2 seconds");
+                w.Sample("zenitiumdns_memory_pressure_ratio", dnsServer.CacheZoneManager.LastMemoryPressure.Ratio);
+
+                w.Header("zenitiumdns_cache_pressure_trims_total", "counter", "Times the cache was cut because memory was almost full");
+                w.Sample("zenitiumdns_cache_pressure_trims_total", dnsServer.CacheZoneManager.PressureTrims);
+
+                w.Header("zenitiumdns_gc_paced_collections_total", "counter", "Short gen0 collections started early because many new cache entries were created");
+                w.Sample("zenitiumdns_gc_paced_collections_total", dnsServer.CacheZoneManager.PacedCollections);
+
+                w.Header("zenitiumdns_cache_pressure_trimmed_entries_total", "counter", "Cache records removed because memory was almost full");
+                w.Sample("zenitiumdns_cache_pressure_trimmed_entries_total", dnsServer.CacheZoneManager.PressureTrimmedEntries);
+
+                w.Header("zenitiumdns_cache_pressure_cap_entries", "gauge", "Temporary cache size cap while memory is almost full (0 = none)");
+                w.Sample("zenitiumdns_cache_pressure_cap_entries", dnsServer.CacheZoneManager.PressureCapEntries);
+
                 w.Header("zenitiumdns_aggressive_nsec_enabled", "gauge", "Whether aggressive use of DNSSEC-validated cache (RFC 8198) is enabled");
                 w.Sample("zenitiumdns_aggressive_nsec_enabled", dnsServer.CacheZoneManager.AggressiveNsec ? 1 : 0);
 
@@ -517,9 +533,73 @@ namespace ZenitiumDns.Core
                 w.Header("zenitiumdns_query_logging_suspended", "gauge", "Whether the watchdog has suspended query logging for the rest of the day");
                 w.Sample("zenitiumdns_query_logging_suspended", _dnsWebService._log.IsQueryLoggingSuspended ? 1 : 0);
 
+                WriteDhcpMetrics(w);
                 WriteProcessMetrics(w);
 
                 return w.ToString();
+            }
+
+            private void WriteDhcpMetrics(MetricsWriter w)
+            {
+                DhcpServer dhcpServer = _dnsWebService._dhcpServer;
+
+                if (dhcpServer is null)
+                    return;
+
+                DhcpSettings settings = dhcpServer.Settings;
+
+                if (!settings.Enabled)
+                    return;
+
+                IReadOnlyDictionary<string, long> counters = dhcpServer.GetCounters();
+
+                long Counter(string key)
+                {
+                    return counters.TryGetValue(key, out long value) ? value : 0;
+                }
+
+                w.Header("zenitiumdns_dhcp_serving", "gauge", "Whether this node currently hands out DHCP addresses");
+                w.Sample("zenitiumdns_dhcp_serving", dhcpServer.IsServing ? 1 : 0);
+
+                w.Header("zenitiumdns_dhcp_offers_paused", "gauge", "Whether offers are paused because another DHCP server answers (standby priority)");
+                w.Sample("zenitiumdns_dhcp_offers_paused", dhcpServer.OffersPaused ? 1 : 0);
+
+                w.Header("zenitiumdns_dhcp_config_errors", "gauge", "Errors in the DHCP configuration (no addresses are handed out while above 0)");
+                w.Sample("zenitiumdns_dhcp_config_errors", dhcpServer.ConfigErrors.Count);
+
+                w.Header("zenitiumdns_dhcp_messages_total", "counter", "DHCP messages processed by type");
+                foreach (string type in new string[] { "discover", "offer", "request", "ack", "nak", "decline", "release", "inform" })
+                    w.Sample("zenitiumdns_dhcp_messages_total", Counter(type), "type", type);
+
+                w.Header("zenitiumdns_dhcp_packets_total", "counter", "DHCP packets received, sent and dropped");
+                w.Sample("zenitiumdns_dhcp_packets_total", Counter("received"), "result", "received");
+                w.Sample("zenitiumdns_dhcp_packets_total", Counter("sent"), "result", "sent");
+                w.Sample("zenitiumdns_dhcp_packets_total", Counter("malformed"), "result", "malformed");
+                w.Sample("zenitiumdns_dhcp_packets_total", Counter("rateLimited"), "result", "rate_limited");
+                w.Sample("zenitiumdns_dhcp_packets_total", Counter("busy"), "result", "busy");
+                w.Sample("zenitiumdns_dhcp_packets_total", Counter("ignored"), "result", "ignored");
+
+                w.Header("zenitiumdns_dhcp_pool_exhausted_total", "counter", "Requests that found no free address");
+                w.Sample("zenitiumdns_dhcp_pool_exhausted_total", Counter("poolExhausted"));
+
+                w.Header("zenitiumdns_dhcp_conflicts_total", "counter", "Addresses found in use by ping check or DHCPDECLINE");
+                w.Sample("zenitiumdns_dhcp_conflicts_total", Counter("conflicts"));
+
+                (int total, int used) = dhcpServer.GetPoolUsage();
+                w.Header("zenitiumdns_dhcp_pool_addresses", "gauge", "Dynamic pool addresses in total and in use");
+                w.Sample("zenitiumdns_dhcp_pool_addresses", total, "state", "total");
+                w.Sample("zenitiumdns_dhcp_pool_addresses", used, "state", "used");
+
+                DateTime recent = DateTime.UtcNow.AddSeconds(-Math.Max(900, settings.RogueProbeIntervalSeconds * 3));
+                int foreign = 0;
+                foreach (DhcpForeignServer server in dhcpServer.GetForeignServers())
+                {
+                    if (server.LastSeen >= recent)
+                        foreign++;
+                }
+
+                w.Header("zenitiumdns_dhcp_foreign_servers", "gauge", "Other DHCP servers seen in the network recently");
+                w.Sample("zenitiumdns_dhcp_foreign_servers", foreign);
             }
 
             #endregion

@@ -214,7 +214,7 @@ function updateClientProfileUsage() {
     for (var i = 0; i < lines.length; i++) {
         var value = lines[i].trim().toLowerCase();
 
-        if (/^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/.test(value) && !/^[0-9]+$/.test(value))
+        if (/^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/.test(value))
             clientIds.push(value);
     }
 
@@ -223,7 +223,8 @@ function updateClientProfileUsage() {
         return;
     }
 
-    var serverDomain = clientProfilesData.serverDomain;
+    var hostName = clientProfilesData.tlsHostName || clientProfilesData.serverDomain;
+    var wildcardDomains = clientProfilesData.tlsWildcardDomains || [];
     var html = "";
 
     for (var j = 0; j < clientIds.length; j++) {
@@ -231,17 +232,22 @@ function updateClientProfileUsage() {
 
         if (clientProfilesData.enableDnsOverHttps) {
             var port = clientProfilesData.dnsOverHttpsPort;
-            html += "<div><strong>DoH</strong> <code>https://" + htmlEncode(serverDomain) + (port === 443 ? "" : ":" + port) + "/dns-query/" + htmlEncode(id) + "</code></div>";
+            html += "<div><strong>DoH</strong> <code>https://" + htmlEncode(hostName) + (port === 443 ? "" : ":" + port) + "/dns-query/" + htmlEncode(id) + "</code></div>";
         }
 
-        if (clientProfilesData.enableDnsOverTls || clientProfilesData.enableDnsOverQuic)
-            html += "<div><strong>" + (clientProfilesData.enableDnsOverTls && clientProfilesData.enableDnsOverQuic ? "DoT/DoQ" : (clientProfilesData.enableDnsOverTls ? "DoT" : "DoQ")) + "</strong> <code>" + htmlEncode(id + "." + serverDomain) + "</code></div>";
+        if ((clientProfilesData.enableDnsOverTls || clientProfilesData.enableDnsOverQuic) && (wildcardDomains.length > 0))
+            html += "<div><strong>" + (clientProfilesData.enableDnsOverTls && clientProfilesData.enableDnsOverQuic ? "DoT/DoQ" : (clientProfilesData.enableDnsOverTls ? "DoT" : "DoQ")) + "</strong> <code>" + htmlEncode(id + "." + wildcardDomains[0]) + "</code></div>";
+    }
+
+    if (clientProfilesData.enableDnsOverTls || clientProfilesData.enableDnsOverQuic) {
+        if (!clientProfilesData.hasTlsCertificate)
+            html += "<div class=\"text-warning\">" + htmlEncode(tr("Für DNS-over-TLS und DNS-over-QUIC ist kein Zertifikat eingerichtet.")) + "</div>";
+        else if (wildcardDomains.length === 0)
+            html += "<div class=\"text-warning\">" + htmlEncode(tr("DNS-over-TLS und DNS-over-QUIC erkennen die ClientID am Servernamen und brauchen dafür ein Wildcard-Zertifikat (*.{0}). Das eingerichtete Zertifikat hat keinen Wildcard-Eintrag, deshalb funktioniert die ClientID derzeit nur über DNS-over-HTTPS.", hostName)) + "</div>";
     }
 
     if (html === "")
         html = "<span class=\"text-muted\">" + htmlEncode(tr("ClientIDs wirken nur über DNS-over-HTTPS, DNS-over-TLS oder DNS-over-QUIC. Diese Protokolle sind derzeit ausgeschaltet.")) + "</span>";
-    else if (clientProfilesData.enableDnsOverTls || clientProfilesData.enableDnsOverQuic)
-        html += "<div class=\"text-muted\">" + htmlEncode(tr("Für DoT und DoQ muss das Zertifikat auch *.{0} abdecken.", serverDomain)) + "</div>";
 
     div.html(html);
 }

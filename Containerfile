@@ -11,6 +11,7 @@ RUN case "$TARGETARCH" in \
         *) echo "Unsupported architecture: $TARGETARCH" >&2; exit 1 ;; \
     esac \
     && dotnet publish src/ZenitiumDns/ZenitiumDns.csproj -c Release -r "$rid" --self-contained true -p:PublishReadyToRun=true -p:DebugType=embedded -o /out/opt/zenitiumdns --nologo -v quiet -clp:ErrorsOnly \
+    && dotnet run --project tools/WebMinifier/WebMinifier.csproj -c Release -v quiet -- /out/opt/zenitiumdns/www /out/opt/zenitiumdns/dohwww \
     && rm -f /out/opt/zenitiumdns/install.sh /out/opt/zenitiumdns/uninstall.sh /out/opt/zenitiumdns/start.sh /out/opt/zenitiumdns/openrc.service /out/opt/zenitiumdns/systemd.service \
     && mkdir -p /out/usr/share/zenitiumdns/apps \
     && for project in apps/*/*.csproj; do \

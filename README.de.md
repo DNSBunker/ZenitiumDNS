@@ -16,24 +16,25 @@ ZenitiumDNS ist ein quelloffener rekursiver DNS-Resolver, den du selbst betreibe
 
 Um die Namensauflösung kümmert sich kaum jemand, denn sie läuft automatisch im Hintergrund und ist schwer zu durchschauen. Die meisten Programme nutzen den DNS-Resolver des Betriebssystems, der wiederum per UDP den DNS-Server des Internetanbieters fragt. Das funktioniert, aber der Anbieter sieht und kontrolliert damit, welche Webseiten du aufrufst, auch wenn diese HTTPS verwenden. Manche Anbieter leiten Anfragen sogar um, blockieren sie oder verändern Inhalte. ZenitiumDNS nimmt Anfragen über UDP, TCP, [DNS-over-TLS](https://de.wikipedia.org/wiki/DNS_over_TLS), [DNS-over-HTTPS](https://de.wikipedia.org/wiki/DNS_over_HTTPS) und [DNS-over-QUIC](https://www.ietf.org/rfc/rfc9250.html) entgegen und löst sie als rekursiver Resolver direkt über die Root-Server auf, auf Wunsch mit DNSSEC-Validierung. Alternativ nutzt er Forwarder über dieselben verschlüsselten Protokolle.
 
-Der Funktionsumfang ist auf den Betrieb als Resolver zugeschnitten. Autoritative Zonen, Zonentransfers, DHCP-Server, Clustering und die Windows-Komponenten des Originals sind entfernt. Für interne Domains gibt es Weiterleitungszonen (Conditional Forwarder), in denen sich einzelne Einträge lokal überschreiben lassen.
+Der Funktionsumfang ist auf den Betrieb als Resolver zugeschnitten. Autoritative Zonen, Zonentransfers, der ursprüngliche DHCP-Server samt Clustering und die Windows-Komponenten des Originals sind entfernt; an die Stelle des alten DHCP-Servers tritt ein neu geschriebener. Für interne Domains gibt es Weiterleitungszonen (Conditional Forwarder), in denen sich einzelne Einträge lokal überschreiben lassen.
 
 # Herkunft
 ZenitiumDNS ist ein Fork von [Technitium DNS Server](https://github.com/TechnitiumSoftware/DnsServer) und [TechnitiumLibrary](https://github.com/TechnitiumSoftware/TechnitiumLibrary) von Shreyas Zare auf Basis von Version 15.5.1. Beide Projekte stehen unter der GNU General Public License v3.0, ebenso dieser Fork. Welche Änderungen der Fork enthält, steht in [NOTICE.de.md](NOTICE.de.md). Alle Unterschiede zum Original-Build mit Messwerten sind in [CHANGELOG-ZenitiumDNS.de.md](CHANGELOG-ZenitiumDNS.de.md) aufgeführt.
 
 # Was ZenitiumDNS gegenüber dem Original bietet
-- Auf öffentliche Resolver zugeschnitten: Autoritative Zonen (Primary, Secondary, Stub, Catalog), DNSSEC-Signierung, Zonentransfers, NOTIFY, dynamische Updates, TSIG, DHCP-Server, Clustering, Windows-Dienst, Systemtray und Windows-Installer sind entfernt. Das verkleinert Angriffsfläche und Weboberfläche.
+- Auf öffentliche Resolver zugeschnitten: Autoritative Zonen (Primary, Secondary, Stub, Catalog), DNSSEC-Signierung, Zonentransfers, NOTIFY, dynamische Updates, TSIG, der ursprüngliche DHCP-Server samt Clustering, Windows-Dienst, Systemtray und Windows-Installer sind entfernt. Das verkleinert Angriffsfläche und Weboberfläche.
 - Anfragefilter nach dem Vorbild von dnsdist, standardmäßig aktiv: Anfragen, die auf einem öffentlichen Resolver nichts verloren haben (ANY, AXFR/IXFR, fremde Opcodes und Klassen, ohne RD-Flag, übergroß oder fehlerhaft), werden über UDP verworfen und über TCP, DoT, DoH und DoQ abgewiesen.
 - Ratenbegrenzung in Anfragen pro Sekunde mit Token-Bucket je Client-Subnetz, CGNAT-taugliche Standardwerte und Client-Sperrlisten wie IPsum oder Spamhaus DROP, deren Adressen schon vor dem Auswerten der Anfrage verworfen werden.
 - Lokale, vollständig geprüfte Kopie der Root-Zone und der arpa-Zone nach RFC 8806 mit ZONEMD-Prüfung: Delegationen kommen aus dem Speicher, nicht existierende Top-Level-Domains beantwortet der Resolver selbst. Die Root-Vertrauensanker werden signaturgeprüft von IANA übernommen. Alles lässt sich abschalten oder durch eigene, in der Weboberfläche bearbeitete Versionen ersetzen.
 - Do53 wahlweise voll, nur für DDR (andere Anfragen verworfen oder abgelehnt) oder ganz abgeschaltet.
-- Wächter, der bei vollem Datenträger, Speichermangel, überlaufenden Warteschlangen oder ausgefallenen Diensten selbst eingreift, dazu Echtzeitgraphen interner Prozesse.
-- Selbsttest, der Dienste, Auflösung, DNSSEC, Zertifikate, Sicherheitseinstellungen, Listen und Systemgrenzen prüft und schwere Probleme auf der Übersicht meldet.
+- Wächter, der bei vollem Datenträger, überlaufenden Warteschlangen oder ausgefallenen Diensten selbst eingreift, dazu Echtzeitgraphen interner Prozesse.
+- Schutz vor Abstürzen durch Speichermangel: Alle 2 Sekunden prüft der Server den Arbeitsspeicher des Systems, die Speichergrenze des Dienstes oder Containers und die Heap-Grenze von .NET; ab 85 % wächst der Cache nicht mehr, ab 90 % werden die am längsten ungenutzten Einträge entfernt und der Speicher kompaktiert.
+- Selbsttest, der Dienste, Auflösung, DNSSEC, Zertifikate, Sicherheitseinstellungen, Cache, Blocklisten, Client-Profile, Apps und Systemgrenzen prüft, die Ergebnisse nach Themen gruppiert mit direkten Links zu den passenden Einstellungen zeigt und schwere Probleme auf der Übersicht meldet.
 - PEM-Zertifikate wie `fullchain.pem` und `privkey.pem` ohne Umwandlung, automatische Ankündigung der verschlüsselten Dienste per DDR (RFC 9462). Der eigene Servername und die Namen im Zertifikat werden nie blockiert.
 - Firefox-Canary und Chromes Preflight-Prüfung lassen sich per Schalter beantworten, damit Browser beim Resolver bleiben.
 - DNSSEC-Validierung für den Post-Quantum-Algorithmus ML-DSA-44 mit Schutz vor Downgrades auf klassische Algorithmen.
 - Eigenständiges Debian-13-Paket mit eingebauter .NET-Laufzeit, gehärtetem systemd-Dienst, zufälligem Admin-Passwort bei der Erstinstallation und vorinstallierten, standardmäßig deaktivierten Resolver-Apps, die sich über ein Formular oder direkt als JSON konfigurieren lassen.
-- Weboberfläche wahlweise auf Deutsch oder Englisch, nach der Installation beim ersten Anmelden gewählt und jederzeit in den Einstellungen umstellbar. Selbsttest, Meldungen des Servers, App-Beschreibungen und die DoH-Startseite folgen der gewählten Sprache. Eigenes Design: Seitenleiste, Messwertleiste mit Verläufen, Einstellungen in thematischen Bereichen, Hell-, Dunkel- und Bernstein-Modus, auch auf dem Smartphone bedienbar.
+- Weboberfläche wahlweise auf Deutsch oder Englisch, nach der Installation beim ersten Anmelden gewählt und jederzeit in den Einstellungen umstellbar. Selbsttest, Meldungen des Servers, App-Beschreibungen und die kurze Infoseite, die ein Browser beim Aufruf der DoH-Adresse sieht, folgen der gewählten Sprache. Eigenes Design: Seitenleiste, Messwertleiste mit Verläufen, Einstellungen in thematischen Bereichen, Hell-, Dunkel- und Bernstein-Modus, auch auf dem Smartphone bedienbar.
 - Antwortzeit-Statistik: Median, 95./99. Perzentil und Durchschnitt getrennt nach Cache und rekursiver Auflösung, als Live-Kennzahl und Verlauf.
 - Automatischer IPv6-Rückfall: Ist IPv6 gestört, pausiert der Resolver ausgehende IPv6-Anfragen und nutzt IPv4, bis IPv6 wieder funktioniert.
 - Keine Verbindungen zu Servern des Originalprojekts. Die Update-Prüfung fragt nur die Releases dieses Repositorys auf GitHub ab und zeigt Änderungen und Installationsbefehl an. Alle Apps werden mit dem Paket ausgeliefert, einen App-Store gibt es nicht.
@@ -46,6 +47,7 @@ ZenitiumDNS ist ein Fork von [Technitium DNS Server](https://github.com/Techniti
   - rund 70 % weniger CPU-Zeit pro Anfrage bei gleicher Last,
   - rund 65 % weniger Speicherallokationen,
   - keine minütlichen Hänger durch die Cache-Wartung.
+- Gegen Technitium DNS Server 15.5.1 auf derselben Maschine mit einem reproduzierbaren Benchmark-Kit gemessen, siehe [Performance](docs/Performance.de.md).
 - Deutlich weniger Speicherbedarf: 2,5 Millionen Domains aus Blocklisten belegen rund 80 statt 395 MB, die Statistik behält von jeder abgeschlossenen Minute nur die Top 1000, und ein Cache-Eintrag braucht etwa halb so viel Speicher. Unter Last ist rund 70 % weniger Speicher belegt. Eine optionale Speichergrenze verkleinert den Cache automatisch.
 - Blocklisten in der Syntax von AdGuard Home, Adblock und Pi-hole-Regex neben hosts-Dateien und reinen Domainlisten, mit Ausnahmen, Platzhaltern, regulären Ausdrücken und Modifikatoren sowie Blockierung über die IP-Adresse in der Antwort.
 - Clientprofile nach dem Vorbild von AdGuard Home: Geräte werden über IP-Adresse, Netz oder ClientID (DoH-Pfad, DoT/DoQ-Servername) erkannt und bekommen eigene Listen, lassen die Standardlisten aus oder werden gar nicht gefiltert.
@@ -94,6 +96,11 @@ ZenitiumDNS ist ein Fork von [Technitium DNS Server](https://github.com/Techniti
 - EDNS-Padding ([RFC 7830](https://www.rfc-editor.org/rfc/rfc7830), [RFC 8467](https://www.rfc-editor.org/rfc/rfc8467)) für DoT, DoH und DoQ, damit die Paketgröße nicht verrät, welche Domain abgefragt wurde.
 - HTTP- und SOCKS5-Proxys für ausgehende Anfragen, etwa über das [Tor-Netzwerk](https://www.torproject.org/).
 
+## DHCP
+- Neuer DHCPv4-Server mit einfachen Einstellungen für ein Netz und einer Expertenkonfiguration in der Syntax von dnsmasq (Bereiche, Reservierungen, Tags, Hersteller- und Benutzerklassen, Relays mit Option 82, PXE/BOOTP, gekapselte Herstelleroptionen, Rapid Commit).
+- Erkennt andere DHCP-Server im Netz und kann ihnen den Vortritt lassen (primär, nachrangig mit verzögerten Angeboten, Reserve).
+- Die Namen der Geräte werden im DNS beantwortet (A und PTR).
+
 ## Betrieb und Überwachung
 - Übersicht mit Anfragen pro Sekunde, Antwortzeiten (Median, 95./99. Perzentil), Cache-Trefferquote, Fehler- und Blockierquote, Verlauf und Top-Listen.
 - Statistik von einer Minute bis zwölf Monaten und Echtzeitgraphen interner Prozesse.
@@ -116,8 +123,8 @@ ZenitiumDNS ist ein Fork von [Technitium DNS Server](https://github.com/Techniti
 | `apps` | Mitgelieferte DNS-Apps. |
 | `setup/debian` | Build-Skript für das Debian-Paket, systemd-Dienst und Maintainer-Skripte. |
 | `Containerfile`, `setup/container` | Container-Image und sein Startskript; `.github/workflows/container.yml` baut das Image für jedes Release. |
-| `tools` | Hilfsskripte, etwa `i18n.py` zum Prüfen des englischen Wörterbuchs der Weboberfläche. |
-| `docs` | Build-Anleitung, API-Dokumentation und Übersicht der Umgebungsvariablen. |
+| `tools` | Hilfswerkzeuge: `i18n.py` prüft das englische Wörterbuch der Weboberfläche, `WebMinifier` verkleinert beim Paketbau die Web-Dateien. |
+| `docs` | Build-Anleitung, Container-Image, Blocklisten und Client-Profile, Prometheus-Metriken, Umgebungsvariablen und unterstützte RFCs. |
 
 # Schnellstart
 Fertige Debian-13-Pakete für amd64 und arm64 gibt es unter [Releases](https://github.com/DNSBunker/ZenitiumDNS/releases):
@@ -149,7 +156,7 @@ sudo apt install ./setup/debian/dist/zenitiumdns_*.deb
 Anschließend im Browser `http://<IP-Adresse-des-Servers>:5380/` öffnen, um die Weboberfläche aufzurufen. Nach der ersten Anmeldung wählst du die Sprache der Oberfläche.
 
 # Übersetzung der Weboberfläche
-Die Weboberfläche ist auf Deutsch geschrieben; `src/ZenitiumDns.Core/www/lang/en.json` ordnet jedem deutschen Text die englische Fassung zu. Statische Texte in `index.html` werden beim Laden der Seite übersetzt, in JavaScript erzeugte Texte laufen über `tr("…")` mit `{0}`, `{1}` … als Platzhaltern. Texte auf dem Server verwenden `Lang.T("Deutsch", "English")`. Nach dem Ändern oder Ergänzen von Texten zeigen
+Die Weboberfläche ist auf Deutsch geschrieben; `src/ZenitiumDns.Core/www/lang/en.json` ordnet jedem deutschen Text die englische Fassung zu. Statische Texte in `index.html` werden beim Laden der Seite übersetzt, in JavaScript erzeugte Texte laufen über `tr("…")` mit `{0}`, `{1}` … als Platzhaltern. Texte auf dem Server verwenden `Lang.T("Deutsch", "English")`, Meldungen, die gespeichert und später in der dann gewählten Sprache angezeigt werden, `Lang.L("Deutsch", "English")`. Nach dem Ändern oder Ergänzen von Texten zeigen
 
 ```
 python3 tools/i18n.py missing
@@ -165,6 +172,8 @@ fehlende Übersetzungen an und prüfen, ob Markup und Platzhalter übereinstimme
 - [Container-Image](docs/Container.de.md)
 - [Umgebungsvariablen](docs/EnvironmentVariables.de.md)
 - [Blocklisten und Clientprofile](docs/BlockLists.de.md)
+- [DHCP-Server](docs/DHCP.de.md)
+- [Performance im Vergleich mit Technitium](docs/Performance.de.md)
 - [Prometheus-Metriken](docs/Metrics.de.md)
 - [Unterstützte RFCs](docs/SupportedRFCs.de.md)
 - [Änderungsprotokoll](CHANGELOG.de.md)

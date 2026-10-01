@@ -34,7 +34,7 @@ Beim ersten Start legt der Container ein zufälliges Passwort für den Benutzer 
 podman logs zenitiumdns
 ```
 
-Das Passwort steht außerdem in `/etc/zenitiumdns/admin.password`. `http://<Host>:5380/` öffnen, anmelden, die Sprache wählen und das Passwort im Kontomenü ändern. Der Server löscht die Datei danach selbst.
+Das Passwort steht außerdem in `/etc/zenitiumdns/admin.password`. `http://<Host>:5380/` öffnen, anmelden, die Sprache wählen und das Passwort im Kontomenü ändern. Der Server löscht die Datei danach selbst, ebenso wenn der Benutzer `admin` gelöscht oder umbenannt wird.
 
 ## Ports
 
@@ -85,6 +85,8 @@ Umgebungsvariablen werden mit `-e` übergeben. Damit die Garbage Collection bei 
 ```
 -e DOTNET_GCConserveMemory=5
 ```
+
+Größe und optionale Speichergrenze des Caches stehen unter Einstellungen > Cache. Mit einer Speichergrenze für den Container (`--memory`) hält der Server den Cache selbst darunter: ab 85 % der Grenze wächst der Cache nicht mehr, ab 90 % wird er gekürzt. Leitet der Container an einen cachenden Resolver wie Unbound weiter, lässt sich der Cache dort vollständig abschalten (Cache verwenden).
 
 ## Image selbst bauen
 

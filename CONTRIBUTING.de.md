@@ -16,4 +16,6 @@ Mit dem Einreichen eines Beitrags bestätigst du:
 ## Richtlinien
 - Vorhandene Urheberrechts- und Lizenzhinweise in bestehenden Quelldateien bleiben unverändert.
 - Die Solution muss vor dem Einreichen fehlerfrei bauen.
-- Neue oder geänderte Texte der Weboberfläche werden auf Deutsch geschrieben und brauchen eine englische Übersetzung in `src/ZenitiumDns.Core/www/lang/en.json`; `python3 tools/i18n.py check` muss durchlaufen. Texte auf dem Server verwenden `Lang.T("Deutsch", "English")`.
+- Neue oder geänderte Texte der Weboberfläche werden auf Deutsch geschrieben und brauchen eine englische Übersetzung in `src/ZenitiumDns.Core/www/lang/en.json`; `python3 tools/i18n.py check` muss durchlaufen. Texte auf dem Server verwenden `Lang.T("Deutsch", "English")`, Meldungen, die gespeichert und später angezeigt werden, `Lang.L("Deutsch", "English")`.
+- Quelldateien enthalten außer dem Urheberrechts- und Lizenzkopf keine Kommentare.
+- Web-Dateien werden lesbar geschrieben; Debian-Paket und Container-Image verkleinern sie mit `tools/WebMinifier`.

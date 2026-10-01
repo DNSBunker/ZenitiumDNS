@@ -1,0 +1,28 @@
+kind=zenitiumdns
+cpus=0-3
+idle_rss_mb=115
+cache_hits_40k_answers=sent=1199999 recv=1199999 noerror=1199999 servfail=0 nxdomain=0 refused=0
+cache_hits_40k_latency=latency_us mean=136 p50=125 p90=195 p99=445 p999=1225 max=5249 samples=1080008 over2s=0
+cache_hits_40k_cpu_us_per_query=10.2
+cache_hits_40k_rss_mb=146
+cache_hits_max_offered_per_second=622087
+cache_hits_max_answers_per_second=481850
+dot_8k_answers=sent=239428 recv=239428 errors=0
+dot_8k_latency=latency_us mean=147 p50=115 p90=225 p99=935 p999=1215 samples=239428
+dot_8k_cpu_us_per_query=56.0
+resolve_2k_answers=sent=59999 recv=59999 noerror=59999 servfail=0 nxdomain=0 refused=0
+resolve_2k_latency=latency_us mean=290 p50=205 p90=325 p99=2975 p999=5605 max=15165 samples=54000 over2s=0
+resolve_2k_cpu_us_per_query=370.3
+resolve_2k_rss_mb=201
+fill_1m_answers=sent=999990 recv=999990 noerror=999990 servfail=0 nxdomain=0 refused=0
+fill_1m_latency=latency_us mean=504 p50=235 p90=795 p99=5155 p999=10105 max=31153 samples=939993 over2s=0
+fill_1m_cpu_us_per_query=100.7
+fill_1m_rss_mb=871
+fill_1m_entries=999996
+fill_1m_rss_after_20s_mb=903
+blocklist_domains=2493399
+blocklist_rss_mb=216
+blocked_40k_answers=sent=1199991 recv=1199991 noerror=600457 servfail=0 nxdomain=599534 refused=0
+blocked_40k_latency=latency_us mean=147 p50=125 p90=195 p99=685 p999=4435 max=6408 samples=1079997 over2s=0
+blocked_40k_cpu_us_per_query=12.0
+blocked_40k_rss_mb=240

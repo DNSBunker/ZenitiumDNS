@@ -16,24 +16,25 @@ ZenitiumDNS is an open source recursive DNS resolver that you run yourself – a
 
 Hardly anyone pays attention to name resolution, because it runs automatically in the background and is hard to see through. Most programs use the operating system's resolver, which in turn asks your provider's DNS server over UDP. That works, but it lets the provider see and control which websites you visit, even if they use HTTPS. Some providers even redirect, block or alter queries. ZenitiumDNS accepts queries over UDP, TCP, [DNS-over-TLS](https://en.wikipedia.org/wiki/DNS_over_TLS), [DNS-over-HTTPS](https://en.wikipedia.org/wiki/DNS_over_HTTPS) and [DNS-over-QUIC](https://www.ietf.org/rfc/rfc9250.html) and resolves them as a recursive resolver directly via the root servers, with DNSSEC validation if desired. Alternatively it uses forwarders over the same encrypted protocols.
 
-The feature set is tailored to running a resolver. Authoritative zones, zone transfers, the DHCP server, clustering and the Windows components of the original are removed. For internal domains there are forwarder zones (conditional forwarders), in which individual records can be overridden locally.
+The feature set is tailored to running a resolver. Authoritative zones, zone transfers, the original DHCP server and clustering and the Windows components of the original are removed; a newly written DHCP server takes the place of the original one. For internal domains there are forwarder zones (conditional forwarders), in which individual records can be overridden locally.
 
 # Origin
 ZenitiumDNS is a fork of [Technitium DNS Server](https://github.com/TechnitiumSoftware/DnsServer) and [TechnitiumLibrary](https://github.com/TechnitiumSoftware/TechnitiumLibrary) by Shreyas Zare, based on version 15.5.1. Both projects are licensed under the GNU General Public License v3.0, and so is this fork. The changes the fork contains are listed in [NOTICE.md](NOTICE.md). All differences from the original build, including measurements, are listed in [CHANGELOG-ZenitiumDNS.md](CHANGELOG-ZenitiumDNS.md).
 
 # What ZenitiumDNS offers compared to the original
-- Tailored to public resolvers: authoritative zones (primary, secondary, stub, catalog), DNSSEC signing, zone transfers, NOTIFY, dynamic updates, TSIG, DHCP server, clustering, Windows service, system tray and Windows installer are removed. This reduces the attack surface and the web interface.
+- Tailored to public resolvers: authoritative zones (primary, secondary, stub, catalog), DNSSEC signing, zone transfers, NOTIFY, dynamic updates, TSIG, the original DHCP server and clustering, Windows service, system tray and Windows installer are removed. This reduces the attack surface and the web interface.
 - Request filter modeled after dnsdist, active by default: queries that have no business on a public resolver (ANY, AXFR/IXFR, foreign opcodes and classes, without RD flag, oversized or malformed) are dropped over UDP and refused over TCP, DoT, DoH and DoQ.
 - Rate limiting in queries per second with a token bucket per client subnet, CGNAT-friendly defaults and client block lists such as IPsum or Spamhaus DROP whose addresses are dropped even before the query is parsed.
 - Local, fully verified copy of the root zone and the arpa zone according to RFC 8806 with ZONEMD verification: delegations come from memory, and the resolver answers nonexistent top-level domains itself. The root trust anchors are taken from IANA with signature verification. Everything can be turned off or replaced by custom versions edited in the web interface.
 - Do53 either fully enabled, DDR only (other queries dropped or refused) or turned off completely.
-- Watchdog that intervenes by itself on a full disk, memory pressure, overflowing queues or failed services, plus live graphs of internal processes.
-- Self-test that checks services, resolution, DNSSEC, certificates, security settings, lists and system limits and reports serious problems on the dashboard.
+- Watchdog that intervenes by itself on a full disk, overflowing queues or failed services, plus live graphs of internal processes.
+- Protection against out-of-memory crashes: every 2 seconds the server checks system memory, the memory limit of the service or container and the .NET heap limit; from 85 % the cache stops growing, from 90 % the least recently used entries are cut and memory is compacted.
+- Self-test that checks services, resolution, DNSSEC, certificates, security settings, cache, block lists, client profiles, apps and system limits, groups the results by topic with direct links to the matching settings and reports serious problems on the dashboard.
 - PEM certificates such as `fullchain.pem` and `privkey.pem` without conversion, automatic announcement of the encrypted services via DDR (RFC 9462). The server's own name and the names in the certificate are never blocked.
 - Firefox's canary domain and Chrome's preflight check can be answered with a switch so that browsers stay with the resolver.
 - DNSSEC validation for the post-quantum algorithm ML-DSA-44 with protection against downgrades to classic algorithms.
 - Standalone Debian 13 package with bundled .NET runtime, hardened systemd service, random admin password on first installation and preinstalled resolver apps, disabled by default, that can be configured via a form or directly as JSON.
-- Web interface in English or German, chosen at the first sign-in after installation and switchable at any time in the settings. Self-test, server messages, app descriptions and the DoH landing page follow the chosen language. Custom design: sidebar, metrics band with trends, settings grouped by topic, light, dark and amber mode, also usable on a smartphone.
+- Web interface in English or German, chosen at the first sign-in after installation and switchable at any time in the settings. Self-test, server messages, app descriptions and the short info page shown when a browser opens the DoH address follow the chosen language. Custom design: sidebar, metrics band with trends, settings grouped by topic, light, dark and amber mode, also usable on a smartphone.
 - Response time statistics: median, 95th/99th percentile and average, separately for cache and recursive resolution, as live metric and history.
 - Automatic IPv6 fallback: if IPv6 is broken, the resolver pauses outgoing IPv6 queries and uses IPv4 until IPv6 works again.
 - No connections to servers of the original project. The update check only queries the releases of this repository on GitHub and shows the changes and the install command. All apps ship with the package; there is no app store.
@@ -46,6 +47,7 @@ ZenitiumDNS is a fork of [Technitium DNS Server](https://github.com/TechnitiumSo
   - about 70 % less CPU time per query under the same load,
   - about 65 % fewer memory allocations,
   - no minute-by-minute stalls caused by cache maintenance.
+- Measured against Technitium DNS Server 15.5.1 on the same machine with a reproducible benchmark kit, see [Performance](docs/Performance.md).
 - Much lower memory use: 2.5 million block list domains take about 80 instead of 395 MB, the statistics keep only the top 1,000 entries of every completed minute, and a cache entry needs about half the memory. Under load, about 70 % less memory is in use. An optional memory limit trims the cache automatically.
 - Block lists in AdGuard Home, Adblock and Pi-hole regex syntax next to hosts files and plain domain lists, with exceptions, wildcards, regular expressions and modifiers, and blocking by the IP address in the answer.
 - Client profiles in the style of AdGuard Home: devices are recognized by IP address, network or ClientID (DoH path, DoT/DoQ server name) and get their own lists, skip the default lists or are not filtered at all.
@@ -94,6 +96,11 @@ ZenitiumDNS is a fork of [Technitium DNS Server](https://github.com/TechnitiumSo
 - EDNS padding ([RFC 7830](https://www.rfc-editor.org/rfc/rfc7830), [RFC 8467](https://www.rfc-editor.org/rfc/rfc8467)) for DoT, DoH and DoQ so that the packet size does not reveal which domain was queried.
 - HTTP and SOCKS5 proxies for outgoing queries, for example via the [Tor network](https://www.torproject.org/).
 
+## DHCP
+- New DHCPv4 server with simple settings for one network and an expert configuration in the syntax of dnsmasq (ranges, reservations, tags, vendor and user classes, relays with option 82, PXE/BOOTP, encapsulated vendor options, rapid commit).
+- Detects other DHCP servers on the network and can give way to them (primary, secondary with delayed offers, standby).
+- Names of the devices are answered in DNS (A and PTR).
+
 ## Operation and monitoring
 - Dashboard with queries per second, response times (median, 95th/99th percentile), cache hit rate, failure and block rate, history and top lists.
 - Statistics from one minute to twelve months and live graphs of internal processes.
@@ -116,8 +123,8 @@ ZenitiumDNS is a fork of [Technitium DNS Server](https://github.com/TechnitiumSo
 | `apps` | Bundled DNS apps. |
 | `setup/debian` | Build script for the Debian package, systemd service and maintainer scripts. |
 | `Containerfile`, `setup/container` | Container image and its entry point; `.github/workflows/container.yml` builds the image for every release. |
-| `tools` | Helper scripts, e.g. `i18n.py` to check the English dictionary of the web interface. |
-| `docs` | Build instructions, API documentation and overview of the environment variables. |
+| `tools` | Helper tools: `i18n.py` checks the English dictionary of the web interface, `WebMinifier` shrinks the web files when packaging. |
+| `docs` | Build instructions, container image, block lists and client profiles, Prometheus metrics, environment variables and supported RFCs. |
 
 # Quick start
 Ready-made Debian 13 packages for amd64 and arm64 are available under [Releases](https://github.com/DNSBunker/ZenitiumDNS/releases):
@@ -149,7 +156,7 @@ sudo apt install ./setup/debian/dist/zenitiumdns_*.deb
 Then open `http://<server-ip-address>:5380/` in your browser to access the web interface. After the first sign-in you choose the interface language.
 
 # Translating the web interface
-The web interface is written in German; `src/ZenitiumDns.Core/www/lang/en.json` maps every German text to English. Static texts in `index.html` are translated when the page loads, texts built in JavaScript go through `tr("…")`, with `{0}`, `{1}` … as placeholders. Server-side texts use `Lang.T("German", "English")`. After changing or adding texts, run
+The web interface is written in German; `src/ZenitiumDns.Core/www/lang/en.json` maps every German text to English. Static texts in `index.html` are translated when the page loads, texts built in JavaScript go through `tr("…")`, with `{0}`, `{1}` … as placeholders. Server-side texts use `Lang.T("German", "English")`, or `Lang.L("German", "English")` for messages that are stored and shown later in the language chosen at that time. After changing or adding texts, run
 
 ```
 python3 tools/i18n.py missing
@@ -165,6 +172,8 @@ to list missing translations and to verify that markup and placeholders match. `
 - [Container image](docs/Container.md)
 - [Environment variables](docs/EnvironmentVariables.md)
 - [Block lists and client profiles](docs/BlockLists.md)
+- [DHCP server](docs/DHCP.md)
+- [Performance compared with Technitium](docs/Performance.md)
 - [Prometheus metrics](docs/Metrics.md)
 - [Supported RFCs](docs/SupportedRFCs.md)
 - [Changelog](CHANGELOG.md)

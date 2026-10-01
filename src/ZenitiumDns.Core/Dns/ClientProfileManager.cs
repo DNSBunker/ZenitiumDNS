@@ -201,6 +201,20 @@ namespace ZenitiumDns.Core.Dns
             return true;
         }
 
+        private void BackupInvalidFile(string file)
+        {
+            try
+            {
+                string backupFile = file + ".invalid";
+                File.Copy(file, backupFile, true);
+                _dnsServer.LogManager.Write("DNS Server saved a copy of the client profiles file as: " + backupFile);
+            }
+            catch (Exception ex)
+            {
+                _dnsServer.LogManager.Write(ex);
+            }
+        }
+
         #endregion
 
         #region public
@@ -264,7 +278,7 @@ namespace ZenitiumDns.Core.Dns
 
                 string normalized;
 
-                if (IPAddress.TryParse(identifier, out IPAddress address) && !identifier.Contains('/'))
+                if (!identifier.Contains('/') && IPAddressExtensions.TryParseStrict(identifier, out IPAddress address))
                 {
                     if (address.IsIPv4MappedToIPv6)
                         address = address.MapToIPv4();
@@ -273,7 +287,7 @@ namespace ZenitiumDns.Core.Dns
                 }
                 else if (identifier.Contains('/'))
                 {
-                    if (!NetworkAddress.TryParse(identifier, out NetworkAddress network))
+                    if (!IPAddressExtensions.TryParseStrictNetwork(identifier, out NetworkAddress network))
                         throw new ArgumentException("Invalid network address: " + identifier);
 
                     normalized = network.ToString();
@@ -343,28 +357,68 @@ namespace ZenitiumDns.Core.Dns
             try
             {
                 List<ClientProfile> profiles = new List<ClientProfile>();
+                int skipped = 0;
 
                 using (JsonDocument document = JsonDocument.Parse(File.ReadAllBytes(file)))
                 {
-                    if (document.RootElement.TryGetProperty("profiles", out JsonElement jsonProfiles))
+                    if (document.RootElement.TryGetProperty("profiles", out JsonElement jsonProfiles) && (jsonProfiles.ValueKind == JsonValueKind.Array))
                     {
+                        HashSet<string> names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                        HashSet<string> usedIdentifiers = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                        int position = 0;
+
                         foreach (JsonElement jsonProfile in jsonProfiles.EnumerateArray())
                         {
-                            ClientProfile profile = ReadProfile(jsonProfile);
-                            profiles.Add(Normalize(profile.Name, profile.Identifiers, profile.BlockingEnabled, profile.UseDefaultLists, profile.BlockListUrls));
+                            position++;
+
+                            try
+                            {
+                                ClientProfile read = ReadProfile(jsonProfile);
+                                ClientProfile profile = Normalize(read.Name, read.Identifiers, read.BlockingEnabled, read.UseDefaultLists, read.BlockListUrls);
+
+                                if (profiles.Count >= MAX_PROFILES)
+                                    throw new ArgumentException("Cannot load more than " + MAX_PROFILES + " client profiles.");
+
+                                if (!names.Add(profile.Name))
+                                    throw new ArgumentException("A client profile with the same name already exists: " + profile.Name);
+
+                                List<string> identifiers = new List<string>(profile.Identifiers.Count);
+
+                                foreach (string identifier in profile.Identifiers)
+                                {
+                                    if (usedIdentifiers.Add(identifier))
+                                        identifiers.Add(identifier);
+                                    else
+                                        _dnsServer.LogManager.Write("DNS Server ignored the client identifier '" + identifier + "' of the client profile '" + profile.Name + "' since it is already used by another profile.");
+                                }
+
+                                if (identifiers.Count != profile.Identifiers.Count)
+                                    profile = new ClientProfile(profile.Name, identifiers, profile.BlockingEnabled, profile.UseDefaultLists, profile.BlockListUrls);
+
+                                profiles.Add(profile);
+                            }
+                            catch (Exception ex)
+                            {
+                                skipped++;
+                                _dnsServer.LogManager.Write("DNS Server skipped the client profile at position " + position + " in " + file + ": " + ex.Message);
+                            }
                         }
                     }
                 }
+
+                if (skipped > 0)
+                    BackupInvalidFile(file);
 
                 lock (_lock)
                 {
                     Apply(ProfileIndex.Create(profiles), initial);
                 }
 
-                _dnsServer.LogManager.Write("DNS Server client profiles file was loaded: " + file);
+                _dnsServer.LogManager.Write("DNS Server client profiles file was loaded: " + file + (skipped > 0 ? " (" + skipped + " invalid profiles skipped)" : ""));
             }
             catch (Exception ex)
             {
+                BackupInvalidFile(file);
                 _dnsServer.LogManager.Write("DNS Server encountered an error while loading client profiles file: " + file, ex);
             }
         }
@@ -530,6 +584,9 @@ namespace ZenitiumDns.Core.Dns
         public int Count
         { get { return _index.Profiles.Length; } }
 
+        public bool HasClientIds
+        { get { return _index.ByClientId.Count > 0; } }
+
         #endregion
 
         sealed class ProfileIndex
@@ -571,7 +628,7 @@ namespace ZenitiumDns.Core.Dns
 
                         if (identifier.Contains('/'))
                             byNetwork.Add((NetworkAddress.Parse(identifier), profile));
-                        else if (IPAddress.TryParse(identifier, out IPAddress address))
+                        else if (IPAddressExtensions.TryParseStrict(identifier, out IPAddress address))
                             byAddress.Add(address, profile);
                         else
                             byClientId.Add(identifier, profile);

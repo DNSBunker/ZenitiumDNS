@@ -34,7 +34,7 @@ On the first start, the container creates a random password for the user `admin`
 podman logs zenitiumdns
 ```
 
-The password is also stored in `/etc/zenitiumdns/admin.password`. Open `http://<host>:5380/`, sign in, choose the language and change the password under the account menu. The server then deletes the file itself.
+The password is also stored in `/etc/zenitiumdns/admin.password`. Open `http://<host>:5380/`, sign in, choose the language and change the password under the account menu. The server then deletes the file itself, as it does when the user `admin` is deleted or renamed.
 
 ## Ports
 
@@ -85,6 +85,8 @@ Environment variables are passed with `-e`. To make the garbage collection compa
 ```
 -e DOTNET_GCConserveMemory=5
 ```
+
+The size of the cache and an optional memory limit are set under Settings > Cache. With a container memory limit (`--memory`), the server keeps the cache below it by itself: from 85 % of the limit the cache stops growing, from 90 % it is cut. If the container forwards to a caching resolver such as Unbound, the cache can be turned off completely there (Use cache).
 
 ## Building the image yourself
 

@@ -37,6 +37,7 @@ namespace ZenitiumDns.Core.Auth
         Apps = 6,
         DnsClient = 7,
         Settings = 8,
+        DhcpServer = 9,
         Administration = 10,
         Logs = 11
     }

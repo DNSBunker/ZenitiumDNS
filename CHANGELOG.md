@@ -2,6 +2,57 @@
 
 [Deutsche Version](CHANGELOG.de.md)
 
+## ZenitiumDNS 15.5.1 (package 15.5.1-12)
+Released: 1 October 2026
+
+### New
+- DHCP server (DHCPv4) under the new **DHCP** tab, details in [docs/DHCP.md](docs/DHCP.md):
+  - simple settings (interface, range, gateway, DNS servers, domain, lease time, reservations) and an expert configuration in the syntax of dnsmasq (`dhcp-range`, `dhcp-host`, `dhcp-option`, tags, `dhcp-match`, `dhcp-boot`, relay support and more), checked line by line before saving,
+  - detection of other DHCP servers in the network (own DHCPDISCOVER on a schedule and offers seen from devices) and a priority: "Primary" answers immediately, "Secondary" answers after a delay so that an existing server keeps working, "Standby" only serves while no other server is seen,
+  - ping check before an address is offered, DHCPDECLINE handling, rapid commit (RFC 4039), client FQDN (RFC 4702), classless static routes (RFC 3442), long options (RFC 3396), relay agent information (RFC 3046), subnet and link selection (RFC 3011, RFC 3527),
+  - host names of the devices are answered in DNS (A and PTR) under the configured domain,
+  - permission section **DHCP** (Administrators full, DNS Administrators view), self-test checks and Prometheus metrics `zenitiumdns_dhcp_*`,
+  - settings and leases are part of the backup together with the DNS settings.
+- Memory protection for the cache: when the used memory reaches 85 % of the system memory, of the service or container limit or of the .NET heap limit, the cache stops growing; from 90 % a quarter and from 95 % half of the entries are removed after a compacting garbage collection has confirmed the pressure. The cap is lifted after five minutes below 75 %. The check runs every 2 seconds, replaces the earlier watchdog memory check and is shown in the self-test and as metrics (`zenitiumdns_memory_pressure_ratio`, `zenitiumdns_cache_pressure_*`).
+- [docs/Performance.md](docs/Performance.md): measured comparison with Technitium DNS Server 15.5.1 including the raw data, and a benchmark kit in `tools/benchmark` (UDP load generator, DNS-over-TLS load generator, simulated root and TLD servers, script and summary) so that the numbers can be repeated.
+- ClientID over DNS-over-TLS and DNS-over-QUIC: the server reads the wildcard names of the certificate; the client profiles show the actual addresses to use and warn when the certificate has no wildcard entry, so the ClientID only works over DNS-over-HTTPS. The self-test checks the same.
+- The web interface reconnects by itself when the server is briefly unreachable, for example during a restart or an update: instead of an error message a notice shows the next attempt, the current view is refreshed afterwards, and after an update to a new version the page reloads itself.
+- Self-test reworked: headline with the number of errors and warnings, filter "Needs action", "Open" jumps to the matching setting, duration and number of checks; new checks for the admin password and its file, request filter, rate limiting, client block lists, client profiles, UDP buffers, truncated answers, web interface, memory protection, QNAME minimization, cookies and 0x20, EDNS padding and DHCP.
+
+### Performance
+- Recursive resolutions no longer go through a pool of hundreds of waiting loops that were all woken for every new resolution (thundering herd in the inherited `TaskPool`). Lock contention at 700 resolutions per second dropped from about 290 to 0 per second, at 5,000 per second from about 2,500 to under 1; the CPU time per recursive resolution dropped by about 40 %. On a server with 8 CPUs (800 waiting loops), 700 queries per second needed 2.42 ms of CPU time per query before and 0.46 ms now, with about 2,000 instead of 0 lock contentions per second.
+- DNS-over-TCP, DNS-over-TLS and DNS-over-QUIC run on the .NET thread pool instead of an own scheduler that handed every completed read over to another thread under a lock. At 8,000 DoT queries per second, lock contention dropped from about 1,500 to under 1 per second and the CPU time per query from about 105 to 60 µs.
+- With far less garbage, the runtime collected only every two seconds, but for 15 to 35 ms at once. A short gen0 collection now runs as soon as 150 new cache entries were created since the last one; at 2,000 new names per second the 99.9th percentile is 4 to 6 ms instead of 5 to 11 ms before and 30 to 40 ms without pacing (metric `zenitiumdns_gc_paced_collections_total`).
+- Web assets are minified when building the package and the image (`tools/WebMinifier`): 29 files, 1.4 instead of 2.4 MB.
+
+### Security
+- The file `/etc/zenitiumdns/admin.password` is also deleted when the user `admin` is deleted, renamed or replaced by a non-local user.
+- Imported interface languages cannot break out of HTML attributes or scripts anymore: straight quotes and backticks in translations are replaced with typographic ones.
+- IP addresses in client profiles and block lists are parsed strictly. Short forms such as `1.2.3`, `10` or `010.1.1.1`, which .NET accepts as IPv4 addresses, are no longer taken as addresses; a numeric ClientID such as `123` now works.
+- systemd service: `CAP_NET_RAW` and the address family `AF_PACKET` for DHCP replies to devices without an address.
+
+### Fixed
+- One invalid client profile no longer discards all profiles at start: invalid entries and profiles with a name already used are skipped and logged, an identifier already used by another profile is ignored, and a copy of the file is kept as `clients.json.invalid`.
+- Block lists: every line starting with `[` was silently ignored; now only header lines such as `[Adblock Plus 2.0]` are, and other lines show up in the counts of skipped or invalid lines.
+- Advanced Forwarding app: queries from clients that may not use recursion are no longer forwarded, so the app cannot turn the server into an open resolver; domain rules are compared case-insensitively and without a trailing dot.
+- DNS64 app: answers with `REFUSED` and blocked or dropped answers are no longer synthesized into AAAA records.
+- Drop Requests app: queries to an allowed local endpoint skipped the rules for blocked questions.
+- Log Exporter app: missing paths, endpoints or addresses give a clear error instead of a `NullReferenceException`, relative file paths are resolved against the app folder, a queue size of 0 means the default of 1,000,000, Extended DNS Errors are taken from the parsed option instead of splitting text (messages with `:` were cut), and exports no longer run on the scheduler of the calling thread.
+- The live graphs on the dashboard stopped after a restart of the server until the page was reloaded.
+- DNS-over-HTTPS landing page: a short page about the service and its address instead of a client tutorial, without Bootstrap and jQuery.
+
+### Tests
+- In the isolated test network: general regression tests 88 of 88, list syntax 44 of 44, client profiles 57 of 57, without cache 23 of 23, admin password file 10 of 10, DoH landing page 11 of 11, DNSSEC and aggressive NSEC with signed Knot zones 35 of 35, web interface in German and English 48 and 49 checks including the DHCP pages.
+- DHCP: protocol, options, relays and DNS names 66 checks; detection of other DHCP servers against dnsmasq with all three priorities 8 checks; self-test and metrics with and without another DHCP server; backup and restore of settings and leases.
+- Comparison with Technitium DNS Server 15.5.1 on the same machine, three alternating runs each, in [docs/Performance.md](docs/Performance.md). On the test server with 8 CPUs, 700 queries per second for nonexistent top-level domains caused 1,700 to 2,170 contended locks per second with 15.5.1-11 and none with 15.5.1-12.
+
+### Other changes
+- New files in the configuration folder: `dhcp.json`, `dhcp-leases.json` and `dhcp-node.id`. The formats of the existing files are unchanged; `auth.config` gets the permission section DHCP when it is saved.
+- The dashboard graph of the queues shows the .NET thread pool instead of the removed query scheduler.
+- New Prometheus metrics for memory protection, GC pacing and DHCP, see [docs/Metrics.md](docs/Metrics.md).
+- Supported RFCs: the DHCP RFCs 951, 2131, 2132, 3011, 3046, 3396, 3397, 3442, 3527, 4039, 4702 and 6842 added.
+- All Markdown files were checked against the code and corrected; new are [docs/DHCP.md](docs/DHCP.md) and [docs/Performance.md](docs/Performance.md).
+
 ## ZenitiumDNS 15.5.1 (package 15.5.1-11)
 Released: 30 September 2026
 

@@ -28,12 +28,19 @@ Note: If you do not want to use DNS-over-QUIC and HTTP/3, you can leave out `lib
 dotnet publish src/ZenitiumDns/ZenitiumDns.csproj -c Release -o publish
 ```
 
+Optionally shrink the web interface and the DoH info page. The minifier removes comments and whitespace from HTML, CSS, JavaScript and JSON files and deletes source maps; the Debian package and the container image do this automatically.
+```
+dotnet run --project tools/WebMinifier/WebMinifier.csproj -c Release -- publish/www publish/dohwww
+```
+
 5. Optionally build the bundled DNS apps. Each app ends up in its own folder `apps/<AppName>/bin/Release`, which can be packed as a ZIP file and installed in the Apps section of the web interface.
 ```
 dotnet build apps/AdvancedBlockingApp/AdvancedBlockingApp.csproj -c Release
 ```
 
-6. Install the DNS server as a service. The installer copies the files to `/opt/zenitiumdns` and creates the system user `zenitiumdns`. `/etc/zenitiumdns` serves as the configuration folder and `/var/log/zenitiumdns` as the log folder. A systemd or OpenRC service named `zenitiumdns` is set up.
+6. Install the DNS server as a service. The installer copies the files to `/opt/zenitiumdns` and creates the system user `zenitiumdns`. `/etc/zenitiumdns` serves as the configuration folder and `/var/log/zenitiumdns` as the log folder. A systemd or OpenRC service named `zenitiumdns` is set up. If the ASP.NET Core Runtime 10 is missing, the installer downloads it to `/opt/dotnet`.
+
+On a first installation the installer also makes the machine use ZenitiumDNS: with systemd it stops and disables `systemd-resolved` and sets `dns=none` in `/etc/NetworkManager/NetworkManager.conf`; in both cases it saves `/etc/resolv.conf` as `/opt/zenitiumdns/resolv.conf.bak` and replaces it with `nameserver 127.0.0.1`. The uninstaller restores the saved file. The Debian package below does not change `/etc/resolv.conf`.
 
 ```
 sudo sh publish/install.sh
@@ -41,7 +48,7 @@ sudo sh publish/install.sh
 
 To uninstall, run `sudo sh /opt/zenitiumdns/uninstall.sh`.
 
-7. Open the web interface in your browser at `http://<server-ip-address>:5380/`, choose the interface language and set a password to complete the installation.
+7. Open the web interface in your browser at `http://<server-ip-address>:5380/`, choose the interface language and set a new password for the user `admin` to complete the installation.
 
 ## Debian package
 

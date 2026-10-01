@@ -135,7 +135,7 @@ namespace ZenitiumDns.Core.Dns.ZoneManagers
                 if (entry.Length == 0)
                     return false;
 
-                if (NetworkAddress.TryParse(entry, out NetworkAddress network))
+                if (IPAddressExtensions.TryParseStrictNetwork(entry, out NetworkAddress network))
                     (negated ? excludeNetworks : includeNetworks).Add(network);
                 else
                     (negated ? excludeNames : includeNames).Add(entry);
@@ -1242,7 +1242,7 @@ namespace ZenitiumDns.Core.Dns.ZoneManagers
             int i = value.IndexOf('/');
             string addressPart = i < 0 ? value : value.Substring(0, i);
 
-            if (!IPAddress.TryParse(addressPart, out address))
+            if (!IPAddressExtensions.TryParseStrict(addressPart, out address))
                 return false;
 
             if (address.IsIPv4MappedToIPv6)
@@ -1593,7 +1593,7 @@ namespace ZenitiumDns.Core.Dns.ZoneManagers
                 return;
             }
 
-            if (IPAddress.TryParse(pattern, out IPAddress ip))
+            if (IPAddressExtensions.TryParseStrict(pattern, out IPAddress ip))
             {
                 if (!badfilter && !hasAdvancedModifier && !important)
                     AddIpRule(state, ip, ip.AddressFamily == AddressFamily.InterNetwork ? 32 : 128, exception);
@@ -1709,7 +1709,7 @@ namespace ZenitiumDns.Core.Dns.ZoneManagers
                 return;
             }
 
-            if (!IPAddress.TryParse(words[0], out _))
+            if (!IPAddressExtensions.TryParseStrict(words[0], out _))
             {
                 state.Counts.Skipped++;
                 return;
@@ -1741,7 +1741,7 @@ namespace ZenitiumDns.Core.Dns.ZoneManagers
                     return;
             }
 
-            if (!DnsClient.IsDomainNameValid(hostname) || IPAddress.TryParse(hostname, out _))
+            if (!DnsClient.IsDomainNameValid(hostname) || IPAddressExtensions.TryParseStrict(hostname, out _))
             {
                 state.Counts.Skipped++;
                 return;
@@ -1801,8 +1801,13 @@ namespace ZenitiumDns.Core.Dns.ZoneManagers
                 {
                     case '!':
                     case '#':
-                    case '[':
                         continue;
+
+                    case '[':
+                        if (line.EndsWith(']'))
+                            continue;
+
+                        break;
                 }
 
                 if (line.Contains("##", StringComparison.Ordinal) || line.Contains("#@#", StringComparison.Ordinal) || line.Contains("#?#", StringComparison.Ordinal) || line.Contains("#$#", StringComparison.Ordinal) || line.Contains("$$", StringComparison.Ordinal))

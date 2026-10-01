@@ -16,4 +16,6 @@ By submitting a contribution you confirm:
 ## Guidelines
 - Existing copyright and license notices in existing source files remain unchanged.
 - The solution must build without errors before submitting.
-- New or changed texts in the web interface are written in German and need an English translation in `src/ZenitiumDns.Core/www/lang/en.json`; `python3 tools/i18n.py check` must pass. Server-side texts use `Lang.T("German", "English")`.
+- New or changed texts in the web interface are written in German and need an English translation in `src/ZenitiumDns.Core/www/lang/en.json`; `python3 tools/i18n.py check` must pass. Server-side texts use `Lang.T("German", "English")`, or `Lang.L("German", "English")` for messages that are stored and shown later.
+- Source files contain no comments apart from the copyright and license header.
+- Web files are written readable; the Debian package and the container image minify them with `tools/WebMinifier`.

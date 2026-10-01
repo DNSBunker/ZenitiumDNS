@@ -569,6 +569,17 @@ namespace ZenitiumDns.Core.Auth
 
             _permissions = permissions;
             _sessions = sessions;
+
+            if (!_permissions.ContainsKey(PermissionSection.DhcpServer))
+            {
+                Group adminGroup = GetGroup(Group.ADMINISTRATORS);
+                if (adminGroup is not null)
+                    SetPermission(PermissionSection.DhcpServer, adminGroup, PermissionFlag.ViewModifyDelete);
+
+                Group dnsAdminGroup = GetGroup(Group.DNS_ADMINISTRATORS);
+                if (dnsAdminGroup is not null)
+                    SetPermission(PermissionSection.DhcpServer, dnsAdminGroup, PermissionFlag.View);
+            }
         }
 
         private void WriteConfigTo(Stream s)
@@ -693,6 +704,7 @@ namespace ZenitiumDns.Core.Auth
             SetPermission(PermissionSection.Settings, adminGroup, PermissionFlag.ViewModifyDelete);
             SetPermission(PermissionSection.Administration, adminGroup, PermissionFlag.ViewModifyDelete);
             SetPermission(PermissionSection.Logs, adminGroup, PermissionFlag.ViewModifyDelete);
+            SetPermission(PermissionSection.DhcpServer, adminGroup, PermissionFlag.ViewModifyDelete);
 
             SetPermission(PermissionSection.Zones, dnsAdminGroup, PermissionFlag.ViewModifyDelete);
             SetPermission(PermissionSection.Cache, dnsAdminGroup, PermissionFlag.ViewModifyDelete);
@@ -701,6 +713,7 @@ namespace ZenitiumDns.Core.Auth
             SetPermission(PermissionSection.Apps, dnsAdminGroup, PermissionFlag.ViewModify);
             SetPermission(PermissionSection.DnsClient, dnsAdminGroup, PermissionFlag.View);
             SetPermission(PermissionSection.Settings, dnsAdminGroup, PermissionFlag.ViewModify);
+            SetPermission(PermissionSection.DhcpServer, dnsAdminGroup, PermissionFlag.View);
 
             SetPermission(PermissionSection.Dashboard, everyoneGroup, PermissionFlag.View);
             SetPermission(PermissionSection.Zones, everyoneGroup, PermissionFlag.View);
@@ -1103,6 +1116,9 @@ namespace ZenitiumDns.Core.Auth
 
             _users.TryRemove(oldUsername, out _);
             _dnsWebService._userPreferences.Rename(oldUsername, user.Username);
+
+            if (oldUsername.Equals("admin", StringComparison.OrdinalIgnoreCase))
+                RemoveStaleAdminPasswordFile();
         }
 
         public async Task<User> ChangePasswordAsync(string username, string password, string totp, IPAddress remoteAddress, string newPassword, int iterations)
@@ -1117,7 +1133,7 @@ namespace ZenitiumDns.Core.Auth
             return user;
         }
 
-        internal void RemoveStaleAdminPasswordFile()
+        internal string GetAdminPasswordFilePath()
         {
             string adminPasswordFile = Environment.GetEnvironmentVariable("DNS_SERVER_ADMIN_PASSWORD_FILE");
             if (string.IsNullOrEmpty(adminPasswordFile))
@@ -1128,7 +1144,25 @@ namespace ZenitiumDns.Core.Auth
                 string fullPath = Path.GetFullPath(adminPasswordFile);
 
                 if (!string.Equals(Path.GetDirectoryName(fullPath), Path.TrimEndingDirectorySeparator(Path.GetFullPath(_configFolder)), StringComparison.Ordinal))
-                    return;
+                    return null;
+
+                return fullPath;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        internal void RemoveStaleAdminPasswordFile()
+        {
+            string adminPasswordFile = GetAdminPasswordFilePath();
+            if (adminPasswordFile is null)
+                return;
+
+            try
+            {
+                string fullPath = adminPasswordFile;
 
                 if (!File.Exists(fullPath))
                     return;
@@ -1147,7 +1181,10 @@ namespace ZenitiumDns.Core.Auth
 
                 File.Delete(fullPath);
 
-                _log.Write("DNS Server deleted the initial admin password file because the password of user admin has been changed: " + fullPath);
+                if ((adminUser is null) || (adminUser.Type != UserType.Local))
+                    _log.Write("DNS Server deleted the initial admin password file because there is no local user admin anymore: " + fullPath);
+                else
+                    _log.Write("DNS Server deleted the initial admin password file because the password of user admin has been changed: " + fullPath);
             }
             catch (Exception ex)
             {
@@ -1169,6 +1206,9 @@ namespace ZenitiumDns.Core.Auth
                 }
 
                 _dnsWebService._userPreferences.Remove(deletedUser.Username);
+
+                if (deletedUser.Username.Equals("admin", StringComparison.OrdinalIgnoreCase))
+                    RemoveStaleAdminPasswordFile();
 
                 return true;
             }

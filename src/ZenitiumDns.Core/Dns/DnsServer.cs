@@ -167,6 +167,7 @@ namespace ZenitiumDns.Core.Dns
         readonly BlockedZoneManager _blockedZoneManager;
         readonly BlockListZoneManager _blockListZoneManager;
         readonly ClientProfileManager _clientProfileManager;
+        Dhcp.DhcpServer _dhcpServer;
         readonly CacheZoneManager _cacheZoneManager;
         readonly DnsApplicationManager _dnsApplicationManager;
 
@@ -332,10 +333,8 @@ namespace ZenitiumDns.Core.Dns
         readonly Lock _rateLimitMaintenanceTimerLock = new Lock();
         const int RATE_LIMIT_MAINTENANCE_TIMER_INTERVAL = 10000;
 
-        readonly IndependentTaskScheduler _queryTaskScheduler = new IndependentTaskScheduler(threadName: "QueryThreadPool");
 
         TaskPool _resolverTaskPool;
-        readonly IndependentTaskScheduler _resolverTaskScheduler = new IndependentTaskScheduler(priority: ThreadPriority.AboveNormal, threadName: "ResolverThreadPool");
         readonly ConcurrentDictionary<string, Task<RecursiveResolveResponse>> _resolverTasks = new ConcurrentDictionary<string, Task<RecursiveResolveResponse>>(-1, 1000);
 
         volatile ServiceState _state = ServiceState.Stopped;
@@ -482,8 +481,6 @@ namespace ZenitiumDns.Core.Dns
 
             _resolverTaskPool?.Dispose();
 
-            _queryTaskScheduler?.Dispose();
-            _resolverTaskScheduler?.Dispose();
 
             lock (_saveLock)
             {
@@ -3173,6 +3170,13 @@ namespace ZenitiumDns.Core.Dns
                         if (isRecursionAllowed && request.RecursionDesired && TryGetSignalDomain(question.Name, out string signalDomain))
                             return GetSignalDomainResponse(request, signalDomain);
 
+                        if (isRecursionAllowed && (_dhcpServer is not null))
+                        {
+                            DnsDatagram dhcpResponse = GetDhcpResponse(request, question);
+                            if (dhcpResponse is not null)
+                                return dhcpResponse;
+                        }
+
                         DnsDatagram response = await ProcessAuthoritativeQueryAsync(request, remoteEP, protocol, isRecursionAllowed, skipDnsAppAuthoritativeRequestHandlers);
                         if (response is not null)
                         {
@@ -3213,6 +3217,40 @@ namespace ZenitiumDns.Core.Dns
                 default:
                     return new DnsDatagram(request.Identifier, true, request.OPCODE, false, false, request.RecursionDesired, isRecursionAllowed, false, request.CheckingDisabled, DnsResponseCode.NotImplemented, request.Question, null, null, null, request.EDNS is null ? ushort.MinValue : _udpPayloadSize, _dnssecValidation && request.DnssecOk ? EDnsHeaderFlags.DNSSEC_OK : EDnsHeaderFlags.None) { Tag = ResponseTypeTags.Authoritative };
             }
+        }
+
+        private DnsDatagram GetDhcpResponse(DnsDatagram request, DnsQuestionRecord question)
+        {
+            Dhcp.DhcpServer dhcpServer = _dhcpServer;
+            if (dhcpServer is null)
+                return null;
+
+            string name = question.Name;
+            IReadOnlyList<DnsResourceRecord> answer = null;
+            DnsResponseCode rcode = DnsResponseCode.NoError;
+
+            if (question.Type == DnsResourceRecordType.PTR)
+            {
+                if (!name.EndsWith(".in-addr.arpa", StringComparison.OrdinalIgnoreCase) || !IPAddressExtensions.TryParseReverseDomain(name, out IPAddress address) || !dhcpServer.TryResolveAddress(address, out string hostName, out uint ptrTtl))
+                    return null;
+
+                answer = [new DnsResourceRecord(name, DnsResourceRecordType.PTR, DnsClass.IN, ptrTtl, new DnsPTRRecordData(hostName))];
+            }
+            else if (dhcpServer.TryResolveName(name, out IPAddress address, out uint ttl))
+            {
+                if ((question.Type == DnsResourceRecordType.A) || (question.Type == DnsResourceRecordType.ANY))
+                    answer = [new DnsResourceRecord(name, DnsResourceRecordType.A, DnsClass.IN, ttl, new DnsARecordData(address))];
+            }
+            else if (dhcpServer.IsNameInLocalDomain(name))
+            {
+                rcode = DnsResponseCode.NxDomain;
+            }
+            else
+            {
+                return null;
+            }
+
+            return new DnsDatagram(request.Identifier, true, DnsOpcode.StandardQuery, true, false, request.RecursionDesired, true, false, request.CheckingDisabled, rcode, request.Question, answer, null, null, request.EDNS is null ? ushort.MinValue : _udpPayloadSize, EDnsHeaderFlags.None) { Tag = ResponseTypeTags.Authoritative };
         }
 
         private async ValueTask<DnsDatagram> ProcessAuthoritativeQueryAsync(DnsDatagram request, IPEndPoint remoteEP, DnsTransportProtocol protocol, bool isRecursionAllowed, bool skipDnsAppAuthoritativeRequestHandlers)
@@ -5447,6 +5485,44 @@ namespace ZenitiumDns.Core.Dns
             return _serverDomain;
         }
 
+        public IReadOnlyList<string> GetTlsWildcardDomains()
+        {
+            List<string> domains = new List<string>();
+
+            X509Certificate2 certificate = _dnsTlsCertificate;
+            if (certificate is null)
+                return domains;
+
+            try
+            {
+                foreach (X509Extension extension in certificate.Extensions)
+                {
+                    if (extension.Oid?.Value != "2.5.29.17")
+                        continue;
+
+                    foreach (string dnsName in new X509SubjectAlternativeNameExtension(extension.RawData, extension.Critical).EnumerateDnsNames())
+                    {
+                        if (!dnsName.StartsWith("*.", StringComparison.Ordinal))
+                            continue;
+
+                        string domain = dnsName.Substring(2).TrimEnd('.').ToLowerInvariant();
+
+                        if ((domain.IndexOf('.') > 0) && DnsClient.IsDomainNameValid(domain) && !domains.Contains(domain))
+                            domains.Add(domain);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _log.Write(ex);
+            }
+
+            return domains;
+        }
+
+        public string TlsHostName
+        { get { return GetDdrTargetName(); } }
+
         public IReadOnlyList<DnsResourceRecord> GetDdrRecords(string ownerName = DDR_DOMAIN)
         {
             List<DnsResourceRecord> records = new List<DnsResourceRecord>(3);
@@ -5885,7 +5961,7 @@ namespace ZenitiumDns.Core.Dns
 
             int maxConcurrentResolutions = Environment.ProcessorCount * maxConcurrentResolutionsPerCore;
             int resolverQueueSize = maxConcurrentResolutions * 5 * 10;
-            _resolverTaskPool = new TaskPool(resolverQueueSize, maxConcurrentResolutions, _resolverTaskScheduler);
+            _resolverTaskPool = new TaskPool(resolverQueueSize, maxConcurrentResolutions);
 
             previousResolverTaskPool?.Dispose();
         }
@@ -6000,8 +6076,32 @@ namespace ZenitiumDns.Core.Dns
 
                 _dohWebService.Use(delegate (HttpContext context, RequestDelegate next)
                 {
-                    if (!Lang.IsEnglish && ((context.Request.Path == "/") || (context.Request.Path == "/index.html")) && File.Exists(Path.Combine(_dohwwwFolder, "index.de.html")))
-                        context.Request.Path = "/index.de.html";
+                    IHeaderDictionary headers = context.Response.Headers;
+
+                    headers.XContentTypeOptions = "nosniff";
+                    headers["Referrer-Policy"] = "no-referrer";
+                    headers.ContentSecurityPolicy = "default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'";
+
+                    PathString path = context.Request.Path;
+
+                    if ((path == "/") || (path == "/index.html") || (path == "/index.de.html"))
+                    {
+                        string file = Path.Combine(_dohwwwFolder, !Lang.IsEnglish && File.Exists(Path.Combine(_dohwwwFolder, "index.de.html")) ? "index.de.html" : "index.html");
+
+                        if (File.Exists(file) && (HttpMethods.IsGet(context.Request.Method) || HttpMethods.IsHead(context.Request.Method)))
+                        {
+                            string html = File.ReadAllText(file).Replace("{host}", WebUtility.HtmlEncode(context.Request.Host.HasValue ? context.Request.Host.Value : _serverDomain));
+
+                            headers["X-Robots-Tag"] = "noindex, nofollow";
+                            headers.CacheControl = "no-cache";
+                            context.Response.ContentType = "text/html; charset=utf-8";
+
+                            if (HttpMethods.IsHead(context.Request.Method))
+                                return Task.CompletedTask;
+
+                            return context.Response.WriteAsync(html);
+                        }
+                    }
 
                     return next(context);
                 });
@@ -6382,7 +6482,7 @@ namespace ZenitiumDns.Core.Dns
                     _ = Task.Factory.StartNew(delegate ()
                     {
                         return AcceptConnectionAsync(tcpListener, DnsTransportProtocol.Tcp);
-                    }, CancellationToken.None, TaskCreationOptions.DenyChildAttach, _queryTaskScheduler);
+                    }, CancellationToken.None, TaskCreationOptions.DenyChildAttach, TaskScheduler.Default);
                 }
             }
 
@@ -6393,7 +6493,7 @@ namespace ZenitiumDns.Core.Dns
                     _ = Task.Factory.StartNew(delegate ()
                     {
                         return AcceptConnectionAsync(tcpProxyListener, DnsTransportProtocol.TcpProxy);
-                    }, CancellationToken.None, TaskCreationOptions.DenyChildAttach, _queryTaskScheduler);
+                    }, CancellationToken.None, TaskCreationOptions.DenyChildAttach, TaskScheduler.Default);
                 }
             }
 
@@ -6404,7 +6504,7 @@ namespace ZenitiumDns.Core.Dns
                     _ = Task.Factory.StartNew(delegate ()
                     {
                         return AcceptConnectionAsync(tlsListener, DnsTransportProtocol.Tls);
-                    }, CancellationToken.None, TaskCreationOptions.DenyChildAttach, _queryTaskScheduler);
+                    }, CancellationToken.None, TaskCreationOptions.DenyChildAttach, TaskScheduler.Default);
                 }
             }
 
@@ -6415,7 +6515,7 @@ namespace ZenitiumDns.Core.Dns
                     _ = Task.Factory.StartNew(delegate ()
                     {
                         return AcceptQuicConnectionAsync(quicListener);
-                    }, CancellationToken.None, TaskCreationOptions.DenyChildAttach, _queryTaskScheduler);
+                    }, CancellationToken.None, TaskCreationOptions.DenyChildAttach, TaskScheduler.Default);
                 }
             }
 
@@ -6670,6 +6770,12 @@ namespace ZenitiumDns.Core.Dns
         public BlockListZoneManager BlockListZoneManager
         { get { return _blockListZoneManager; } }
 
+        public Dhcp.DhcpServer DhcpServer
+        {
+            get { return _dhcpServer; }
+            set { _dhcpServer = value; }
+        }
+
         public ClientProfileManager ClientProfileManager
         { get { return _clientProfileManager; } }
 
@@ -6695,10 +6801,10 @@ namespace ZenitiumDns.Core.Dns
         { get { return _state == ServiceState.Running; } }
 
         internal int QueryTaskQueueLength
-        { get { return _queryTaskScheduler.QueuedTasks; } }
+        { get { return (int)Math.Min(int.MaxValue, ThreadPool.PendingWorkItemCount); } }
 
         internal int ResolverTaskQueueLength
-        { get { return _resolverTaskScheduler.QueuedTasks; } }
+        { get { return _resolverTaskPool?.QueuedTasks ?? 0; } }
 
         internal int PendingResolutions
         { get { return _resolverTasks.Count; } }

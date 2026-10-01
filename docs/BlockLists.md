@@ -6,7 +6,7 @@ ZenitiumDNS reads block and allow lists in several formats and can apply differe
 
 ## List formats
 
-All formats can be mixed in one list. Lines starting with `!`, `#` or `[` are comments.
+All formats can be mixed in one list. Lines starting with `!` or `#`, headers such as `[Adblock Plus 2.0]` and text after ` #` on a hosts or domain line are comments.
 
 | Format | Example | Effect |
 | ------ | ------- | ------ |
@@ -77,13 +77,13 @@ The ClientID is taken from encrypted DNS:
 | DNS-over-TLS | server name `kids.dns.example.com` |
 | DNS-over-QUIC | server name `kids.dns.example.com` |
 
-For DoT and DoQ the TLS certificate must also be valid for `*.dns.example.com`. The first label of the server name counts as a ClientID only if a profile uses it, so the normal server name keeps working. Behind a reverse proxy for DoH the path has to be passed on unchanged. Plain DNS over port 53 only knows the IP address.
+For DoT and DoQ the TLS certificate must also be valid for `*.dns.example.com`; the client profile dialog and the self-test warn if it is not. The first label of the server name counts as a ClientID only if a profile uses it, so the normal server name keeps working. Behind a reverse proxy for DoH the path has to be passed on unchanged. Plain DNS over port 53 only knows the IP address.
 
 ### API
 
 | Call | Parameters |
 | ---- | ---------- |
-| `api/settings/clients/list` | none; returns the profiles, the default lists and the server name and ports needed for ClientIDs |
+| `api/settings/clients/list` | none; returns the profiles, the default lists, the server name and ports needed for ClientIDs and whether the certificate covers ClientID server names (`hasTlsCertificate`, `tlsHostName`, `tlsWildcardDomains`) |
 | `api/settings/clients/set` | `name`, `identifiers` (line or comma separated), `blockingEnabled`, `useDefaultLists`, `blockListUrls` (line or comma separated), `originalName` to change an existing profile |
 | `api/settings/clients/delete` | `name` |
 

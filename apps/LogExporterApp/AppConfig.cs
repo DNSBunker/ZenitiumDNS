@@ -57,7 +57,7 @@ namespace LogExporter
     public class SyslogTarget : TargetBase
     {
         [JsonPropertyName("address")]
-        public required string Address { get; set; }
+        public string? Address { get; set; }
 
         [JsonPropertyName("port")]
         public int? Port { get; set; }
@@ -69,13 +69,13 @@ namespace LogExporter
     public class FileTarget : TargetBase
     {
         [JsonPropertyName("path")]
-        public required string Path { get; set; }
+        public string? Path { get; set; }
     }
 
     public class HttpTarget : TargetBase
     {
         [JsonPropertyName("endpoint")]
-        public required string Endpoint { get; set; }
+        public string? Endpoint { get; set; }
 
         [JsonPropertyName("headers")]
         public Dictionary<string, string?>? Headers { get; set; }

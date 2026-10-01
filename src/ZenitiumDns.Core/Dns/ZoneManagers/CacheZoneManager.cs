@@ -24,6 +24,7 @@ using ZenitiumDns.Core.Dns.Zones;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 using System.Text;
 using System.Threading;
@@ -82,6 +83,38 @@ namespace ZenitiumDns.Core.Dns.ZoneManagers
         DateTime _lastMemoryCompaction;
         long _memoryTrimmedEntries;
 
+        const int MEMORY_GUARD_INTERVAL = 2000;
+        const double MEMORY_GUARD_FREEZE = 0.85;
+        const double MEMORY_GUARD_TRIM = 0.90;
+        const double MEMORY_GUARD_EMERGENCY = 0.95;
+        const double MEMORY_GUARD_RELEASE = 0.75;
+        const long MEMORY_GUARD_MINIMUM_ENTRIES = 1000;
+        static readonly TimeSpan MEMORY_GUARD_TRIM_INTERVAL = TimeSpan.FromSeconds(5);
+        static readonly TimeSpan MEMORY_GUARD_EMERGENCY_INTERVAL = TimeSpan.FromSeconds(2);
+        static readonly TimeSpan MEMORY_GUARD_RELEASE_DELAY = TimeSpan.FromMinutes(5);
+        static readonly TimeSpan MEMORY_GUARD_REPORT_INTERVAL = TimeSpan.FromMinutes(1);
+
+        Timer _memoryGuardTimer;
+        int _memoryGuardRunning;
+
+        const int GC_PACING_INTERVAL = 50;
+        const long GC_PACING_ENTRIES = 150;
+
+        Timer _gcPacingTimer;
+        int _gcPacingRunning;
+        long _addedEntries;
+        int _pacingGen0Count;
+        long _pacingAddedEntries;
+        long _pacedCollections;
+        long _pressureCapEntries;
+        DateTime _pressureCalmSince = DateTime.MinValue;
+        DateTime _lastPressureTrim = DateTime.MinValue;
+        DateTime _lastPressureReport = DateTime.MinValue;
+        long _pressureTrimmedEntries;
+        long _pressureTrims;
+        long _pressureCompactions;
+        MemoryPressureReading _lastPressure;
+
         #endregion
 
         #region constructor
@@ -94,6 +127,9 @@ namespace ZenitiumDns.Core.Dns.ZoneManagers
             MaximumNegativeRecordTtl = MAXIMUM_NEGATIVE_RECORD_TTL;
 
             _cacheMaintenanceTimer = new Timer(CacheMaintenanceTimerCallback, null, CACHE_MAINTENANCE_TIMER_INITIAL_INTEVAL, Timeout.Infinite);
+            _memoryGuardTimer = new Timer(MemoryGuardTimerCallback, null, MEMORY_GUARD_INTERVAL, MEMORY_GUARD_INTERVAL);
+
+            _gcPacingTimer = new Timer(GcPacingTimerCallback, null, GC_PACING_INTERVAL, GC_PACING_INTERVAL);
         }
 
         #endregion
@@ -113,6 +149,18 @@ namespace ZenitiumDns.Core.Dns.ZoneManagers
                 {
                     _cacheMaintenanceTimer.Dispose();
                     _cacheMaintenanceTimer = null;
+                }
+
+                if (_memoryGuardTimer is not null)
+                {
+                    _memoryGuardTimer.Dispose();
+                    _memoryGuardTimer = null;
+                }
+
+                if (_gcPacingTimer is not null)
+                {
+                    _gcPacingTimer.Dispose();
+                    _gcPacingTimer = null;
                 }
             }
 
@@ -273,7 +321,10 @@ namespace ZenitiumDns.Core.Dns.ZoneManagers
                 });
 
                 if (zone.SetRecords(resourceRecords, _dnsServer.ServeStale))
+                {
                     Interlocked.Increment(ref _totalEntries);
+                    Interlocked.Increment(ref _addedEntries);
+                }
             }
             else
             {
@@ -314,7 +365,10 @@ namespace ZenitiumDns.Core.Dns.ZoneManagers
                 }
 
                 if (addedEntries > 0)
+                {
                     Interlocked.Add(ref _totalEntries, addedEntries);
+                    Interlocked.Add(ref _addedEntries, addedEntries);
+                }
             }
         }
 
@@ -364,6 +418,169 @@ namespace ZenitiumDns.Core.Dns.ZoneManagers
                     _cacheMaintenanceTimer?.Change(CACHE_MAINTENANCE_TIMER_PERIODIC_INTERVAL, Timeout.Infinite);
                 }
             }
+        }
+
+        private void GcPacingTimerCallback(object state)
+        {
+            if (Interlocked.Exchange(ref _gcPacingRunning, 1) == 1)
+                return;
+
+            try
+            {
+                int gen0Count = GC.CollectionCount(0);
+                long added = Volatile.Read(ref _addedEntries);
+
+                if (gen0Count != _pacingGen0Count)
+                {
+                    _pacingGen0Count = gen0Count;
+                    _pacingAddedEntries = added;
+                    return;
+                }
+
+                if ((added - _pacingAddedEntries) < GC_PACING_ENTRIES)
+                    return;
+
+                GC.Collect(0, GCCollectionMode.Forced, true, false);
+
+                _pacingGen0Count = GC.CollectionCount(0);
+                _pacingAddedEntries = Volatile.Read(ref _addedEntries);
+                Interlocked.Increment(ref _pacedCollections);
+            }
+            catch
+            { }
+            finally
+            {
+                Volatile.Write(ref _gcPacingRunning, 0);
+            }
+        }
+
+        private void MemoryGuardTimerCallback(object state)
+        {
+            if (Interlocked.Exchange(ref _memoryGuardRunning, 1) == 1)
+                return;
+
+            try
+            {
+                MemoryPressureReading reading = MemoryPressure.Read();
+                _lastPressure = reading;
+
+                if (!_enabled)
+                    return;
+
+                DateTime utcNow = DateTime.UtcNow;
+
+                if (reading.Ratio < MEMORY_GUARD_FREEZE)
+                {
+                    if ((reading.Ratio < MEMORY_GUARD_RELEASE) && (Interlocked.Read(ref _pressureCapEntries) > 0))
+                    {
+                        if (_pressureCalmSince == DateTime.MinValue)
+                        {
+                            _pressureCalmSince = utcNow;
+                        }
+                        else if (utcNow - _pressureCalmSince >= MEMORY_GUARD_RELEASE_DELAY)
+                        {
+                            Interlocked.Exchange(ref _pressureCapEntries, 0);
+                            _pressureCalmSince = DateTime.MinValue;
+                            _dnsServer.LogManager.Write("DNS Cache may grow again, memory is " + FormatPressure(reading) + " full.");
+                        }
+                    }
+                    else if (reading.Ratio >= MEMORY_GUARD_RELEASE)
+                    {
+                        _pressureCalmSince = DateTime.MinValue;
+                    }
+
+                    EnforcePressureCap();
+                    return;
+                }
+
+                _pressureCalmSince = DateTime.MinValue;
+
+                long entries = Volatile.Read(ref _totalEntries);
+
+                if (Interlocked.Read(ref _pressureCapEntries) == 0)
+                {
+                    Interlocked.Exchange(ref _pressureCapEntries, Math.Max(entries, MEMORY_GUARD_MINIMUM_ENTRIES));
+                    _dnsServer.LogManager.Write("DNS Cache stopped growing at " + entries + " entries because memory is " + FormatPressure(reading) + " full.");
+                }
+
+                EnforcePressureCap();
+
+                bool emergency = reading.Ratio >= MEMORY_GUARD_EMERGENCY;
+
+                if ((reading.Ratio < MEMORY_GUARD_TRIM) || (utcNow - _lastPressureTrim < (emergency ? MEMORY_GUARD_EMERGENCY_INTERVAL : MEMORY_GUARD_TRIM_INTERVAL)))
+                    return;
+
+                _lastPressureTrim = utcNow;
+
+                long workingSetBefore = Environment.WorkingSet;
+                long start = Stopwatch.GetTimestamp();
+
+                GC.Collect(GC.MaxGeneration, GCCollectionMode.Aggressive, true, true);
+                Interlocked.Increment(ref _pressureCompactions);
+
+                MemoryPressureReading afterCompaction = MemoryPressure.Read();
+                _lastPressure = afterCompaction;
+
+                entries = Volatile.Read(ref _totalEntries);
+
+                if ((afterCompaction.Ratio < MEMORY_GUARD_TRIM) || (entries <= MEMORY_GUARD_MINIMUM_ENTRIES))
+                    return;
+
+                emergency = afterCompaction.Ratio >= MEMORY_GUARD_EMERGENCY;
+
+                long target = Math.Max(MEMORY_GUARD_MINIMUM_ENTRIES, (long)(entries * (emergency ? 0.5 : 0.75)));
+                int removed = TrimEntries(entries - target);
+
+                Interlocked.Add(ref _pressureTrimmedEntries, removed);
+                Interlocked.Add(ref _memoryTrimmedEntries, removed);
+                Interlocked.Increment(ref _pressureTrims);
+
+                long remaining = Volatile.Read(ref _totalEntries);
+                Interlocked.Exchange(ref _pressureCapEntries, Math.Max(remaining, MEMORY_GUARD_MINIMUM_ENTRIES));
+
+                GC.Collect(GC.MaxGeneration, GCCollectionMode.Aggressive, true, true);
+
+                double pause = Stopwatch.GetElapsedTime(start).TotalMilliseconds;
+                long workingSetAfter = Environment.WorkingSet;
+
+                _dnsServer.LogManager.Write("DNS Cache: memory was still " + FormatPressure(afterCompaction) + " full after compaction; " + removed + " least recently used cache entries were removed (" + remaining + " left), working set " + (workingSetBefore / 1048576) + " -> " + (workingSetAfter / 1048576) + " MB, " + pause.ToString("0") + " ms.");
+
+                if (utcNow - _lastPressureReport >= MEMORY_GUARD_REPORT_INTERVAL)
+                {
+                    _lastPressureReport = utcNow;
+                    _dnsServer.Watchdog?.ReportMemoryPressure(afterCompaction, removed, remaining, workingSetBefore, workingSetAfter);
+                }
+            }
+            catch (Exception ex)
+            {
+                _dnsServer.LogManager.Write(ex);
+            }
+            finally
+            {
+                Volatile.Write(ref _memoryGuardRunning, 0);
+            }
+        }
+
+        private void EnforcePressureCap()
+        {
+            long cap = Interlocked.Read(ref _pressureCapEntries);
+            if (cap <= 0)
+                return;
+
+            long entries = Volatile.Read(ref _totalEntries);
+
+            if (entries > cap + (cap / 20))
+            {
+                int removed = TrimEntries(entries - cap);
+
+                Interlocked.Add(ref _pressureTrimmedEntries, removed);
+                Interlocked.Add(ref _memoryTrimmedEntries, removed);
+            }
+        }
+
+        private static string FormatPressure(MemoryPressureReading reading)
+        {
+            return (reading.Ratio * 100).ToString("0.0", CultureInfo.InvariantCulture) + " % (" + reading.Source + ", " + (reading.Used / 1048576) + " of " + (reading.Limit / 1048576) + " MB)";
         }
 
         private static GCMemoryInfo GetLastFullGcInfo()
@@ -1450,6 +1667,24 @@ namespace ZenitiumDns.Core.Dns.ZoneManagers
 
         public long MemoryTrimmedEntries
         { get { return Interlocked.Read(ref _memoryTrimmedEntries); } }
+
+        public long PressureTrimmedEntries
+        { get { return Interlocked.Read(ref _pressureTrimmedEntries); } }
+
+        public long PressureTrims
+        { get { return Interlocked.Read(ref _pressureTrims); } }
+
+        public long PressureCompactions
+        { get { return Interlocked.Read(ref _pressureCompactions); } }
+
+        public long PressureCapEntries
+        { get { return Interlocked.Read(ref _pressureCapEntries); } }
+
+        public long PacedCollections
+        { get { return Interlocked.Read(ref _pacedCollections); } }
+
+        internal MemoryPressureReading LastMemoryPressure
+        { get { return _lastPressure; } }
 
         public long MaximumEntries
         {

@@ -44,6 +44,7 @@ All configuration options are documented below.
 | `dropMalformedRequests` | boolean | `false` | Silently drops DNS requests that fail to parse correctly. Useful for mitigating parser-based attacks or reducing log noise from malformed packets. |
 | `allowedNetworks` | array of strings | `[]` | List of network addresses (IP or CIDR) from which requests are always allowed. If specified, requests from networks not in this list are evaluated against blocked networks and questions. Empty array disables allowlist mode. |
 | `blockedNetworks` | array of strings | `[]` | List of network addresses (IP or CIDR) from which requests are always dropped. Processed after `allowedNetworks`. |
+| `allowedLocalEndPoints` | array of strings | `[]` | Local end points of the server through which requests are accepted, as IP address or host name with optional port (`192.0.2.10:53`, `[2001:db8::10]:853`, `dns.example.com:443`); without a port any port matches. For DoH, DoT and DoQ the host name the client connected to is compared. If the list is not empty, requests that arrive through any other end point are dropped. `blockedQuestions` still apply to accepted requests. |
 | `blockedQuestions` | array of objects | `[]` | List of DNS question patterns to block. Each object defines name, type, and zone-blocking behavior. See [Blocked Questions Configuration](#blocked-questions-configuration). |
 
 ### Blocked Questions Configuration
@@ -164,13 +165,13 @@ The Drop Requests App evaluates each incoming DNS request through the following 
 
 1. **Blocking Check:** If `enableBlocking` is `false`, allow the request immediately.
 
-2. **Malformed Packet Check:** If `dropMalformedRequests` is `true` and the request contains a parsing exception, drop the request silently.
+2. **Malformed Packet Check:** If `dropMalformedRequests` is `true` and the request could not be parsed or does not contain exactly one question, drop the request silently.
 
 3. **Allowlist Evaluation:** If `allowedNetworks` is configured, check if the source IP address matches any allowed network. If matched, allow the request. If `allowedNetworks` is empty, skip this step.
 
 4. **Blocklist Evaluation:** Check if the source IP address matches any network in `blockedNetworks`. If matched, drop the request silently.
 
-5. **Question Count Validation:** If the request does not contain exactly one DNS question, drop the request silently.
+5. **Local End Point Check:** If `allowedLocalEndPoints` is configured and the request did not arrive through one of the listed end points, drop the request silently.
 
 6. **Question Pattern Matching:** Evaluate the DNS question against all entries in `blockedQuestions`. If any entry matches, drop the request silently.
 

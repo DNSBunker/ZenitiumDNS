@@ -1101,7 +1101,7 @@ var liveSystemCharts = {
     Cpu: { series: [{ key: "cpu", label: "CPU", token: "--c1" }], format: function (v) { return formatNumber(v, 1) + " %"; }, max: 100 },
     Memory: { series: [{ key: "workingSet", label: tr("Prozess"), token: "--c1", scale: 1048576 }, { key: "gcHeap", label: "GC-Heap", token: "--c2", scale: 1048576 }], format: function (v) { return formatNumber(v, 0) + " MB"; } },
     Qps: { series: [{ key: "qps", label: tr("Anfragen/s"), token: "--c1" }], format: function (v) { return formatNumber(v, 0); }, integer: true },
-    Queues: { series: [{ key: "queryQueue", label: tr("Anfragen"), token: "--c1" }, { key: "resolverQueue", label: "Resolver", token: "--c2" }, { key: "statsQueue", label: tr("Statistik"), token: "--c3" }], format: function (v) { return formatNumber(v, 0); }, integer: true },
+    Queues: { series: [{ key: "queryQueue", label: tr("Threadpool"), token: "--c1" }, { key: "resolverQueue", label: "Resolver", token: "--c2" }, { key: "statsQueue", label: tr("Statistik"), token: "--c3" }], format: function (v) { return formatNumber(v, 0); }, integer: true },
     Resolutions: { series: [{ key: "pendingResolutions", label: tr("Laufend"), token: "--c1" }], format: function (v) { return formatNumber(v, 0); }, integer: true },
     Gc: { series: [{ key: "gen0", label: "Gen 0", token: "--c1" }, { key: "gen1", label: "Gen 1", token: "--c2" }, { key: "gen2", label: "Gen 2", token: "--c3" }], format: function (v) { return formatNumber(v, 1) + "/s"; } },
     Threads: { series: [{ key: "threads", label: "Threads", token: "--c1" }, { key: "threadPoolQueue", label: tr("Wartend"), token: "--c2" }], format: function (v) { return formatNumber(v, 0); }, integer: true },
@@ -1190,7 +1190,7 @@ function renderLiveSystemCharts() {
 }
 
 function pollLiveSystem() {
-    if (liveSystem.busy || (sessionData == null) || document.hidden || !$("#mainPanelTabPaneDashboard").hasClass("active"))
+    if (liveSystem.busy || (sessionData == null) || document.hidden || serverConnection.lost || !$("#mainPanelTabPaneDashboard").hasClass("active"))
         return;
 
     if (liveSystem.enabled === false)
@@ -1212,6 +1212,12 @@ function pollLiveSystem() {
             liveSystem.enabled = response.enabled;
             liveSystem.capacity = response.capacity;
 
+            if ((response.latestSeq != null) && (response.latestSeq < liveSystem.seq)) {
+                liveSystem.samples = [];
+                liveSystem.seq = 0;
+                return;
+            }
+
             if (!response.enabled) {
                 $("#divLiveSystem").hide();
                 liveSystem.samples = [];
@@ -1224,14 +1230,15 @@ function pollLiveSystem() {
                 liveSystem.seq = response.samples[i].seq;
             }
 
-            if (response.samples.length === 0 && liveSystem.samples.length > 0 && liveSystem.samples[liveSystem.samples.length - 1].seq > liveSystem.seq)
-                liveSystem.samples = [];
-
             if (liveSystem.samples.length > liveSystem.capacity)
                 liveSystem.samples.splice(0, liveSystem.samples.length - liveSystem.capacity);
 
             $("#divLiveSystem").show();
             renderLiveSystemCharts();
+        },
+        error: function (jqXHR, textStatus) {
+            if (isServerConnectionFailure(jqXHR, textStatus))
+                onServerConnectionLost();
         },
         complete: function () {
             liveSystem.busy = false;

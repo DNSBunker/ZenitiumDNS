@@ -1869,6 +1869,9 @@ function getPermissionSectionLabel(section) {
         case "Settings":
             return tr("Einstellungen");
 
+        case "DhcpServer":
+            return "DHCP";
+
         case "Administration":
             return tr("Verwaltung");
 

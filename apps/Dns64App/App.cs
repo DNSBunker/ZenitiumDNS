@@ -97,7 +97,20 @@ namespace Dns64
             switch (response.RCODE)
             {
                 case DnsResponseCode.NxDomain:
+                case DnsResponseCode.Refused:
                     return response;
+            }
+
+            if (response.Tag is DnsServerResponseType responseType)
+            {
+                switch (responseType)
+                {
+                    case DnsServerResponseType.Blocked:
+                    case DnsServerResponseType.UpstreamBlocked:
+                    case DnsServerResponseType.UpstreamBlockedCached:
+                    case DnsServerResponseType.Dropped:
+                        return response;
+                }
             }
 
             DnsQuestionRecord question = request.Question[0];

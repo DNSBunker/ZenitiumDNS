@@ -4,6 +4,7 @@
 		<Version>$(ZenitiumDnsVersion)</Version>
 		<InformationalVersion>$(ZenitiumDnsVersion)-$(ZenitiumDnsRevision)</InformationalVersion>
 		<CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
 	</PropertyGroup>
 
 	<ItemGroup>

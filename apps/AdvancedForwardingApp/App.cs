@@ -173,7 +173,7 @@ namespace AdvancedForwarding
 
         public async Task<DnsDatagram?> ProcessRequestAsync(DnsDatagram request, IPEndPoint remoteEP, DnsTransportProtocol protocol, bool isRecursionAllowed)
         {
-            if (!_enableForwarding || !request.RecursionDesired)
+            if (!_enableForwarding || !request.RecursionDesired || !isRecursionAllowed)
                 return null;
 
             IPAddress remoteIP = remoteEP.Address;
@@ -386,7 +386,18 @@ namespace AdvancedForwarding
 
                 _forwarderRecords = forwarderRecords;
 
-                _domains = jsonForwarding.ReadArrayAsSet("domains") ?? [];
+                _domains = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+                HashSet<string>? domains = jsonForwarding.ReadArrayAsSet("domains");
+                if (domains is not null)
+                {
+                    foreach (string domain in domains)
+                    {
+                        string entry = domain.Trim().TrimEnd('.');
+                        if (entry.Length > 0)
+                            _domains.Add(entry);
+                    }
+                }
             }
 
             public Forwarding(IReadOnlyList<string> domains, NameServerAddress forwarder, bool dnssecValidation, ConfigProxyServer proxy)
@@ -397,7 +408,7 @@ namespace AdvancedForwarding
             {
                 _forwarderRecords = forwarderRecords;
 
-                _domains = new HashSet<string>(domains.Count);
+                _domains = new HashSet<string>(domains.Count, StringComparer.OrdinalIgnoreCase);
 
                 foreach (string domain in domains)
                 {

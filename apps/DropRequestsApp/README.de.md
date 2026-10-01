@@ -44,6 +44,7 @@ Alle Optionen sind unten beschrieben.
 | `dropMalformedRequests` | boolean | `false` | Verwirft DNS-Anfragen stillschweigend, die sich nicht korrekt einlesen lassen. Hilft gegen Angriffe auf den Parser und reduziert Protokolleinträge durch fehlerhafte Pakete. |
 | `allowedNetworks` | Liste von Texten | `[]` | Netzadressen (IP oder CIDR), deren Anfragen immer zugelassen werden. Ist die Liste gefüllt, werden Anfragen aus anderen Netzen gegen die blockierten Netze und Anfragen geprüft. Eine leere Liste schaltet den Allowlist-Modus ab. |
 | `blockedNetworks` | Liste von Texten | `[]` | Netzadressen (IP oder CIDR), deren Anfragen immer verworfen werden. Wird nach `allowedNetworks` ausgewertet. |
+| `allowedLocalEndPoints` | Liste von Texten | `[]` | Lokale Endpunkte des Servers, über die Anfragen angenommen werden, als IP-Adresse oder Hostname mit optionalem Port (`192.0.2.10:53`, `[2001:db8::10]:853`, `dns.example.com:443`); ohne Port passt jeder Port. Bei DoH, DoT und DoQ zählt der Hostname, mit dem sich der Client verbunden hat. Ist die Liste gefüllt, werden Anfragen über alle anderen Endpunkte verworfen. Für angenommene Anfragen gelten `blockedQuestions` weiterhin. |
 | `blockedQuestions` | Liste von Objekten | `[]` | Muster für DNS-Anfragen, die blockiert werden. Jedes Objekt legt Name, Typ und das Blockieren ganzer Zonen fest. Siehe [Blockierte Anfragen](#blockierte-anfragen). |
 
 ### Blockierte Anfragen
@@ -164,13 +165,13 @@ Die Drop Requests App prüft jede eingehende DNS-Anfrage in diesen Schritten:
 
 1. **Prüfung des Hauptschalters:** Steht `enableBlocking` auf `false`, wird die Anfrage sofort zugelassen.
 
-2. **Prüfung auf fehlerhafte Pakete:** Steht `dropMalformedRequests` auf `true` und ließ sich die Anfrage nicht einlesen, wird sie stillschweigend verworfen.
+2. **Prüfung auf fehlerhafte Pakete:** Steht `dropMalformedRequests` auf `true` und ließ sich die Anfrage nicht einlesen oder enthält sie nicht genau eine Frage, wird sie stillschweigend verworfen.
 
 3. **Auswertung der Allowlist:** Ist `allowedNetworks` gefüllt, wird geprüft, ob die Quell-IP zu einem erlaubten Netz passt. Bei einem Treffer wird die Anfrage zugelassen. Ist `allowedNetworks` leer, entfällt dieser Schritt.
 
 4. **Auswertung der Blockliste:** Passt die Quell-IP zu einem Netz in `blockedNetworks`, wird die Anfrage stillschweigend verworfen.
 
-5. **Prüfung der Anzahl der Fragen:** Enthält die Anfrage nicht genau eine DNS-Frage, wird sie stillschweigend verworfen.
+5. **Prüfung des lokalen Endpunkts:** Ist `allowedLocalEndPoints` gefüllt und kam die Anfrage nicht über einen der genannten Endpunkte, wird sie stillschweigend verworfen.
 
 6. **Abgleich mit Mustern:** Die DNS-Frage wird mit allen Einträgen in `blockedQuestions` verglichen. Passt ein Eintrag, wird die Anfrage stillschweigend verworfen.
 

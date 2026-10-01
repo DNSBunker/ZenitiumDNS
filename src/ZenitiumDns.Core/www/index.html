@@ -56,6 +56,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
     <script src="js/selftest.js"></script>
     <script src="js/preferences.js"></script>
     <script src="js/clients.js"></script>
+    <script src="js/dhcp.js"></script>
 </head>
 <body>
     <div class="AlertPlaceholder toast-region" role="status" aria-live="polite"></div>
@@ -74,6 +75,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
                 <li id="mainPanelTabListDashboard" role="presentation" class="active"><a href="#mainPanelTabPaneDashboard" aria-controls="mainPanelTabPaneDashboard" role="tab" data-toggle="tab"><span class="fa fa-fw fa-tachometer" aria-hidden="true"></span> Übersicht</a></li>
                 <li id="mainPanelTabListResolver" role="presentation"><a href="#mainPanelTabPaneResolver" aria-controls="mainPanelTabPaneResolver" role="tab" data-toggle="tab" onclick="refreshResolverTab();"><span class="fa fa-fw fa-sitemap" aria-hidden="true"></span> Resolver</a></li>
                 <li id="mainPanelTabListFilter" role="presentation"><a href="#mainPanelTabPaneFilter" aria-controls="mainPanelTabPaneFilter" role="tab" data-toggle="tab"><span class="fa fa-fw fa-filter" aria-hidden="true"></span> Filter</a></li>
+                <li id="mainPanelTabListDhcp" role="presentation"><a href="#mainPanelTabPaneDhcp" aria-controls="mainPanelTabPaneDhcp" role="tab" data-toggle="tab" onclick="refreshDhcpTab();"><span class="fa fa-fw fa-plug" aria-hidden="true"></span> DHCP</a></li>
                 <li id="mainPanelTabListApps" role="presentation"><a href="#mainPanelTabPaneApps" aria-controls="mainPanelTabPaneApps" role="tab" data-toggle="tab" onclick="refreshApps();"><span class="fa fa-fw fa-puzzle-piece" aria-hidden="true"></span> Apps</a></li>
                 <li id="mainPanelTabListDnsClient" role="presentation"><a href="#mainPanelTabPaneDnsClient" aria-controls="mainPanelTabPaneDnsClient" role="tab" data-toggle="tab"><span class="fa fa-fw fa-search" aria-hidden="true"></span> DNS-Client</a></li>
                 <li id="mainPanelTabListLogs" role="presentation"><a href="#mainPanelTabPaneLogs" aria-controls="mainPanelTabPaneLogs" role="tab" data-toggle="tab" onclick="refreshLogsTab();"><span class="fa fa-fw fa-list-alt" aria-hidden="true"></span> Protokolle</a></li>
@@ -763,6 +765,248 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
                                     </div>
                                 </div>
 
+                                <div id="mainPanelTabPaneDhcp" role="tabpanel" class="tab-pane" style="padding: 10px 0 0 0;">
+                                    <ul class="nav nav-pills sub-nav" role="tablist">
+                                        <li id="dhcpTabListStatus" role="presentation" class="active"><a href="#dhcpTabPaneStatus" aria-controls="dhcpTabPaneStatus" role="tab" data-toggle="tab">Status</a></li>
+                                        <li id="dhcpTabListLeases" role="presentation"><a href="#dhcpTabPaneLeases" aria-controls="dhcpTabPaneLeases" role="tab" data-toggle="tab">Leases</a></li>
+                                        <li id="dhcpTabListSettings" role="presentation"><a href="#dhcpTabPaneSettings" aria-controls="dhcpTabPaneSettings" role="tab" data-toggle="tab">Einstellungen</a></li>
+                                        <li id="dhcpTabListExpert" role="presentation"><a href="#dhcpTabPaneExpert" aria-controls="dhcpTabPaneExpert" role="tab" data-toggle="tab">Experte</a></li>
+                                    </ul>
+
+                                    <div class="tab-content" style="padding-top: 12px;">
+                                        <div id="dhcpTabPaneStatus" role="tabpanel" class="tab-pane active">
+                                            <div class="section-intro">
+                                                <div style="max-width: 110ch;">Der DHCP-Server vergibt IPv4-Adressen und trägt die Namen der Geräte in das lokale DNS ein. Er erkennt andere DHCP-Server im Netz und kann ihnen den Vortritt lassen.</div>
+                                            </div>
+
+                                            <div style="margin-bottom: 10px;">
+                                                <button type="button" class="btn btn-default btn-sm" onclick="refreshDhcpStatus();">Aktualisieren</button>
+                                                <button id="btnDhcpProbe" type="button" class="btn btn-default btn-sm" data-loading-text="Suche läuft …" onclick="probeDhcp(this);">Nach anderen DHCP-Servern suchen</button>
+                                            </div>
+
+                                            <div id="divDhcpStatus"></div>
+                                        </div>
+
+                                        <div id="dhcpTabPaneLeases" role="tabpanel" class="tab-pane">
+                                            <div class="section-intro">
+                                                <div style="max-width: 110ch;">Aktuelle und frühere Leases. Abgelaufene Leases bleiben erhalten, damit ein Gerät beim nächsten Mal dieselbe Adresse bekommt, solange sie frei ist. Ein Lease lässt sich in eine feste Reservierung umwandeln.</div>
+                                            </div>
+
+                                            <div class="form-inline" style="margin-bottom: 10px;">
+                                                <input id="txtDhcpLeaseFilter" type="text" class="form-control input-sm" style="width: 260px;" placeholder="Suche nach IP, MAC oder Name" oninput="renderDhcpLeases();">
+                                                <button type="button" class="btn btn-default btn-sm" onclick="refreshDhcpLeases();">Aktualisieren</button>
+                                            </div>
+
+                                            <div id="divDhcpLeases"></div>
+                                        </div>
+
+                                        <div id="dhcpTabPaneSettings" role="tabpanel" class="tab-pane">
+
+                                            <div class="well well-sm form-horizontal settings-section">
+                                                <h4 class="settings-section-title">DHCP-Server</h4>
+                                                <div class="form-group">
+                                                    <div class="col-sm-offset-3 col-sm-8">
+                                                        <div class="checkbox">
+                                                            <label><input id="chkDhcpEnabled" type="checkbox"> DHCP-Server einschalten</label>
+                                                        </div>
+                                                    </div>
+                                                    <div class="col-sm-offset-3 col-sm-8 help-block-text">Der Server lauscht auf UDP-Port 67 aller Schnittstellen mit IPv4-Adresse und antwortet nur in Netzen, für die ein Adressbereich eingerichtet ist. Läuft auf diesem Rechner schon ein anderer DHCP-Server, zeigt der Status einen Fehler beim Öffnen des Ports.</div>
+                                                </div>
+                                            </div>
+
+                                            <div class="well well-sm form-horizontal settings-section">
+                                                <h4 class="settings-section-title">Adressbereich</h4>
+                                                <p class="settings-section-desc">Für ein einzelnes Netz genügen diese Angaben. Weitere Netze, Relays und Sonderfälle werden im Reiter Experte eingerichtet.</p>
+                                                <div class="form-group">
+                                                    <div class="col-sm-offset-3 col-sm-8">
+                                                        <div class="checkbox">
+                                                            <label><input id="chkDhcpSimpleEnabled" type="checkbox"> Einfache Einstellungen verwenden</label>
+                                                        </div>
+                                                    </div>
+                                                    <div class="col-sm-offset-3 col-sm-8 help-block-text">Ausgeschaltet gilt nur die Konfiguration im Reiter Experte.</div>
+                                                </div>
+
+                                                <div class="form-group dhcp-simple">
+                                                    <label for="optDhcpInterface" class="col-sm-3 control-label">Schnittstelle</label>
+                                                    <div class="col-sm-8">
+                                                        <select id="optDhcpInterface" class="form-control" style="width: 320px;"></select>
+                                                    </div>
+                                                    <div class="col-sm-offset-3 col-sm-8 help-block-text">Automatisch bedeutet: jede Schnittstelle, deren Netz zum Adressbereich passt. Im Cluster müssen fest eingetragene Schnittstellen auf allen Knoten gleich heißen.</div>
+                                                </div>
+
+                                                <div class="form-group dhcp-simple">
+                                                    <label class="col-sm-3 control-label">Adressbereich</label>
+                                                    <div class="col-sm-8">
+                                                        <input id="txtDhcpRangeStart" type="text" class="form-control" style="width: 150px; display: inline;" placeholder="192.168.1.100"> <span class="unit">bis</span>
+                                                        <input id="txtDhcpRangeEnd" type="text" class="form-control" style="width: 150px; display: inline;" placeholder="192.168.1.200">
+                                                    </div>
+                                                </div>
+
+                                                <div class="form-group dhcp-simple">
+                                                    <label for="txtDhcpNetmask" class="col-sm-3 control-label">Netzmaske</label>
+                                                    <div class="col-sm-8">
+                                                        <input id="txtDhcpNetmask" type="text" class="form-control" style="width: 150px; display: inline;" placeholder="automatisch"> <span class="unit">leer = aus der Schnittstelle</span>
+                                                    </div>
+                                                </div>
+
+                                                <div class="form-group dhcp-simple">
+                                                    <label for="txtDhcpGateway" class="col-sm-3 control-label">Gateway</label>
+                                                    <div class="col-sm-8">
+                                                        <input id="txtDhcpGateway" type="text" class="form-control" style="width: 150px; display: inline;" placeholder="automatisch"> <span class="unit" id="lblDhcpGatewayHint"></span>
+                                                    </div>
+                                                    <div class="col-sm-offset-3 col-sm-8 help-block-text">Leer übernimmt der Server das Standard-Gateway der Schnittstelle, sofern es im selben Netz liegt.</div>
+                                                </div>
+
+                                                <div class="form-group dhcp-simple">
+                                                    <label for="txtDhcpDnsServers" class="col-sm-3 control-label">DNS-Server</label>
+                                                    <div class="col-sm-8">
+                                                        <input id="txtDhcpDnsServers" type="text" class="form-control" style="width: 320px; display: inline;" placeholder="dieser Server">
+                                                    </div>
+                                                    <div class="col-sm-offset-3 col-sm-8 help-block-text">Mehrere Adressen mit Leerzeichen trennen. Leer verteilt der Server seine eigene Adresse im jeweiligen Netz, die Geräte nutzen dann ZenitiumDNS mit allen Filtern.</div>
+                                                </div>
+
+                                                <div class="form-group dhcp-simple">
+                                                    <label for="txtDhcpDomain" class="col-sm-3 control-label">Domain</label>
+                                                    <div class="col-sm-8">
+                                                        <input id="txtDhcpDomain" type="text" class="form-control" style="width: 200px; display: inline;" placeholder="lan">
+                                                    </div>
+                                                    <div class="col-sm-offset-3 col-sm-8 help-block-text">Geräte sind unter <code>name.domain</code> erreichbar. Für ein privates Netz empfiehlt sich <code>home.arpa</code> oder <code>lan</code>; unbekannte Namen in dieser Domain beantwortet der Server selbst mit NXDOMAIN.</div>
+                                                </div>
+
+                                                <div class="form-group dhcp-simple">
+                                                    <label for="txtDhcpLeaseTime" class="col-sm-3 control-label">Lease-Dauer</label>
+                                                    <div class="col-sm-8">
+                                                        <input id="txtDhcpLeaseTime" type="text" class="form-control" style="width: 100px; display: inline;" placeholder="24h"> <span class="unit">z. B. 30m, 12h, 7d oder infinite</span>
+                                                    </div>
+                                                </div>
+
+                                                <div class="form-group dhcp-simple">
+                                                    <div class="col-sm-offset-3 col-sm-8">
+                                                        <div class="checkbox">
+                                                            <label><input id="chkDhcpAuthoritative" type="checkbox"> Autoritativ für dieses Netz</label>
+                                                        </div>
+                                                    </div>
+                                                    <div class="col-sm-offset-3 col-sm-8 help-block-text">Nur einschalten, wenn dieser Server der einzige DHCP-Server im Netz ist. Dann weist er falsche Anfragen sofort mit DHCPNAK ab und übernimmt Leases, die er nicht kennt, statt zu schweigen.</div>
+                                                </div>
+                                            </div>
+
+                                            <div class="well well-sm form-horizontal settings-section dhcp-simple">
+                                                <h4 class="settings-section-title">Reservierungen</h4>
+                                                <p class="settings-section-desc">Feste Adressen für einzelne Geräte, erkannt an der MAC-Adresse. Die Adresse darf außerhalb des Adressbereichs liegen, muss aber im selben Netz sein.</p>
+                                                <table class="table table-condensed dhcp-reservations">
+                                                    <thead><tr><th>MAC-Adresse</th><th>IP-Adresse</th><th>Hostname</th><th></th></tr></thead>
+                                                    <tbody id="tbodyDhcpReservations"></tbody>
+                                                </table>
+                                                <button type="button" class="btn btn-default btn-sm" onclick="addDhcpReservationRow('', '', '');">Reservierung hinzufügen</button>
+                                            </div>
+
+                                            <div class="well well-sm form-horizontal settings-section">
+                                                <h4 class="settings-section-title">Priorität gegenüber anderen DHCP-Servern</h4>
+                                                <p class="settings-section-desc">Legt fest, wie sich der Server verhält, wenn im selben Netz noch ein anderer DHCP-Server antwortet, etwa der Router.</p>
+                                                <div class="form-group">
+                                                    <div class="col-sm-offset-3 col-sm-8">
+                                                        <div class="radio"><label><input type="radio" name="rdoDhcpPriority" value="primary"> <b>Primär</b>: sofort antworten</label></div>
+                                                        <div class="radio"><label><input type="radio" name="rdoDhcpPriority" value="delayed"> <b>Nachrangig</b>: Angebote verzögert senden, andere Server kommen zuerst zum Zug</label></div>
+                                                        <div class="radio"><label><input type="radio" name="rdoDhcpPriority" value="standby"> <b>Reserve</b>: neuen Geräten nur antworten, solange kein anderer DHCP-Server gefunden wird</label></div>
+                                                    </div>
+                                                </div>
+                                                <div class="form-group dhcp-priority-delayed">
+                                                    <label for="txtDhcpResponseDelay" class="col-sm-3 control-label">Verzögerung</label>
+                                                    <div class="col-sm-8">
+                                                        <input id="txtDhcpResponseDelay" type="number" min="0" max="10000" class="form-control" style="width: 110px; display: inline;"> <span class="unit">Millisekunden (Standard 2000)</span>
+                                                    </div>
+                                                </div>
+                                                <div class="form-group dhcp-priority-delayed">
+                                                    <label for="txtDhcpMinSecs" class="col-sm-3 control-label">Mindestwartezeit</label>
+                                                    <div class="col-sm-8">
+                                                        <input id="txtDhcpMinSecs" type="number" min="0" max="60" class="form-control" style="width: 110px; display: inline;"> <span class="unit">Sekunden (0 = aus)</span>
+                                                    </div>
+                                                    <div class="col-sm-offset-3 col-sm-8 help-block-text">Antwortet erst, wenn ein Gerät schon so lange sucht (Feld <code>secs</code> der Anfrage), also nur, wenn der andere Server ausfällt.</div>
+                                                </div>
+                                            </div>
+
+                                            <div class="well well-sm form-horizontal settings-section">
+                                                <h4 class="settings-section-title">Schutz vor Adresskonflikten</h4>
+                                                <div class="form-group">
+                                                    <div class="col-sm-offset-3 col-sm-8">
+                                                        <div class="checkbox">
+                                                            <label><input id="chkDhcpPingCheck" type="checkbox"> Adresse vor dem Vergeben anpingen</label>
+                                                        </div>
+                                                        <input id="txtDhcpPingTimeout" type="number" min="100" max="3000" class="form-control" style="width: 110px; display: inline;"> <span class="unit">Millisekunden Wartezeit</span>
+                                                    </div>
+                                                    <div class="col-sm-offset-3 col-sm-8 help-block-text">Antwortet eine Adresse auf den Ping, wird sie zehn Minuten lang nicht vergeben. Schützt vor Geräten mit fest eingestellter Adresse im Bereich.</div>
+                                                </div>
+                                                <div class="form-group">
+                                                    <div class="col-sm-offset-3 col-sm-8">
+                                                        <div class="checkbox">
+                                                            <label><input id="chkDhcpRogueDetection" type="checkbox"> Regelmäßig nach anderen DHCP-Servern suchen</label>
+                                                        </div>
+                                                        <input id="txtDhcpRogueInterval" type="number" min="30" max="86400" class="form-control" style="width: 110px; display: inline;"> <span class="unit">Sekunden zwischen den Suchen</span>
+                                                    </div>
+                                                    <div class="col-sm-offset-3 col-sm-8 help-block-text">Der Server sendet dazu selbst eine DHCP-Anfrage und wertet die Angebote aus. Zusätzlich erkennt er fremde Server an den Anfragen der Geräte. Gefundene Server erscheinen im Status und im Selbsttest.</div>
+                                                </div>
+                                            </div>
+
+                                            <div class="well well-sm form-horizontal settings-section">
+                                                <h4 class="settings-section-title">DNS-Namen</h4>
+                                                <div class="form-group">
+                                                    <div class="col-sm-offset-3 col-sm-8">
+                                                        <div class="checkbox">
+                                                            <label><input id="chkDhcpRegisterDns" type="checkbox"> Gerätenamen im DNS eintragen</label>
+                                                        </div>
+                                                        <input id="txtDhcpDnsTtl" type="number" min="0" max="86400" class="form-control" style="width: 110px; display: inline;"> <span class="unit">Sekunden TTL</span>
+                                                    </div>
+                                                    <div class="col-sm-offset-3 col-sm-8 help-block-text">Beantwortet A- und PTR-Anfragen für die Namen der Geräte, nur für Clients, die den Resolver nutzen dürfen.</div>
+                                                </div>
+                                            </div>
+
+                                            <div id="divDhcpSettingsAlert"></div>
+                                            <button id="btnSaveDhcpSettings" type="button" class="btn btn-primary" data-loading-text="Speichern" onclick="saveDhcpSettings(this);">Speichern</button>
+                                        </div>
+
+                                        <div id="dhcpTabPaneExpert" role="tabpanel" class="tab-pane">
+                                            <div class="section-intro">
+                                                <div style="max-width: 110ch;">Volle Kontrolle in der Syntax von dnsmasq: mehrere Netze und Relays, Tags, Optionen nach Hersteller- oder Benutzerklasse, PXE-Boot, gekapselte Herstelleroptionen und mehr. Die Zeilen der einfachen Einstellungen stehen oben und tragen das Tag <code>simple</code>; Zeilen hier haben bei derselben Option Vorrang.</div>
+                                            </div>
+
+                                            <div class="form-group">
+                                                <label>Aus den einfachen Einstellungen erzeugt</label>
+                                                <pre id="preDhcpGenerated" class="dhcp-generated"></pre>
+                                            </div>
+
+                                            <div class="form-group">
+                                                <label for="txtDhcpExpert">Eigene Konfiguration</label>
+                                                <textarea id="txtDhcpExpert" class="form-control dhcp-expert-editor" rows="18" spellcheck="false" autocomplete="off" placeholder="dhcp-range=set:gaeste,10.10.0.50,10.10.0.200,255.255.255.0,2h&#10;dhcp-option=tag:gaeste,option:router,10.10.0.1&#10;dhcp-host=aa:bb:cc:dd:ee:ff,192.168.1.20,drucker"></textarea>
+                                            </div>
+
+                                            <div id="divDhcpExpertResult"></div>
+                                            <div style="margin-bottom: 14px;">
+                                                <button id="btnValidateDhcpExpert" type="button" class="btn btn-default" data-loading-text="Prüfen" onclick="validateDhcpExpert(this);">Prüfen</button>
+                                                <button type="button" class="btn btn-primary" data-loading-text="Speichern" onclick="saveDhcpSettings(this);">Speichern</button>
+                                            </div>
+
+                                            <details class="dhcp-reference">
+                                                <summary>Unterstützte Anweisungen</summary>
+                                                <table class="table table-condensed">
+                                                    <tbody>
+                                                        <tr><td><code>dhcp-range=[tag:&lt;tag&gt;,][set:&lt;tag&gt;,]&lt;start&gt;,&lt;ende&gt;|static[,&lt;netzmaske&gt;[,&lt;broadcast&gt;]][,&lt;dauer&gt;]</code></td><td>Adressbereich; für Netze hinter einem Relay ist die Netzmaske Pflicht.</td></tr>
+                                                        <tr><td><code>dhcp-host=[&lt;mac&gt;][,id:&lt;client-id&gt;|*][,set:&lt;tag&gt;][,tag:&lt;tag&gt;][,&lt;ip&gt;][,&lt;name&gt;][,&lt;dauer&gt;][,ignore]</code></td><td>Reservierung, eigener Name oder Ausschluss eines Geräts; MAC-Adressen dürfen <code>*</code> enthalten.</td></tr>
+                                                        <tr><td><code>dhcp-option[-force]=[tag:&lt;tag&gt;,][encap:&lt;opt&gt;,][vi-encap:&lt;nr&gt;,][vendor:&lt;klasse&gt;,]&lt;nr&gt;|option:&lt;name&gt;,[&lt;wert&gt;,…]</code></td><td>Optionen; <code>0.0.0.0</code> steht für die Adresse dieses Servers, ein leerer Wert unterdrückt die Option, <code>-force</code> sendet sie auch ungefragt.</td></tr>
+                                                        <tr><td><code>dhcp-match</code>, <code>dhcp-vendorclass</code>, <code>dhcp-userclass</code>, <code>dhcp-mac</code>, <code>dhcp-circuitid</code>, <code>dhcp-remoteid</code>, <code>dhcp-subscrid</code></td><td>Setzen Tags anhand von Optionen, Hersteller- und Benutzerklasse, MAC-Adresse oder Relay-Angaben (Option 82).</td></tr>
+                                                        <tr><td><code>tag-if=set:&lt;tag&gt;[,set:&lt;tag&gt;][,tag:&lt;tag&gt;]</code></td><td>Setzt Tags, wenn alle angegebenen Tags gesetzt sind (<code>tag:!x</code> verneint).</td></tr>
+                                                        <tr><td><code>dhcp-ignore</code>, <code>dhcp-ignore-names</code>, <code>dhcp-generate-names</code>, <code>dhcp-broadcast</code></td><td>Anfragen ignorieren, Namen der Geräte ignorieren oder aus der MAC-Adresse bilden, Antworten immer per Broadcast senden.</td></tr>
+                                                        <tr><td><code>dhcp-boot=[tag:&lt;tag&gt;,]&lt;datei&gt;[,&lt;servername&gt;[,&lt;serveradresse&gt;]]</code></td><td>PXE- und BOOTP-Boot.</td></tr>
+                                                        <tr><td><code>domain=&lt;domain&gt;[,&lt;netz/präfix&gt;|&lt;start&gt;,&lt;ende&gt;][,local]</code></td><td>Domain für Gerätenamen; <code>local</code> beantwortet unbekannte Namen darin selbst.</td></tr>
+                                                        <tr><td><code>dhcp-authoritative</code>, <code>dhcp-rapid-commit</code>, <code>dhcp-sequential-ip</code>, <code>dhcp-ignore-clid</code>, <code>dhcp-lease-max=&lt;n&gt;</code>, <code>dhcp-reply-delay=[tag:&lt;tag&gt;,]&lt;s&gt;</code>, <code>bootp-dynamic</code>, <code>no-ping</code></td><td>Globale Schalter.</td></tr>
+                                                        <tr><td><code>interface=&lt;name&gt;</code>, <code>except-interface=&lt;name&gt;</code></td><td>Schnittstellen einschränken; jede Schnittstelle setzt automatisch ein Tag mit ihrem Namen, außerdem gibt es die Tags <code>known</code> und <code>bootp</code>.</td></tr>
+                                                    </tbody>
+                                                </table>
+                                                <div id="divDhcpOptionNames" class="dhcp-option-names"></div>
+                                            </details>
+                                        </div>
+                                    </div>
+                                </div>
+
                                 <div id="mainPanelTabPaneApps" role="tabpanel" class="tab-pane" style="padding: 10px 0 0 0;">
                                     <div id="divViewAppsLoader" style=" display: none; margin-top: 10px; height: 400px;"></div>
 
@@ -1137,7 +1381,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
                                 <div id="mainPanelTabPaneSelfTest" role="tabpanel" class="tab-pane" style="padding: 10px 0 0 0;">
                                     <div class="section-intro">
                                         <div class="pull-left">
-                                            Der Selbsttest prüft, ob der Resolver wie vorgesehen arbeitet: lauschende Dienste, Auflösung und DNSSEC, Zertifikate, Sicherheitseinstellungen, Blocklisten, Apps und das System. Schwere Probleme erscheinen zusätzlich auf der Übersicht. Ergebnisse werden eine Minute zwischengespeichert.
+                                            Der Selbsttest prüft, ob der Resolver wie vorgesehen arbeitet: lauschende Dienste, Auflösung und DNSSEC, Cache, Zertifikate, Sicherheitseinstellungen, Blocklisten und Clientprofile, Apps und das System. Fehler erscheinen zusätzlich auf der Übersicht, „Öffnen“ springt zur passenden Einstellung. Ergebnisse werden eine Minute zwischengespeichert.
                                         </div>
                                         <div class="pull-right">
                                             <button id="btnSelfTestRun" type="button" class="btn btn-primary btn-sm" onclick="refreshSelfTest(true);" data-loading-text="Prüfe..."><span class="fa fa-refresh" aria-hidden="true"></span> Erneut prüfen</button>

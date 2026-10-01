@@ -1,45 +1,29 @@
 <!DOCTYPE html>
-<html lang="en" xmlns="http://www.w3.org/1999/xhtml">
+<html lang="en">
 <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-
-    <title>ZenitiumDNS</title>
-
-    <link href="/css/main.css" rel="stylesheet" />
-    <link href="/css/bootstrap.min.css" rel="stylesheet" />
-
-    <script src="/js/jquery.min.js"></script>
-    <script src="/js/main.js"></script>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>ZenitiumDNS</title>
+<link rel="icon" href="/favicon.ico">
+<style>
+body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;background:#f4f6f6;color:#1f2a2c;line-height:1.5}
+main{max-width:560px;margin:12vh auto 0;padding:0 20px;text-align:center}
+img{width:64px;height:64px}
+h1{font-size:26px;margin:12px 0 4px}
+.lead{color:#4a5a5d;margin:0 0 24px}
+.endpoint{display:inline-block;padding:10px 16px;background:#fff;border:1px solid #d6dfe0;border-radius:8px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:15px;word-break:break-all}
+.note{color:#6b7a7d;font-size:13px;margin-top:28px}
+@media (prefers-color-scheme:dark){body{background:#141b1c;color:#e3eaeb}.lead{color:#a9b8ba}.endpoint{background:#1d2628;border-color:#324043}.note{color:#8a9a9d}}
+</style>
 </head>
 <body>
-    <div id="content">
-        <div class="container">
-            <div class="features" style="text-align: center; margin-top: 60px;">
-                <a href="/">
-                    <img src="/img/logo.png" alt="ZenitiumDNS Logo" />
-                </a>
-                <h1>ZenitiumDNS</h1>
-                <p style="max-width: 800px; margin-right: auto; margin-left: auto;">This server supports encrypted DNS protocol (DNS-over-HTTPS) that you can use with your web browser like Mozilla Firefox.</p>
-
-                <h3 style="margin-top: 40px;">The Encrypted DNS Service URL</h3>
-                <p>
-                    Use the following URL to configure your clients for consuming the DNS-over-HTTPS service.
-                </p>
-                <p style="font-size: 16px; font-weight: bold;">
-                    <a id="lnkDoH" href=""></a>
-                </p>
-
-                <h3 style="margin-top: 40px;">Mozilla Firefox Configuration</h3>
-                <p style="max-width: 800px; margin-right: auto; margin-left: auto;">
-                    To configure Firefox, go to <b>Settings &gt; Privacy &amp; Security</b> and scroll down to find <b>DNS over HTTPS</b> section. Click on the <b>Max Protection</b> option, select <b>Custom</b> option in the <b>Choose provider</b> drop down box, and enter the encrypted DNS service URL given above.
-                </p>
-                <img class="auto-resize-img shadow-screenshot" style="margin-top: 20px; margin-bottom: 20px;" src="img/firefox-doh.png" alt="Mozilla Firefox Custom DNS-over-HTTPS Option" />
-                <p style="max-width: 800px; margin-right: auto; margin-left: auto;">
-                    Note! This will work only for Firefox and all other applications on your computer will keep using the default DNS server configured in your network settings.
-                </p>
-            </div>
-        </div>
-    </div>
+<main>
+<img src="/img/logo.png" alt="">
+<h1>ZenitiumDNS</h1>
+<p class="lead">This address is a DNS-over-HTTPS endpoint (RFC 8484). It answers DNS queries from apps and operating systems and is not a website.</p>
+<div class="endpoint">https://{host}/dns-query</div>
+<p class="note">Enter the address above as DNS-over-HTTPS server in your browser or system settings.</p>
+</main>
 </body>
 </html>

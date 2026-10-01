@@ -9,8 +9,8 @@ Die folgende Liste enthält die RFCs, die ZenitiumDNS umsetzt. Die Titel sind di
 | RFC 1034 | Domain names - concepts and facilities
 | RFC 1035 | Domain names - implementation and specification
 | RFC 1183 | New DNS RR Definitions
-| RFC 1982 | Serial Number Arithmetic
 | RFC 1886 | DNS Extensions to support IP version 6
+| RFC 1982 | Serial Number Arithmetic
 | RFC 2308 | Negative Caching of DNS Queries (DNS NCACHE)
 | RFC 2782 | A DNS RR for specifying the location of services (DNS SRV)
 | RFC 2915 | The Naming Authority Pointer (NAPTR) DNS Resource Record
@@ -49,10 +49,10 @@ Die folgende Liste enthält die RFCs, die ZenitiumDNS umsetzt. Die Titel sind di
 | RFC 7793 | Adding 100.64.0.0/10 Prefixes to the IPv4 Locally-Served DNS Zones Registry
 | RFC 7816 | DNS Query Name Minimisation to Improve Privacy
 | RFC 7830 | The EDNS(0) Padding Option
+| RFC 7858 | Specification for DNS over Transport Layer Security (TLS)
 | RFC 7871 | Client Subnet in DNS Queries
 | RFC 7873 | Domain Name System (DNS) Cookies
 | RFC 7958 | DNSSEC Trust Anchor Publication for the Root Zone
-| RFC 7858 | Specification for DNS over Transport Layer Security (TLS)
 | RFC 8080 | Edwards-Curve Digital Security Algorithm (EdDSA) for DNSSEC
 | RFC 8109 | Initializing a DNS Resolver with Priming Queries
 | RFC 8198 | Aggressive Use of DNSSEC-Validated Cache
@@ -67,10 +67,29 @@ Die folgende Liste enthält die RFCs, die ZenitiumDNS umsetzt. Die Titel sind di
 | RFC 9018 | Interoperable Domain Name System (DNS) Server Cookies
 | RFC 9077 | NSEC and NSEC3: TTLs and Aggressive Use
 | RFC 9156 | DNS Query Name Minimisation to Improve Privacy
-| RFC 9250 | DNS over Dedicated QUIC Connections 
+| RFC 9250 | DNS over Dedicated QUIC Connections
 | RFC 9276 | Guidance for NSEC3 Parameter Settings
-| RFC 9520 | Negative Caching of DNS Resolution Failures
-| RFC 9460 | Service Binding and Parameter Specification via the DNS (SVCB and HTTPS Resource Records) 
+| RFC 9460 | Service Binding and Parameter Specification via the DNS (SVCB and HTTPS Resource Records)
 | RFC 9462 | Discovery of Designated Resolvers
+| RFC 9520 | Negative Caching of DNS Resolution Failures
 | RFC 9609 | Initializing a DNS Resolver with Priming Queries
 | draft-vixie-dnsext-dns0x20 | Use of Bit 0x20 in DNS Labels to Improve Transaction Identity
+
+## DHCP
+
+Der DHCP-Server von ZenitiumDNS ([DHCP.de.md](DHCP.de.md)):
+
+| RFC      | Titel |
+|----------|-------|
+| RFC 951 | Bootstrap Protocol (BOOTP) |
+| RFC 2131 | Dynamic Host Configuration Protocol |
+| RFC 2132 | DHCP Options and BOOTP Vendor Extensions |
+| RFC 3011 | The IPv4 Subnet Selection Option for DHCP |
+| RFC 3046 | DHCP Relay Agent Information Option |
+| RFC 3396 | Encoding Long Options in the Dynamic Host Configuration Protocol (DHCPv4) |
+| RFC 3397 | Dynamic Host Configuration Protocol (DHCP) Domain Search Option |
+| RFC 3442 | The Classless Static Route Option for Dynamic Host Configuration Protocol (DHCP) version 4 |
+| RFC 3527 | Link Selection sub-option for the Relay Agent Information Option for DHCPv4 |
+| RFC 4039 | Rapid Commit Option for the Dynamic Host Configuration Protocol version 4 (DHCPv4) |
+| RFC 4702 | The Dynamic Host Configuration Protocol (DHCP) Client Fully Qualified Domain Name (FQDN) Option |
+| RFC 6842 | Client Identifier Option in DHCP Server Replies |

@@ -104,6 +104,10 @@ Counted since the start of the server, even without the endpoint: `zenitiumdns_c
 | `zenitiumdns_cache_max_entries` | gauge | | Configured maximum of the cache (0 = unlimited). |
 | `zenitiumdns_cache_max_memory_bytes` | gauge | | Configured memory limit that triggers cache trimming (0 = no limit). |
 | `zenitiumdns_cache_memory_trimmed_entries_total` | counter | | Cache records removed because the memory limit was exceeded. |
+| `zenitiumdns_memory_pressure_ratio` | gauge | | Highest memory usage ratio of the system, the service or container memory limit (cgroup) and the .NET heap limit, measured every 2 seconds. |
+| `zenitiumdns_cache_pressure_trims_total` | counter | | Times the cache was cut because memory was almost full (from 90 %). |
+| `zenitiumdns_cache_pressure_trimmed_entries_total` | counter | | Cache records removed because memory was almost full. |
+| `zenitiumdns_cache_pressure_cap_entries` | gauge | | Temporary cache size cap while memory is almost full (from 85 %), 0 when there is none. |
 | `zenitiumdns_aggressive_nsec_enabled` | gauge | | 1 if the aggressive use of the DNSSEC-validated cache (RFC 8198) is switched on. |
 | `zenitiumdns_aggressive_nsec_entries` | gauge | | NSEC and NSEC3 records kept for it. |
 | `zenitiumdns_aggressive_nsec_synthesized_total` | counter | | Negative answers synthesized from them. |
@@ -118,9 +122,25 @@ Counted since the start of the server, even without the endpoint: `zenitiumdns_c
 
 | Metric | Type | Labels | Meaning |
 | ------ | ---- | ------ | ------- |
-| `zenitiumdns_queue_length` | gauge | `queue` | Waiting work items: `query` (query processing), `resolver` (recursive resolution), `stats` (statistics). |
+| `zenitiumdns_queue_length` | gauge | `queue` | Waiting work items: `query` (.NET thread pool: DNS-over-TCP, DoT, DoH, DoQ and steps of recursive resolutions), `resolver` (resolutions waiting for a free slot of the concurrent resolution limit), `stats` (statistics). |
 | `zenitiumdns_pending_resolutions` | gauge | | Recursive resolutions in progress. |
 | `zenitiumdns_stats_queue_dropped_total` | counter | | Statistics updates discarded because the statistics queue was full (100,000 entries). If this grows, the statistics and the counters above undercount. |
+
+### DHCP
+
+Only present while the DHCP server is switched on ([DHCP.md](DHCP.md)).
+
+| Metric | Type | Labels | Meaning |
+| ------ | ---- | ------ | ------- |
+| `zenitiumdns_dhcp_serving` | gauge | | 1 while this node hands out addresses. |
+| `zenitiumdns_dhcp_offers_paused` | gauge | | 1 while offers are paused because another DHCP server answers (priority "Standby"). |
+| `zenitiumdns_dhcp_config_errors` | gauge | | Errors in the configuration; above 0 no addresses are handed out. |
+| `zenitiumdns_dhcp_messages_total` | counter | `type` | Processed messages: `discover`, `offer`, `request`, `ack`, `nak`, `decline`, `release`, `inform`. |
+| `zenitiumdns_dhcp_packets_total` | counter | `result` | `received`, `sent`, `malformed`, `rate_limited` (more than 20 packets per second from one MAC address), `busy` (too many requests in processing at once), `ignored` (ignored by the configuration, for example `dhcp-ignore`). |
+| `zenitiumdns_dhcp_pool_exhausted_total` | counter | | Requests that found no free address. |
+| `zenitiumdns_dhcp_conflicts_total` | counter | | Addresses found in use by the ping check or reported by DHCPDECLINE. |
+| `zenitiumdns_dhcp_pool_addresses` | gauge | `state` | Addresses of the dynamic ranges: `total` and `used`. |
+| `zenitiumdns_dhcp_foreign_servers` | gauge | | Other DHCP servers seen in the network within the last 15 minutes (or three search intervals). |
 
 ### Process and .NET runtime
 
@@ -140,6 +160,7 @@ Counted since the start of the server, even without the endpoint: `zenitiumdns_c
 | `dotnet_gc_allocated_bytes_total` | counter | | Allocated bytes since the start. |
 | `dotnet_gc_pause_seconds_total` | counter | | Time the runtime was paused by garbage collections. |
 | `dotnet_gc_pause_time_ratio` | gauge | | Share of the runtime spent in these pauses. |
+| `zenitiumdns_gc_paced_collections_total` | counter | | Short gen0 collections started early because at least 150 new cache entries were created since the last collection (keeps single pauses short during many new names). |
 | `dotnet_threadpool_threads`, `dotnet_threadpool_queue_length` | gauge | | Thread pool threads and waiting work items. |
 | `dotnet_threadpool_completed_items_total` | counter | | Completed work items. |
 | `dotnet_monitor_lock_contentions_total` | counter | | Contended lock acquisitions. |

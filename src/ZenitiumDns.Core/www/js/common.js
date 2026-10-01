@@ -30,6 +30,168 @@ function htmlDecode(value) {
     return $('<div/>').html(value).text();
 }
 
+var serverConnection = { lost: false, attempts: 0, retryAt: 0, timer: null, tick: null };
+
+function isServerConnectionFailure(jqXHR, textStatus) {
+    if (textStatus === "abort")
+        return false;
+
+    return (jqXHR.status === 0) || (jqXHR.status === 502) || (jqXHR.status === 503) || (jqXHR.status === 504);
+}
+
+function getConnectionBanner() {
+    var banner = $("#divConnectionBanner");
+
+    if (banner.length === 0) {
+        banner = $("<div id=\"divConnectionBanner\" class=\"connection-banner\" role=\"status\" aria-live=\"polite\" style=\"display: none;\"><span class=\"connection-banner-icon fa\" aria-hidden=\"true\"></span><span class=\"connection-banner-text\"></span><button type=\"button\" class=\"btn btn-default btn-xs connection-banner-retry\"></button></div>");
+        banner.find(".connection-banner-retry").on("click", function () {
+            reconnectToServerNow();
+        });
+        $("body").append(banner);
+    }
+
+    return banner;
+}
+
+function showConnectionBanner(state) {
+    var banner = getConnectionBanner();
+    var icon = banner.find(".connection-banner-icon");
+    var text = banner.find(".connection-banner-text");
+    var retry = banner.find(".connection-banner-retry");
+
+    banner.removeClass("connection-banner-lost connection-banner-ok");
+    icon.removeClass("fa-plug fa-check fa-refresh fa-spin");
+
+    switch (state) {
+        case "lost":
+            banner.addClass("connection-banner-lost");
+            icon.addClass("fa-plug");
+            text.text(tr("Verbindung zum Server unterbrochen. Neuer Versuch in {0} s …", Math.max(1, Math.ceil((serverConnection.retryAt - Date.now()) / 1000))));
+            retry.text(tr("Jetzt versuchen")).show();
+            break;
+
+        case "connecting":
+            banner.addClass("connection-banner-lost");
+            icon.addClass("fa-refresh fa-spin");
+            text.text(tr("Verbindung wird wiederhergestellt …"));
+            retry.hide();
+            break;
+
+        case "updated":
+            banner.addClass("connection-banner-ok");
+            icon.addClass("fa-refresh fa-spin");
+            text.text(tr("Der Server wurde aktualisiert. Die Seite wird neu geladen …"));
+            retry.hide();
+            break;
+
+        default:
+            banner.addClass("connection-banner-ok");
+            icon.addClass("fa-check");
+            text.text(tr("Verbindung wiederhergestellt."));
+            retry.hide();
+            break;
+    }
+
+    banner.show();
+}
+
+function hideConnectionBanner() {
+    $("#divConnectionBanner").fadeOut(300);
+}
+
+function onServerConnectionLost() {
+    if (serverConnection.lost)
+        return;
+
+    serverConnection.lost = true;
+    serverConnection.attempts = 0;
+    scheduleServerReconnect();
+}
+
+function scheduleServerReconnect() {
+    var delays = [1000, 2000, 3000, 5000];
+    var delay = delays[Math.min(serverConnection.attempts, delays.length - 1)];
+
+    serverConnection.attempts++;
+    serverConnection.retryAt = Date.now() + delay;
+
+    clearTimeout(serverConnection.timer);
+    clearInterval(serverConnection.tick);
+
+    showConnectionBanner("lost");
+
+    serverConnection.tick = setInterval(function () {
+        if (serverConnection.lost && (serverConnection.retryAt > Date.now()))
+            showConnectionBanner("lost");
+    }, 1000);
+
+    serverConnection.timer = setTimeout(reconnectToServerNow, delay);
+}
+
+function reconnectToServerNow() {
+    clearTimeout(serverConnection.timer);
+    clearInterval(serverConnection.tick);
+    showConnectionBanner("connecting");
+
+    $.ajax({
+        type: "GET",
+        url: "api/status",
+        dataType: "json",
+        cache: false,
+        timeout: 5000,
+        success: function () {
+            onServerConnectionRestored();
+        },
+        error: function () {
+            scheduleServerReconnect();
+        }
+    });
+}
+
+function onServerConnectionRestored() {
+    if ((typeof sessionData === "undefined") || (sessionData == null)) {
+        serverConnection.lost = false;
+        showConnectionBanner("ok");
+        setTimeout(hideConnectionBanner, 2500);
+        return;
+    }
+
+    $.ajax({
+        type: "GET",
+        url: "api/user/session/get",
+        headers: { "Authorization": "Bearer " + sessionData.token },
+        dataType: "json",
+        cache: false,
+        timeout: 5000,
+        success: function (responseJSON) {
+            serverConnection.lost = false;
+
+            if (responseJSON.status === "invalid-token") {
+                hideConnectionBanner();
+                showPageLogin();
+                return;
+            }
+
+            var info = responseJSON.info;
+
+            if ((info != null) && (sessionData.info != null) && (info.version !== sessionData.info.version)) {
+                showConnectionBanner("updated");
+                setTimeout(function () { window.location.reload(); }, 1500);
+                return;
+            }
+
+            showConnectionBanner("ok");
+            setTimeout(hideConnectionBanner, 2500);
+
+            if (typeof onServerReconnected === "function")
+                onServerReconnected();
+        },
+        error: function () {
+            scheduleServerReconnect();
+        }
+    });
+}
+
 function HTTPRequest(url, method, data, isTextResponse, success, error, invalidToken, twoFactorAuthRequired, objAlertPlaceholder, objLoaderPlaceholder, processData, contentType, dontHideAlert, showInnerError, token) {
     var finalUrl;
 
@@ -191,14 +353,12 @@ function HTTPRequest(url, method, data, isTextResponse, success, error, invalidT
             if (error != null)
                 error();
 
-            var msg;
+            if (isServerConnectionFailure(jqXHR, textStatus)) {
+                onServerConnectionLost();
+                return;
+            }
 
-            if ((textStatus === "error") && (errorThrown === ""))
-                msg = tr("Keine Verbindung zum Server. Bitte erneut versuchen.");
-            else
-                msg = textStatus + " - " + errorThrown;
-
-            showAlert("danger", tr("Fehler"), msg, objAlertPlaceholder);
+            showAlert("danger", tr("Fehler"), textStatus + " - " + errorThrown, objAlertPlaceholder);
         }
     });
 

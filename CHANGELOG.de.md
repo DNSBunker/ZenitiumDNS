@@ -2,6 +2,57 @@
 
 [English version](CHANGELOG.md)
 
+## ZenitiumDNS 15.5.1 (Paket 15.5.1-12)
+Veröffentlicht: 1. Oktober 2026
+
+### Neu
+- DHCP-Server (DHCPv4) im neuen Reiter **DHCP**, Einzelheiten in [docs/DHCP.de.md](docs/DHCP.de.md):
+  - einfache Einstellungen (Schnittstelle, Bereich, Gateway, DNS-Server, Domain, Lease-Zeit, Reservierungen) und eine Expertenkonfiguration in der Syntax von dnsmasq (`dhcp-range`, `dhcp-host`, `dhcp-option`, Tags, `dhcp-match`, `dhcp-boot`, Relay-Unterstützung und mehr), die vor dem Speichern Zeile für Zeile geprüft wird,
+  - Erkennung anderer DHCP-Server im Netz (eigene DHCPDISCOVER-Anfragen nach Zeitplan und Angebote, die Geräte erhalten) und eine Priorität: „Primär“ antwortet sofort, „Nachrangig“ antwortet verzögert, damit ein vorhandener Server weiterarbeitet, „Reserve“ vergibt nur, solange kein anderer Server zu sehen ist,
+  - Ping-Test, bevor eine Adresse angeboten wird, Behandlung von DHCPDECLINE, Rapid Commit (RFC 4039), Client-FQDN (RFC 4702), klassenlose statische Routen (RFC 3442), lange Optionen (RFC 3396), Relay-Agent-Informationen (RFC 3046), Subnetz- und Link-Auswahl (RFC 3011, RFC 3527),
+  - die Gerätenamen werden im DNS beantwortet (A und PTR) unter der eingestellten Domain,
+  - Berechtigungsbereich **DHCP** (Administratoren vollständig, DNS-Administratoren lesend), Prüfungen im Selbsttest und Prometheus-Metriken `zenitiumdns_dhcp_*`,
+  - Einstellungen und Leases sind zusammen mit den DNS-Einstellungen Teil der Sicherung.
+- Speicherschutz für den Cache: Erreicht der belegte Speicher 85 % des Systemspeichers, des Dienst- oder Container-Limits oder des .NET-Heap-Limits, wächst der Cache nicht weiter; ab 90 % wird ein Viertel, ab 95 % die Hälfte der Einträge entfernt, nachdem eine kompaktierende Garbage Collection den Druck bestätigt hat. Die Grenze fällt nach fünf Minuten unter 75 % weg. Die Prüfung läuft alle 2 Sekunden, ersetzt die bisherige Speicherprüfung des Wächters und erscheint im Selbsttest und als Metriken (`zenitiumdns_memory_pressure_ratio`, `zenitiumdns_cache_pressure_*`).
+- [docs/Performance.de.md](docs/Performance.de.md): gemessener Vergleich mit Technitium DNS Server 15.5.1 samt Rohdaten und ein Benchmark-Kit in `tools/benchmark` (UDP-Lastgenerator, Lastgenerator für DNS-over-TLS, simulierte Root- und TLD-Server, Skript und Zusammenfassung), mit dem sich die Zahlen wiederholen lassen.
+- ClientID über DNS-over-TLS und DNS-over-QUIC: Der Server liest die Wildcard-Namen des Zertifikats; die Clientprofile zeigen die tatsächlich zu verwendenden Adressen und warnen, wenn das Zertifikat keinen Wildcard-Eintrag hat und die ClientID deshalb nur über DNS-over-HTTPS funktioniert. Der Selbsttest prüft dasselbe.
+- Die Weboberfläche verbindet sich selbst wieder, wenn der Server kurz nicht erreichbar ist, etwa bei einem Neustart oder Update: Statt einer Fehlermeldung zeigt ein Hinweis den nächsten Versuch, danach wird die aktuelle Ansicht aufgefrischt, und nach einem Update auf eine neue Version lädt die Seite sich selbst neu.
+- Selbsttest überarbeitet: Kopfzeile mit der Zahl der Fehler und Warnungen, Filter „Handlungsbedarf“, „Öffnen“ springt zur passenden Einstellung, Dauer und Zahl der Prüfungen; neue Prüfungen für das Admin-Passwort und seine Datei, Anfragefilter, Ratenbegrenzung, Client-Sperrlisten, Clientprofile, UDP-Puffer, gekürzte Antworten, Weboberfläche, Speicherschutz, QNAME-Minimierung, Cookies und 0x20, EDNS-Padding und DHCP.
+
+### Leistung
+- Rekursive Auflösungen laufen nicht mehr über einen Pool aus Hunderten wartender Schleifen, die bei jeder neuen Auflösung alle geweckt wurden (Thundering Herd im übernommenen `TaskPool`). Die Lock-Konflikte sanken bei 700 Auflösungen pro Sekunde von etwa 290 auf 0 pro Sekunde, bei 5.000 pro Sekunde von etwa 2.500 auf unter 1; die CPU-Zeit pro rekursiver Auflösung sank um etwa 40 %. Auf einem Server mit 8 CPUs (800 wartende Schleifen) brauchten 700 Anfragen pro Sekunde vorher 2,42 ms CPU-Zeit pro Anfrage und jetzt 0,46 ms, bei rund 2.000 statt 0 Lock-Konflikten pro Sekunde.
+- DNS über TCP, DNS-over-TLS und DNS-over-QUIC laufen auf dem .NET-Threadpool statt auf einem eigenen Scheduler, der jedes fertige Lesen unter einem Lock an einen anderen Thread übergab. Bei 8.000 DoT-Anfragen pro Sekunde sanken die Lock-Konflikte von etwa 1.500 auf unter 1 pro Sekunde und die CPU-Zeit pro Anfrage von etwa 105 auf 60 µs.
+- Mit viel weniger Speichermüll sammelte die Laufzeit nur noch alle zwei Sekunden, dafür 15 bis 35 ms am Stück. Jetzt läuft eine kurze Gen0-Collection, sobald seit der letzten 150 neue Cache-Einträge entstanden sind; bei 2.000 neuen Namen pro Sekunde liegt das 99,9. Perzentil bei 4 bis 6 ms statt 5 bis 11 ms vorher und 30 bis 40 ms ohne diese Steuerung (Metrik `zenitiumdns_gc_paced_collections_total`).
+- Web-Dateien werden beim Bau von Paket und Image verkleinert (`tools/WebMinifier`): 29 Dateien, 1,4 statt 2,4 MB.
+
+### Sicherheit
+- Die Datei `/etc/zenitiumdns/admin.password` wird auch gelöscht, wenn der Benutzer `admin` gelöscht, umbenannt oder durch einen nicht lokalen Benutzer ersetzt wird.
+- Importierte Oberflächensprachen können nicht mehr aus HTML-Attributen oder Skripten ausbrechen: Gerade Anführungszeichen und Backticks in Übersetzungen werden durch typografische ersetzt.
+- IP-Adressen in Clientprofilen und Blocklisten werden streng gelesen. Kurzformen wie `1.2.3`, `10` oder `010.1.1.1`, die .NET als IPv4-Adressen annimmt, gelten nicht mehr als Adressen; eine rein numerische ClientID wie `123` funktioniert jetzt.
+- systemd-Dienst: `CAP_NET_RAW` und die Adressfamilie `AF_PACKET` für DHCP-Antworten an Geräte ohne Adresse.
+
+### Behoben
+- Ein ungültiges Clientprofil verwirft beim Start nicht mehr alle Profile: Ungültige Einträge und Profile mit bereits vergebenem Namen werden übersprungen und protokolliert, ein Bezeichner, den schon ein anderes Profil nutzt, wird ignoriert, und eine Kopie der Datei bleibt als `clients.json.invalid` erhalten.
+- Blocklisten: Jede Zeile, die mit `[` beginnt, wurde stillschweigend ignoriert; jetzt nur noch Kopfzeilen wie `[Adblock Plus 2.0]`, andere Zeilen erscheinen in den Zählern übersprungener oder ungültiger Zeilen.
+- App Advanced Forwarding: Anfragen von Clients, die keine Rekursion nutzen dürfen, werden nicht mehr weitergeleitet, die App kann den Server also nicht zum offenen Resolver machen; Domainregeln werden ohne Rücksicht auf Groß- und Kleinschreibung und ohne abschließenden Punkt verglichen.
+- App DNS64: Antworten mit `REFUSED` und blockierte oder verworfene Antworten werden nicht mehr in AAAA-Einträge umgewandelt.
+- App Drop Requests: Anfragen an einen erlaubten lokalen Endpunkt übersprangen die Regeln für gesperrte Anfragen.
+- App Log Exporter: Fehlende Pfade, Endpunkte oder Adressen führen zu einer klaren Fehlermeldung statt zu einer `NullReferenceException`, relative Dateipfade beziehen sich auf den App-Ordner, eine Warteschlangengröße von 0 bedeutet den Standardwert 1.000.000, Extended DNS Errors werden aus der gelesenen Option übernommen statt Text zu zerlegen (Meldungen mit `:` wurden abgeschnitten), und der Export läuft nicht mehr auf dem Scheduler des aufrufenden Threads.
+- Die Live-Graphen auf der Übersicht blieben nach einem Neustart des Servers stehen, bis die Seite neu geladen wurde.
+- Startseite von DNS-over-HTTPS: eine kurze Seite über den Dienst und seine Adresse statt einer Anleitung für Clients, ohne Bootstrap und jQuery.
+
+### Tests
+- Im isolierten Testnetz: allgemeine Regressionstests 88 von 88, Listensyntax 44 von 44, Clientprofile 57 von 57, ohne Cache 23 von 23, Datei mit dem Admin-Passwort 10 von 10, Startseite von DoH 11 von 11, DNSSEC und aggressives NSEC mit signierten Knot-Zonen 35 von 35, Weboberfläche auf Deutsch und Englisch 48 und 49 Prüfungen einschließlich der DHCP-Seiten.
+- DHCP: Protokoll, Optionen, Relays und DNS-Namen 66 Prüfungen; Erkennung anderer DHCP-Server gegen dnsmasq mit allen drei Prioritäten 8 Prüfungen; Selbsttest und Metriken mit und ohne anderen DHCP-Server; Sicherung und Wiederherstellung von Einstellungen und Leases.
+- Vergleich mit Technitium DNS Server 15.5.1 auf derselben Maschine, je drei abwechselnde Läufe, in [docs/Performance.de.md](docs/Performance.de.md). Auf dem Testserver mit 8 CPUs verursachten 700 Anfragen pro Sekunde für nicht existierende Top-Level-Domains mit 15.5.1-11 1.700 bis 2.170 umkämpfte Sperren pro Sekunde und mit 15.5.1-12 keine.
+
+### Sonstige Änderungen
+- Neue Dateien im Konfigurationsordner: `dhcp.json`, `dhcp-leases.json` und `dhcp-node.id`. Die Formate der vorhandenen Dateien bleiben gleich; `auth.config` erhält beim Speichern den Berechtigungsbereich DHCP.
+- Der Graph der Warteschlangen auf der Übersicht zeigt den .NET-Threadpool statt des entfernten Anfrage-Schedulers.
+- Neue Prometheus-Metriken für Speicherschutz, GC-Steuerung und DHCP, siehe [docs/Metrics.de.md](docs/Metrics.de.md).
+- Unterstützte RFCs: die DHCP-RFCs 951, 2131, 2132, 3011, 3046, 3396, 3397, 3442, 3527, 4039, 4702 und 6842 ergänzt.
+- Alle Markdown-Dateien wurden mit dem Code abgeglichen und korrigiert; neu sind [docs/DHCP.de.md](docs/DHCP.de.md) und [docs/Performance.de.md](docs/Performance.de.md).
+
 ## ZenitiumDNS 15.5.1 (Paket 15.5.1-11)
 Veröffentlicht: 30. September 2026
 

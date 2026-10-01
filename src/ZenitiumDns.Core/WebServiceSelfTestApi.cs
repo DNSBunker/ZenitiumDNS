@@ -32,6 +32,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using ZenitiumDns.ApplicationCommon;
 using ZenitiumDns.Core.Auth;
+using ZenitiumDns.Core.Dhcp;
 using ZenitiumDns.Core.Dns;
 using ZenitiumDns.Core.Dns.Applications;
 using ZenitiumDns.Core.Dns.ZoneManagers;
@@ -55,6 +56,7 @@ namespace ZenitiumDns.Core
 
             IReadOnlyList<SelfTestResult> _lastResults;
             DateTime _lastRunOn;
+            double _lastDuration;
             string _lastLanguage;
 
             #endregion
@@ -135,20 +137,33 @@ namespace ZenitiumDns.Core
                 return value.ToString("N0", Lang.Culture);
             }
 
-            private static void CheckCertificate(List<SelfTestResult> results, string group, string name, X509Certificate2 certificate, string expectedHostname)
+            private static string FormatRemainingDays(TimeSpan remaining)
+            {
+                int days = (int)Math.Floor(remaining.TotalDays);
+
+                if (days < 1)
+                    return Lang.T("in weniger als einem Tag", "in less than a day");
+
+                if (days == 1)
+                    return Lang.T("in einem Tag", "in one day");
+
+                return Lang.T("in " + days + " Tagen", "in " + days + " days");
+            }
+
+            private static void CheckCertificate(List<SelfTestResult> results, string group, string name, X509Certificate2 certificate, string expectedHostname, string section)
             {
                 DateTime now = DateTime.UtcNow;
                 string validity = name + Lang.T(": Gültigkeit", ": validity");
                 DateTime notAfter = certificate.NotAfter.ToUniversalTime();
 
                 if (notAfter <= now)
-                    results.Add(new SelfTestResult(group, validity, SelfTestStatus.Error, Lang.T("Das Zertifikat ist am " + FormatDate(notAfter) + " abgelaufen. Clients bauen keine verschlüsselten Verbindungen mehr auf.", "The certificate expired on " + FormatDate(notAfter) + ". Clients no longer establish encrypted connections.")));
+                    results.Add(new SelfTestResult(group, validity, SelfTestStatus.Error, Lang.T("Das Zertifikat ist am " + FormatDate(notAfter) + " abgelaufen. Clients bauen keine verschlüsselten Verbindungen mehr auf.", "The certificate expired on " + FormatDate(notAfter) + ". Clients no longer establish encrypted connections."), section));
                 else if (certificate.NotBefore.ToUniversalTime() > now)
-                    results.Add(new SelfTestResult(group, validity, SelfTestStatus.Error, Lang.T("Das Zertifikat gilt erst ab " + FormatDate(certificate.NotBefore) + ". Systemzeit prüfen.", "The certificate is only valid from " + FormatDate(certificate.NotBefore) + ". Check the system time.")));
+                    results.Add(new SelfTestResult(group, validity, SelfTestStatus.Error, Lang.T("Das Zertifikat gilt erst ab " + FormatDate(certificate.NotBefore) + ". Systemzeit prüfen.", "The certificate is only valid from " + FormatDate(certificate.NotBefore) + ". Check the system time."), section));
                 else if ((notAfter - now).TotalDays < CERTIFICATE_WARNING_DAYS)
-                    results.Add(new SelfTestResult(group, validity, SelfTestStatus.Warning, Lang.T("Das Zertifikat läuft am " + FormatDate(notAfter) + " ab, in " + Math.Floor((notAfter - now).TotalDays) + " Tagen. Die automatische Erneuerung prüfen.", "The certificate expires on " + FormatDate(notAfter) + ", in " + Math.Floor((notAfter - now).TotalDays) + " days. Check the automatic renewal.")));
+                    results.Add(new SelfTestResult(group, validity, SelfTestStatus.Warning, Lang.T("Das Zertifikat läuft am " + FormatDate(notAfter) + " ab, " + FormatRemainingDays(notAfter - now) + ". Die automatische Erneuerung prüfen.", "The certificate expires on " + FormatDate(notAfter) + ", " + FormatRemainingDays(notAfter - now) + ". Check the automatic renewal."), section));
                 else
-                    results.Add(new SelfTestResult(group, validity, SelfTestStatus.Ok, Lang.T("Gültig bis " + FormatDate(notAfter) + ".", "Valid until " + FormatDate(notAfter) + ".")));
+                    results.Add(new SelfTestResult(group, validity, SelfTestStatus.Ok, Lang.T("Gültig bis " + FormatDate(notAfter) + ".", "Valid until " + FormatDate(notAfter) + "."), section));
 
                 if (!string.IsNullOrEmpty(expectedHostname))
                 {
@@ -164,9 +179,9 @@ namespace ZenitiumDns.Core
                     }
 
                     if (matches)
-                        results.Add(new SelfTestResult(group, name + Lang.T(": Name", ": name"), SelfTestStatus.Ok, Lang.T("Das Zertifikat gilt für " + expectedHostname + ".", "The certificate is valid for " + expectedHostname + ".")));
+                        results.Add(new SelfTestResult(group, name + Lang.T(": Name", ": name"), SelfTestStatus.Ok, Lang.T("Das Zertifikat gilt für " + expectedHostname + ".", "The certificate is valid for " + expectedHostname + "."), section));
                     else
-                        results.Add(new SelfTestResult(group, name + Lang.T(": Name", ": name"), SelfTestStatus.Warning, Lang.T("Das Zertifikat gilt nicht für den Serverdomainnamen " + expectedHostname + ". Clients, die diesen Namen verwenden, lehnen die Verbindung ab.", "The certificate is not valid for the server domain name " + expectedHostname + ". Clients using this name reject the connection.")));
+                        results.Add(new SelfTestResult(group, name + Lang.T(": Name", ": name"), SelfTestStatus.Warning, Lang.T("Das Zertifikat gilt nicht für den Serverdomainnamen " + expectedHostname + ". Clients, die diesen Namen verwenden, lehnen die Verbindung ab.", "The certificate is not valid for the server domain name " + expectedHostname + ". Clients using this name reject the connection."), section));
                 }
             }
 
@@ -198,12 +213,12 @@ namespace ZenitiumDns.Core
                 }
 
                 if (inactive.Count > 0)
-                    results.Add(new SelfTestResult(group, Lang.T("Lauschende Sockets", "Listening sockets"), SelfTestStatus.Error, Lang.T("Nicht aktiv: " + string.Join(", ", inactive) + ". Meist belegt ein anderer Dienst den Port, etwa systemd-resolved, dnsmasq oder unbound. Das Log nennt die genaue Ursache.", "Not active: " + string.Join(", ", inactive) + ". Usually another service occupies the port, such as systemd-resolved, dnsmasq or unbound. The log names the exact cause.")));
+                    results.Add(new SelfTestResult(group, Lang.T("Lauschende Sockets", "Listening sockets"), SelfTestStatus.Error, Lang.T("Nicht aktiv: " + string.Join(", ", inactive) + ". Meist belegt ein anderer Dienst den Port, etwa systemd-resolved, dnsmasq oder unbound. Das Log nennt die genaue Ursache.", "Not active: " + string.Join(", ", inactive) + ". Usually another service occupies the port, such as systemd-resolved, dnsmasq or unbound. The log names the exact cause."), "settings:Network"));
                 else
-                    results.Add(new SelfTestResult(group, Lang.T("Lauschende Sockets", "Listening sockets"), SelfTestStatus.Ok, Lang.T(active + " Dienste lauschen wie konfiguriert.", active + " services are listening as configured.")));
+                    results.Add(new SelfTestResult(group, Lang.T("Lauschende Sockets", "Listening sockets"), SelfTestStatus.Ok, Lang.T(active + " Dienste lauschen wie konfiguriert.", active + " services are listening as configured."), "settings:Network"));
 
                 if ((dnsServer.EnableDnsOverTls || dnsServer.EnableDnsOverHttps || dnsServer.EnableDnsOverQuic) && (dnsServer.DnsTlsCertificate is null))
-                    results.Add(new SelfTestResult(group, Lang.T("Verschlüsselte Protokolle", "Encrypted protocols"), SelfTestStatus.Error, Lang.T("DoT, DoH oder DoQ ist aktiviert, aber es ist kein TLS-Zertifikat geladen. Diese Dienste bleiben deshalb aus.", "DoT, DoH or DoQ is enabled, but no TLS certificate is loaded. These services therefore stay off.")));
+                    results.Add(new SelfTestResult(group, Lang.T("Verschlüsselte Protokolle", "Encrypted protocols"), SelfTestStatus.Error, Lang.T("DoT, DoH oder DoQ ist aktiviert, aber es ist kein TLS-Zertifikat geladen. Diese Dienste bleiben deshalb aus.", "DoT, DoH or DoQ is enabled, but no TLS certificate is loaded. These services therefore stay off."), "settings:OptionalProtocols"));
 
                 bool hasEncryptedService = (dnsServer.DnsTlsCertificate is not null) && (dnsServer.EnableDnsOverTls || dnsServer.EnableDnsOverHttps || dnsServer.EnableDnsOverQuic);
 
@@ -212,17 +227,17 @@ namespace ZenitiumDns.Core
                     case DnsServerDo53Mode.DdrOnlyDrop:
                     case DnsServerDo53Mode.DdrOnlyRefused:
                         if (dnsServer.GetDdrRecords().Count == 0)
-                            results.Add(new SelfTestResult(group, "Do53", SelfTestStatus.Error, Lang.T("Do53 beantwortet nur DDR, es gibt aber keine DDR-Einträge, weil kein TLS-Zertifikat geladen oder kein verschlüsselter Dienst aktiv ist. Clients erhalten über Port 53 damit gar keine Antworten.", "Do53 only answers DDR, but there are no DDR records because no TLS certificate is loaded or no encrypted service is active. Clients therefore get no answers at all over port 53.")));
+                            results.Add(new SelfTestResult(group, "Do53", SelfTestStatus.Error, Lang.T("Do53 beantwortet nur DDR, es gibt aber keine DDR-Einträge, weil kein TLS-Zertifikat geladen oder kein verschlüsselter Dienst aktiv ist. Clients erhalten über Port 53 damit gar keine Antworten.", "Do53 only answers DDR, but there are no DDR records because no TLS certificate is loaded or no encrypted service is active. Clients therefore get no answers at all over port 53."), "settings:OptionalProtocols"));
                         else
-                            results.Add(new SelfTestResult(group, "Do53", SelfTestStatus.Info, Lang.T("Do53 beantwortet nur DDR, andere Anfragen werden " + (dnsServer.Do53Mode == DnsServerDo53Mode.DdrOnlyDrop ? "verworfen" : "mit REFUSED abgelehnt") + ". Clients ohne DDR-Unterstützung können den Resolver nur verschlüsselt nutzen.", "Do53 only answers DDR, other queries are " + (dnsServer.Do53Mode == DnsServerDo53Mode.DdrOnlyDrop ? "dropped" : "rejected with REFUSED") + ". Clients without DDR support can only use the resolver encrypted.")));
+                            results.Add(new SelfTestResult(group, "Do53", SelfTestStatus.Info, Lang.T("Do53 beantwortet nur DDR, andere Anfragen werden " + (dnsServer.Do53Mode == DnsServerDo53Mode.DdrOnlyDrop ? "verworfen" : "mit REFUSED abgelehnt") + ". Clients ohne DDR-Unterstützung können den Resolver nur verschlüsselt nutzen.", "Do53 only answers DDR, other queries are " + (dnsServer.Do53Mode == DnsServerDo53Mode.DdrOnlyDrop ? "dropped" : "rejected with REFUSED") + ". Clients without DDR support can only use the resolver encrypted."), "settings:OptionalProtocols"));
 
                         break;
 
                     case DnsServerDo53Mode.Disabled:
                         if (!hasEncryptedService && !dnsServer.EnableDnsOverHttp && !dnsServer.EnableDnsOverUdpProxy && !dnsServer.EnableDnsOverTcpProxy)
-                            results.Add(new SelfTestResult(group, "Do53", SelfTestStatus.Error, Lang.T("Do53 ist deaktiviert und kein anderer Dienst ist aktiv. Der Resolver ist von außen nicht erreichbar.", "Do53 is disabled and no other service is active. The resolver cannot be reached from outside.")));
+                            results.Add(new SelfTestResult(group, "Do53", SelfTestStatus.Error, Lang.T("Do53 ist deaktiviert und kein anderer Dienst ist aktiv. Der Resolver ist von außen nicht erreichbar.", "Do53 is disabled and no other service is active. The resolver cannot be reached from outside."), "settings:OptionalProtocols"));
                         else
-                            results.Add(new SelfTestResult(group, "Do53", SelfTestStatus.Info, Lang.T("Do53 ist deaktiviert, Port 53 wird nicht geöffnet.", "Do53 is disabled, port 53 is not opened.")));
+                            results.Add(new SelfTestResult(group, "Do53", SelfTestStatus.Info, Lang.T("Do53 ist deaktiviert, Port 53 wird nicht geöffnet.", "Do53 is disabled, port 53 is not opened."), "settings:OptionalProtocols"));
 
                         break;
                 }
@@ -232,24 +247,24 @@ namespace ZenitiumDns.Core
                     switch (dnsServer.EDnsPaddingMode)
                     {
                         case DnsServerEDnsPaddingMode.Disabled:
-                            results.Add(new SelfTestResult(group, Lang.T("EDNS-Padding", "EDNS padding"), SelfTestStatus.Warning, Lang.T("Padding ist ausgeschaltet. Aus der Größe verschlüsselter Antworten lässt sich dann teilweise ablesen, welche Domain abgefragt wurde.", "Padding is turned off. The size of encrypted responses can then partly reveal which domain was queried.")));
+                            results.Add(new SelfTestResult(group, Lang.T("EDNS-Padding", "EDNS padding"), SelfTestStatus.Warning, Lang.T("Padding ist ausgeschaltet. Aus der Größe verschlüsselter Antworten lässt sich dann teilweise ablesen, welche Domain abgefragt wurde.", "Padding is turned off. The size of encrypted responses can then partly reveal which domain was queried."), "settings:OptionalProtocols"));
                             break;
 
                         case DnsServerEDnsPaddingMode.Always:
-                            results.Add(new SelfTestResult(group, Lang.T("EDNS-Padding", "EDNS padding"), SelfTestStatus.Ok, Lang.T("Verschlüsselte Antworten werden immer auf 468 Byte aufgefüllt.", "Encrypted responses are always padded to 468 bytes.")));
+                            results.Add(new SelfTestResult(group, Lang.T("EDNS-Padding", "EDNS padding"), SelfTestStatus.Ok, Lang.T("Verschlüsselte Antworten werden immer auf 468 Byte aufgefüllt.", "Encrypted responses are always padded to 468 bytes."), "settings:OptionalProtocols"));
                             break;
 
                         default:
-                            results.Add(new SelfTestResult(group, Lang.T("EDNS-Padding", "EDNS padding"), SelfTestStatus.Ok, Lang.T("Verschlüsselte Antworten werden auf 468 Byte aufgefüllt, wenn der Client Padding sendet.", "Encrypted responses are padded to 468 bytes when the client sends padding.")));
+                            results.Add(new SelfTestResult(group, Lang.T("EDNS-Padding", "EDNS padding"), SelfTestStatus.Ok, Lang.T("Verschlüsselte Antworten werden auf 468 Byte aufgefüllt, wenn der Client Padding sendet.", "Encrypted responses are padded to 468 bytes when the client sends padding."), "settings:OptionalProtocols"));
                             break;
                     }
                 }
 
                 if (dnsServer.EnableDnsOverQuic && !System.Net.Quic.QuicListener.IsSupported)
-                    results.Add(new SelfTestResult(group, "DNS-over-QUIC", SelfTestStatus.Warning, Lang.T("DoQ ist aktiviert, aber libmsquic ist nicht installiert.", "DoQ is enabled, but libmsquic is not installed.")));
+                    results.Add(new SelfTestResult(group, "DNS-over-QUIC", SelfTestStatus.Warning, Lang.T("DoQ ist aktiviert, aber libmsquic ist nicht installiert.", "DoQ is enabled, but libmsquic is not installed."), "settings:OptionalProtocols"));
 
                 if (dnsServer.EnableDnsOverHttp && ((dnsServer.DnsReverseProxyNetworkACL is null) || (dnsServer.DnsReverseProxyNetworkACL.Count == 0)))
-                    results.Add(new SelfTestResult(group, "DNS-over-HTTP", SelfTestStatus.Warning, Lang.T("DNS-over-HTTP ohne TLS ist aktiv, aber es sind keine erlaubten Reverse Proxys eingetragen.", "DNS-over-HTTP without TLS is active, but no allowed reverse proxies are configured.")));
+                    results.Add(new SelfTestResult(group, "DNS-over-HTTP", SelfTestStatus.Warning, Lang.T("DNS-over-HTTP ohne TLS ist aktiv, aber es sind keine erlaubten Reverse Proxys eingetragen.", "DNS-over-HTTP without TLS is active, but no allowed reverse proxies are configured."), "settings:OptionalProtocols"));
             }
 
             private async Task CheckResolutionAsync(List<SelfTestResult> results)
@@ -279,36 +294,95 @@ namespace ZenitiumDns.Core
                 if ((response is null) || (response.RCODE != DnsResponseCode.NoError) || (response.Answer.Count == 0))
                 {
                     string detail = error ?? ((response is null) ? Lang.T("keine Antwort", "no response") : response.RCODE.ToString());
-                    results.Add(new SelfTestResult(group, Lang.T("Rekursive Auflösung", "Recursive resolution"), SelfTestStatus.Error, Lang.T("Die Root-Zone lässt sich " + via + " nicht auflösen (" + detail + "). Ausgehende Verbindungen auf Port 53 und die Forwarder prüfen.", "The root zone cannot be resolved " + via + " (" + detail + "). Check outgoing connections on port 53 and the forwarders.")));
+                    results.Add(new SelfTestResult(group, Lang.T("Rekursive Auflösung", "Recursive resolution"), SelfTestStatus.Error, Lang.T("Die Root-Zone lässt sich " + via + " nicht auflösen (" + detail + "). Ausgehende Verbindungen auf Port 53 und die Forwarder prüfen.", "The root zone cannot be resolved " + via + " (" + detail + "). Check outgoing connections on port 53 and the forwarders."), "settings:ProxyForwarders"));
                     return;
                 }
 
-                results.Add(new SelfTestResult(group, Lang.T("Rekursive Auflösung", "Recursive resolution"), SelfTestStatus.Ok, Lang.T("Die Root-Zone wurde " + via + " in " + stopwatch.ElapsedMilliseconds + " ms aufgelöst.", "The root zone was resolved " + via + " in " + stopwatch.ElapsedMilliseconds + " ms.")));
-
-                if (!dnsServer.EnableCache)
-                {
-                    if ((dnsServer.Forwarders is not null) && (dnsServer.Forwarders.Count > 0))
-                        results.Add(new SelfTestResult(group, "Cache", SelfTestStatus.Info, Lang.T("Der Cache ist ausgeschaltet. Jede Anfrage geht an die Forwarder, die dann selbst cachen sollten (etwa Unbound)." + (dnsServer.DnssecValidation ? " Die DNSSEC-Validierung fragt ohne Cache bei jeder Auflösung die Schlüssel der Zonen erneut ab." : ""), "The cache is turned off. Every query goes to the forwarders, which should cache themselves (for example Unbound)." + (dnsServer.DnssecValidation ? " Without a cache, DNSSEC validation fetches the keys of the zones again for every resolution." : ""))));
-                    else
-                        results.Add(new SelfTestResult(group, "Cache", SelfTestStatus.Warning, Lang.T("Der Cache ist ausgeschaltet, aber es sind keine Forwarder eingetragen. Jede Anfrage wird ab den Root-Servern aufgelöst, das ist langsam und belastet die Nameserver. Forwarder mit eigenem Cache eintragen (etwa Unbound) oder den Cache einschalten.", "The cache is turned off, but no forwarders are configured. Every query is resolved starting at the root servers, which is slow and loads the name servers. Configure forwarders with their own cache (for example Unbound) or turn the cache on.")));
-                }
+                results.Add(new SelfTestResult(group, Lang.T("Rekursive Auflösung", "Recursive resolution"), SelfTestStatus.Ok, Lang.T("Die Root-Zone wurde " + via + " in " + stopwatch.ElapsedMilliseconds + " ms aufgelöst.", "The root zone was resolved " + via + " in " + stopwatch.ElapsedMilliseconds + " ms."), "settings:ProxyForwarders"));
 
                 if (!dnsServer.DnssecValidation)
-                    results.Add(new SelfTestResult(group, Lang.T("DNSSEC-Validierung", "DNSSEC validation"), SelfTestStatus.Warning, Lang.T("Die DNSSEC-Validierung ist ausgeschaltet. Clients erhalten keine geprüften Antworten und keine Signaturen.", "DNSSEC validation is turned off. Clients receive no validated answers and no signatures.")));
+                    results.Add(new SelfTestResult(group, Lang.T("DNSSEC-Validierung", "DNSSEC validation"), SelfTestStatus.Warning, Lang.T("Die DNSSEC-Validierung ist ausgeschaltet. Clients erhalten keine geprüften Antworten und keine Signaturen.", "DNSSEC validation is turned off. Clients receive no validated answers and no signatures."), "settings:Recursion"));
                 else if (response.AuthenticData)
-                    results.Add(new SelfTestResult(group, Lang.T("DNSSEC-Validierung", "DNSSEC validation"), SelfTestStatus.Ok, Lang.T("Die signierte Root-Zone wurde erfolgreich validiert.", "The signed root zone was validated successfully.")));
+                    results.Add(new SelfTestResult(group, Lang.T("DNSSEC-Validierung", "DNSSEC validation"), SelfTestStatus.Ok, Lang.T("Die signierte Root-Zone wurde erfolgreich validiert.", "The signed root zone was validated successfully."), "settings:Recursion"));
                 else
-                    results.Add(new SelfTestResult(group, Lang.T("DNSSEC-Validierung", "DNSSEC validation"), SelfTestStatus.Error, Lang.T("Die DNSSEC-Validierung ist eingeschaltet, die Antwort für die Root-Zone ist aber nicht als validiert markiert. Systemzeit und Trust Anchor prüfen.", "DNSSEC validation is turned on, but the answer for the root zone is not marked as validated. Check the system time and the trust anchor.")));
+                    results.Add(new SelfTestResult(group, Lang.T("DNSSEC-Validierung", "DNSSEC validation"), SelfTestStatus.Error, Lang.T("Die DNSSEC-Validierung ist eingeschaltet, die Antwort für die Root-Zone ist aber nicht als validiert markiert. Systemzeit und Trust Anchor prüfen.", "DNSSEC validation is turned on, but the answer for the root zone is not marked as validated. Check the system time and the trust anchor."), "settings:Recursion"));
 
                 if (dnsServer.IPv6Mode != IPv6Mode.Disabled)
                 {
                     if (IPv6Reachability.IsUnavailable && (dnsServer.IPv6Mode == IPv6Mode.Preferred))
-                        results.Add(new SelfTestResult(group, "IPv6", SelfTestStatus.Warning, Lang.T("IPv6 ist auf „Bevorzugen“ gestellt, IPv6-Nameserver sind aber nicht erreichbar. Nach jedem Neustart laufen die ersten Anfragen deshalb in Zeitüberschreitungen, bis der automatische Rückfall greift. Unter Einstellungen > Netzwerk auf „Aktivieren“ oder „Deaktivieren“ stellen.", "IPv6 is set to \"Prefer\", but IPv6 name servers are unreachable. After every restart the first queries therefore run into timeouts until the automatic fallback kicks in. Set it to \"Enable\" or \"Disable\" under Settings > Network.")));
+                        results.Add(new SelfTestResult(group, "IPv6", SelfTestStatus.Warning, Lang.T("IPv6 ist auf „Bevorzugen“ gestellt, IPv6-Nameserver sind aber nicht erreichbar. Nach jedem Neustart laufen die ersten Anfragen deshalb in Zeitüberschreitungen, bis der automatische Rückfall greift. Unter Einstellungen > Netzwerk auf „Aktivieren“ oder „Deaktivieren“ stellen.", "IPv6 is set to \"Prefer\", but IPv6 name servers are unreachable. After every restart the first queries therefore run into timeouts until the automatic fallback kicks in. Set it to \"Enable\" or \"Disable\" under Settings > Network."), "settings:Network"));
                     else if (IPv6Reachability.IsUnavailable)
-                        results.Add(new SelfTestResult(group, "IPv6", SelfTestStatus.Info, Lang.T("IPv6 ist aktiviert, ausgehende IPv6-Anfragen sind aber gerade ausgesetzt, weil IPv6-Nameserver nicht erreichbar waren.", "IPv6 is enabled, but outgoing IPv6 queries are currently suspended because IPv6 name servers were unreachable.")));
+                        results.Add(new SelfTestResult(group, "IPv6", SelfTestStatus.Info, Lang.T("IPv6 ist aktiviert, ausgehende IPv6-Anfragen sind aber gerade ausgesetzt, weil IPv6-Nameserver nicht erreichbar waren.", "IPv6 is enabled, but outgoing IPv6 queries are currently suspended because IPv6 name servers were unreachable."), "settings:Network"));
                     else
-                        results.Add(new SelfTestResult(group, "IPv6", SelfTestStatus.Ok, Lang.T("Ausgehende Anfragen über IPv6 sind aktiv.", "Outgoing queries over IPv6 are active.")));
+                        results.Add(new SelfTestResult(group, "IPv6", SelfTestStatus.Ok, Lang.T("Ausgehende Anfragen über IPv6 sind aktiv.", "Outgoing queries over IPv6 are active."), "settings:Network"));
                 }
+
+                List<string> protections = new List<string>();
+
+                if (!dnsServer.EnableDnsCookies)
+                    protections.Add(Lang.T("DNS-Cookies", "DNS cookies"));
+
+                if (!dnsServer.RandomizeName)
+                    protections.Add(Lang.T("zufällige Groß-/Kleinschreibung (0x20)", "random letter case (0x20)"));
+
+                if (protections.Count > 0)
+                    results.Add(new SelfTestResult(group, Lang.T("Schutz vor gefälschten Antworten", "Protection against forged answers"), SelfTestStatus.Info, Lang.T("Ausgeschaltet: " + string.Join(", ", protections) + ". Beide erschweren es Angreifern, gefälschte Antworten in den Cache zu bringen.", "Turned off: " + string.Join(", ", protections) + ". Both make it harder for attackers to inject forged answers into the cache."), "settings:Recursion"));
+                else
+                    results.Add(new SelfTestResult(group, Lang.T("Schutz vor gefälschten Antworten", "Protection against forged answers"), SelfTestStatus.Ok, Lang.T("DNS-Cookies und zufällige Groß-/Kleinschreibung (0x20) sind aktiv.", "DNS cookies and random letter case (0x20) are active."), "settings:Recursion"));
+
+                if (!dnsServer.QnameMinimization && ((dnsServer.Forwarders is null) || (dnsServer.Forwarders.Count == 0)))
+                    results.Add(new SelfTestResult(group, Lang.T("QNAME-Minimierung", "QNAME minimization"), SelfTestStatus.Info, Lang.T("Die QNAME-Minimierung ist ausgeschaltet. Root- und TLD-Server sehen dann den vollständigen abgefragten Namen.", "QNAME minimization is turned off. Root and TLD servers then see the full queried name."), "settings:Recursion"));
+            }
+
+            private void CheckCache(List<SelfTestResult> results)
+            {
+                const string group = "Cache";
+                DnsServer dnsServer = _dnsWebService._dnsServer;
+                CacheZoneManager cache = dnsServer.CacheZoneManager;
+
+                if (!dnsServer.EnableCache)
+                {
+                    if ((dnsServer.Forwarders is not null) && (dnsServer.Forwarders.Count > 0))
+                        results.Add(new SelfTestResult(group, Lang.T("Status", "Status"), SelfTestStatus.Info, Lang.T("Der Cache ist ausgeschaltet. Jede Anfrage geht an die Forwarder, die dann selbst cachen sollten (etwa Unbound)." + (dnsServer.DnssecValidation ? " Die DNSSEC-Validierung fragt ohne Cache bei jeder Auflösung die Schlüssel der Zonen erneut ab." : ""), "The cache is turned off. Every query goes to the forwarders, which should cache themselves (for example Unbound)." + (dnsServer.DnssecValidation ? " Without a cache, DNSSEC validation fetches the keys of the zones again for every resolution." : "")), "settings:Cache"));
+                    else
+                        results.Add(new SelfTestResult(group, Lang.T("Status", "Status"), SelfTestStatus.Warning, Lang.T("Der Cache ist ausgeschaltet, aber es sind keine Forwarder eingetragen. Jede Anfrage wird ab den Root-Servern aufgelöst, das ist langsam und belastet die Nameserver. Forwarder mit eigenem Cache eintragen (etwa Unbound) oder den Cache einschalten.", "The cache is turned off, but no forwarders are configured. Every query is resolved starting at the root servers, which is slow and loads the name servers. Configure forwarders with their own cache (for example Unbound) or turn the cache on."), "settings:Cache"));
+
+                    return;
+                }
+
+                long entries = cache.TotalEntries;
+                long maximumEntries = cache.MaximumEntries;
+                int maximumMemory = cache.MaximumMemoryMegabytes;
+
+                if ((maximumEntries == 0) && (maximumMemory == 0))
+                {
+                    results.Add(new SelfTestResult(group, Lang.T("Größe", "Size"), SelfTestStatus.Info, Lang.T(FormatNumber(entries) + " Einträge, weder Höchstzahl noch Speichergrenze gesetzt. Der Cache wächst, bis der Arbeitsspeicher zu 85 % belegt ist, und wird dann angehalten und bei Bedarf gekürzt; eine Speichergrenze lässt anderen Programmen mehr Platz.", FormatNumber(entries) + " entries, neither a maximum number of entries nor a memory limit is set. The cache grows until memory is 85 % full and is then held and cut when needed; a memory limit leaves more room for other programs."), "settings:Cache"));
+                }
+                else
+                {
+                    string limits = (maximumEntries > 0 ? Lang.T(" von höchstens " + FormatNumber(maximumEntries), " of at most " + FormatNumber(maximumEntries)) : "") + (maximumMemory > 0 ? Lang.T(", Speichergrenze " + FormatNumber(maximumMemory) + " MB", ", memory limit " + FormatNumber(maximumMemory) + " MB") : "");
+
+                    results.Add(new SelfTestResult(group, Lang.T("Größe", "Size"), SelfTestStatus.Ok, Lang.T(FormatNumber(entries) + " Einträge" + limits + ".", FormatNumber(entries) + " entries" + limits + "."), "settings:Cache"));
+                }
+
+                MemoryPressureReading pressure = cache.LastMemoryPressure;
+                string pressureScope = pressure.Source switch
+                {
+                    "cgroup" => Lang.T("Speichergrenze des Dienstes oder Containers", "memory limit of the service or container"),
+                    "heap" => Lang.T("Heap-Grenze von .NET", ".NET heap limit"),
+                    _ => Lang.T("Arbeitsspeicher des Systems", "system memory")
+                };
+
+                if (cache.PressureCapEntries > 0)
+                    results.Add(new SelfTestResult(group, Lang.T("Speicherschutz", "Memory protection"), SelfTestStatus.Warning, Lang.T("Der Speicher ist fast voll (" + (int)(pressure.Ratio * 100) + " % der " + pressureScope + "). Der Cache wächst derzeit nicht über " + FormatNumber(cache.PressureCapEntries) + " Einträge hinaus, um einen Absturz durch Speichermangel zu verhindern. Die Grenze fällt weg, wenn der Speicher fünf Minuten lang unter 75 % liegt.", "Memory is almost full (" + (int)(pressure.Ratio * 100) + " % of the " + pressureScope + "). The cache currently does not grow beyond " + FormatNumber(cache.PressureCapEntries) + " entries to prevent an out-of-memory crash. The cap is lifted once memory stays below 75 % for five minutes."), "settings:Cache"));
+                else if (pressure.Limit > 0)
+                    results.Add(new SelfTestResult(group, Lang.T("Speicherschutz", "Memory protection"), SelfTestStatus.Ok, Lang.T("Aktiv, der Speicher ist zu " + (int)(pressure.Ratio * 100) + " % belegt (" + pressureScope + "). Ab 85 % hält der Server den Cache an, ab 90 % kürzt er ihn.", "Active, memory is " + (int)(pressure.Ratio * 100) + " % full (" + pressureScope + "). From 85 % the server holds the cache, from 90 % it cuts it."), "settings:Cache"));
+
+                if (cache.PressureTrims > 0)
+                    results.Add(new SelfTestResult(group, Lang.T("Speicherschutz", "Memory protection"), SelfTestStatus.Info, Lang.T("Seit dem Start wurde der Cache " + FormatNumber(cache.PressureTrims) + "-mal wegen fast vollen Speichers gekürzt, " + FormatNumber(cache.PressureTrimmedEntries) + " Einträge wurden entfernt.", "Since start, the cache was cut " + FormatNumber(cache.PressureTrims) + " times because memory was almost full, " + FormatNumber(cache.PressureTrimmedEntries) + " entries were removed."), "settings:Cache"));
+
+                if ((maximumMemory > 0) && (cache.MemoryTrimmedEntries > cache.PressureTrimmedEntries))
+                    results.Add(new SelfTestResult(group, Lang.T("Speichergrenze", "Memory limit"), SelfTestStatus.Info, Lang.T("Seit dem Start wurden wegen der Speichergrenze " + FormatNumber(cache.MemoryTrimmedEntries - cache.PressureTrimmedEntries) + " Einträge entfernt.", FormatNumber(cache.MemoryTrimmedEntries - cache.PressureTrimmedEntries) + " entries were removed because of the memory limit since start."), "settings:Cache"));
             }
 
             private void CheckCertificates(List<SelfTestResult> results)
@@ -317,9 +391,22 @@ namespace ZenitiumDns.Core
                 DnsServer dnsServer = _dnsWebService._dnsServer;
 
                 X509Certificate2 dnsCertificate = dnsServer.DnsTlsCertificate;
+
+                if (dnsServer.ClientProfileManager.HasClientIds && (dnsServer.EnableDnsOverTls || dnsServer.EnableDnsOverQuic))
+                {
+                    IReadOnlyList<string> wildcardDomains = dnsServer.GetTlsWildcardDomains();
+
+                    if (dnsCertificate is null)
+                        results.Add(new SelfTestResult(group, "ClientID", SelfTestStatus.Warning, Lang.T("Clientprofile nutzen ClientIDs, für DNS-over-TLS und DNS-over-QUIC ist aber kein Zertifikat eingerichtet.", "Client profiles use ClientIDs, but no certificate is configured for DNS-over-TLS and DNS-over-QUIC."), "clients"));
+                    else if (wildcardDomains.Count == 0)
+                        results.Add(new SelfTestResult(group, "ClientID", SelfTestStatus.Warning, Lang.T("Clientprofile nutzen ClientIDs, das Zertifikat hat aber keinen Wildcard-Eintrag (*.name). DNS-over-TLS und DNS-over-QUIC erkennen die ClientID am Servernamen <id>.name, den Clients nur mit einem Wildcard-Zertifikat akzeptieren. Über DNS-over-HTTPS funktioniert die ClientID im Pfad auch ohne.", "Client profiles use ClientIDs, but the certificate has no wildcard entry (*.name). DNS-over-TLS and DNS-over-QUIC recognize the ClientID by the server name <id>.name, which clients only accept with a wildcard certificate. Over DNS-over-HTTPS the ClientID in the path works without one."), "clients"));
+                    else
+                        results.Add(new SelfTestResult(group, "ClientID", SelfTestStatus.Ok, Lang.T("ClientIDs über DNS-over-TLS und DNS-over-QUIC: <id>." + wildcardDomains[0] + ".", "ClientIDs over DNS-over-TLS and DNS-over-QUIC: <id>." + wildcardDomains[0] + "."), "clients"));
+                }
+
                 if (dnsCertificate is not null)
                 {
-                    CheckCertificate(results, group, "DoT/DoH/DoQ", dnsCertificate, dnsServer.ServerDomain);
+                    CheckCertificate(results, group, "DoT/DoH/DoQ", dnsCertificate, dnsServer.ServerDomain, "settings:OptionalProtocols");
 
                     if (dnsServer.EnableDdr)
                     {
@@ -338,15 +425,15 @@ namespace ZenitiumDns.Core
                         }
 
                         if (hasIpAddress)
-                            results.Add(new SelfTestResult(group, "DDR", SelfTestStatus.Ok, Lang.T("Das Zertifikat enthält IP-Adressen, Clients können die DDR-Ankündigung prüfen.", "The certificate contains IP addresses, clients can verify the DDR announcement.")));
+                            results.Add(new SelfTestResult(group, "DDR", SelfTestStatus.Ok, Lang.T("Das Zertifikat enthält IP-Adressen, Clients können die DDR-Ankündigung prüfen.", "The certificate contains IP addresses, clients can verify the DDR announcement."), "settings:OptionalProtocols"));
                         else
-                            results.Add(new SelfTestResult(group, "DDR", SelfTestStatus.Info, Lang.T("Das Zertifikat enthält keine IP-Adresse. Windows und Apple-Geräte nutzen die DDR-Ankündigung dann nicht automatisch.", "The certificate contains no IP address. Windows and Apple devices then do not use the DDR announcement automatically.")));
+                            results.Add(new SelfTestResult(group, "DDR", SelfTestStatus.Info, Lang.T("Das Zertifikat enthält keine IP-Adresse. Windows und Apple-Geräte nutzen die DDR-Ankündigung dann nicht automatisch.", "The certificate contains no IP address. Windows and Apple devices then do not use the DDR announcement automatically."), "settings:OptionalProtocols"));
                     }
                 }
 
                 X509Certificate2 webCertificate = _dnsWebService._webServiceSslServerAuthenticationOptions?.ServerCertificateContext?.TargetCertificate;
                 if (_dnsWebService._webServiceEnableTls && (webCertificate is not null) && !_dnsWebService._webServiceUseSelfSignedTlsCertificate)
-                    CheckCertificate(results, group, Lang.T("Weboberfläche", "Web interface"), webCertificate, null);
+                    CheckCertificate(results, group, Lang.T("Weboberfläche", "Web interface"), webCertificate, null, "settings:WebService");
             }
 
             private void CheckSecurity(List<SelfTestResult> results)
@@ -355,12 +442,14 @@ namespace ZenitiumDns.Core
                 DnsServer dnsServer = _dnsWebService._dnsServer;
 
                 if (_dnsWebService._authManager.HasDefaultCredentials())
-                    results.Add(new SelfTestResult(group, Lang.T("Admin-Passwort", "Admin password"), SelfTestStatus.Error, Lang.T("Der Benutzer admin hat noch das Standardpasswort admin. Sofort unter Konto ändern.", "The user admin still has the default password admin. Change it immediately under the account menu.")));
+                    results.Add(new SelfTestResult(group, Lang.T("Admin-Passwort", "Admin password"), SelfTestStatus.Error, Lang.T("Der Benutzer admin hat noch das Standardpasswort admin. Sofort unter Konto ändern.", "The user admin still has the default password admin. Change it immediately under the account menu."), "password"));
                 else
-                    results.Add(new SelfTestResult(group, Lang.T("Admin-Passwort", "Admin password"), SelfTestStatus.Ok, Lang.T("Das Standardpasswort ist geändert.", "The default password has been changed.")));
+                    results.Add(new SelfTestResult(group, Lang.T("Admin-Passwort", "Admin password"), SelfTestStatus.Ok, Lang.T("Das Standardpasswort ist geändert.", "The default password has been changed."), "password"));
 
-                if (File.Exists(Path.Combine(_dnsWebService._configFolder, "admin.password")))
-                    results.Add(new SelfTestResult(group, Lang.T("Passwortdatei", "Password file"), SelfTestStatus.Warning, Lang.T("Die Datei admin.password aus der Installation enthält noch das gültige Passwort von admin. Sobald das Passwort geändert ist, wird sie automatisch gelöscht.", "The file admin.password from the installation still contains the valid password of admin. It is deleted automatically as soon as the password is changed.")));
+                string adminPasswordFile = _dnsWebService._authManager.GetAdminPasswordFilePath();
+
+                if ((adminPasswordFile is not null) && File.Exists(adminPasswordFile))
+                    results.Add(new SelfTestResult(group, Lang.T("Passwortdatei", "Password file"), SelfTestStatus.Warning, Lang.T("Die Datei admin.password aus der Installation enthält noch das gültige Passwort von admin. Sobald das Passwort geändert oder der Benutzer admin gelöscht oder umbenannt ist, wird sie automatisch gelöscht.", "The file admin.password from the installation still contains the valid password of admin. It is deleted automatically as soon as the password is changed or the user admin is deleted or renamed."), "password"));
 
                 bool publicHttp = false;
 
@@ -374,11 +463,11 @@ namespace ZenitiumDns.Core
                 }
 
                 if (publicHttp && !_dnsWebService._webServiceEnableTls)
-                    results.Add(new SelfTestResult(group, Lang.T("Weboberfläche", "Web interface"), SelfTestStatus.Warning, Lang.T("Die Weboberfläche ist ohne HTTPS über das Netz erreichbar. Anmeldedaten und Tokens gehen unverschlüsselt über die Leitung.", "The web interface is reachable over the network without HTTPS. Credentials and tokens travel unencrypted.")));
+                    results.Add(new SelfTestResult(group, Lang.T("Weboberfläche", "Web interface"), SelfTestStatus.Warning, Lang.T("Die Weboberfläche ist ohne HTTPS über das Netz erreichbar. Anmeldedaten und Tokens gehen unverschlüsselt über die Leitung.", "The web interface is reachable over the network without HTTPS. Credentials and tokens travel unencrypted."), "settings:WebService"));
                 else if (publicHttp && !_dnsWebService._webServiceHttpToTlsRedirect)
-                    results.Add(new SelfTestResult(group, Lang.T("Weboberfläche", "Web interface"), SelfTestStatus.Info, Lang.T("HTTPS ist aktiv, HTTP auf Port " + _dnsWebService._webServiceHttpPort + " ist aber weiter ohne Umleitung erreichbar.", "HTTPS is active, but HTTP on port " + _dnsWebService._webServiceHttpPort + " is still reachable without redirect.")));
+                    results.Add(new SelfTestResult(group, Lang.T("Weboberfläche", "Web interface"), SelfTestStatus.Info, Lang.T("HTTPS ist aktiv, HTTP auf Port " + _dnsWebService._webServiceHttpPort + " ist aber weiter ohne Umleitung erreichbar.", "HTTPS is active, but HTTP on port " + _dnsWebService._webServiceHttpPort + " is still reachable without redirect."), "settings:WebService"));
                 else
-                    results.Add(new SelfTestResult(group, Lang.T("Weboberfläche", "Web interface"), SelfTestStatus.Ok, publicHttp ? Lang.T("Die Weboberfläche ist nur verschlüsselt erreichbar.", "The web interface is only reachable encrypted.") : Lang.T("Die Weboberfläche lauscht nur auf Loopback.", "The web interface only listens on loopback.")));
+                    results.Add(new SelfTestResult(group, Lang.T("Weboberfläche", "Web interface"), SelfTestStatus.Ok, publicHttp ? Lang.T("Die Weboberfläche ist nur verschlüsselt erreichbar.", "The web interface is only reachable encrypted.") : Lang.T("Die Weboberfläche lauscht nur auf Loopback.", "The web interface only listens on loopback."), "settings:WebService"));
 
                 bool rateLimited = (dnsServer.QpsPrefixLimitsIPv4.Count > 0) || (dnsServer.QpsPrefixLimitsIPv6.Count > 0);
 
@@ -386,31 +475,31 @@ namespace ZenitiumDns.Core
                 {
                     case DnsServerRecursion.Allow:
                         if (rateLimited)
-                            results.Add(new SelfTestResult(group, Lang.T("Rekursion", "Recursion"), SelfTestStatus.Ok, Lang.T("Öffentlicher Resolver mit Ratenbegrenzung.", "Public resolver with rate limiting.")));
+                            results.Add(new SelfTestResult(group, Lang.T("Rekursion", "Recursion"), SelfTestStatus.Ok, Lang.T("Öffentlicher Resolver mit Ratenbegrenzung.", "Public resolver with rate limiting."), "settings:Recursion"));
                         else
-                            results.Add(new SelfTestResult(group, Lang.T("Rekursion", "Recursion"), SelfTestStatus.Error, Lang.T("Der Resolver ist für alle offen, aber die Ratenbegrenzung ist ausgeschaltet. Er kann so für Amplification-Angriffe missbraucht werden.", "The resolver is open to everyone, but rate limiting is turned off. It can thus be abused for amplification attacks.")));
+                            results.Add(new SelfTestResult(group, Lang.T("Rekursion", "Recursion"), SelfTestStatus.Error, Lang.T("Der Resolver ist für alle offen, aber die Ratenbegrenzung ist ausgeschaltet. Er kann so für Amplification-Angriffe missbraucht werden.", "The resolver is open to everyone, but rate limiting is turned off. It can thus be abused for amplification attacks."), "settings:Recursion"));
 
                         break;
 
                     case DnsServerRecursion.AllowOnlyForPrivateNetworks:
-                        results.Add(new SelfTestResult(group, Lang.T("Rekursion", "Recursion"), SelfTestStatus.Info, Lang.T("Die Rekursion ist nur für private Netze erlaubt. Für den öffentlichen Betrieb unter Einstellungen > Resolver auf „Für alle erlauben“ stellen.", "Recursion is only allowed for private networks. For public operation, set it to \"Allow for everyone\" under Settings > Resolver.")));
+                        results.Add(new SelfTestResult(group, Lang.T("Rekursion", "Recursion"), SelfTestStatus.Info, Lang.T("Die Rekursion ist nur für private Netze erlaubt. Für den öffentlichen Betrieb unter Einstellungen > Resolver auf „Für alle erlauben“ stellen.", "Recursion is only allowed for private networks. For public operation, set it to \"Allow for everyone\" under Settings > Resolver."), "settings:Recursion"));
                         break;
 
                     case DnsServerRecursion.Deny:
-                        results.Add(new SelfTestResult(group, Lang.T("Rekursion", "Recursion"), SelfTestStatus.Warning, Lang.T("Die Rekursion ist ausgeschaltet. Der Server beantwortet nur lokale Zonen.", "Recursion is turned off. The server only answers local zones.")));
+                        results.Add(new SelfTestResult(group, Lang.T("Rekursion", "Recursion"), SelfTestStatus.Warning, Lang.T("Die Rekursion ist ausgeschaltet. Der Server beantwortet nur lokale Zonen.", "Recursion is turned off. The server only answers local zones."), "settings:Recursion"));
                         break;
 
                     default:
-                        results.Add(new SelfTestResult(group, Lang.T("Rekursion", "Recursion"), rateLimited ? SelfTestStatus.Ok : SelfTestStatus.Warning, rateLimited ? Lang.T("Die Rekursion ist per ACL eingeschränkt.", "Recursion is restricted by ACL.") : Lang.T("Die Rekursion ist per ACL eingeschränkt, die Ratenbegrenzung ist aber ausgeschaltet.", "Recursion is restricted by ACL, but rate limiting is turned off.")));
+                        results.Add(new SelfTestResult(group, Lang.T("Rekursion", "Recursion"), rateLimited ? SelfTestStatus.Ok : SelfTestStatus.Warning, rateLimited ? Lang.T("Die Rekursion ist per ACL eingeschränkt.", "Recursion is restricted by ACL.") : Lang.T("Die Rekursion ist per ACL eingeschränkt, die Ratenbegrenzung ist aber ausgeschaltet.", "Recursion is restricted by ACL, but rate limiting is turned off."), "settings:Recursion"));
                         break;
                 }
 
                 if (dnsServer.Recursion != DnsServerRecursion.Allow)
                 {
                     if (!rateLimited)
-                        results.Add(new SelfTestResult(group, Lang.T("Ratenbegrenzung", "Rate limiting"), SelfTestStatus.Info, Lang.T("Die Ratenbegrenzung ist ausgeschaltet.", "Rate limiting is turned off.")));
+                        results.Add(new SelfTestResult(group, Lang.T("Ratenbegrenzung", "Rate limiting"), SelfTestStatus.Info, Lang.T("Die Ratenbegrenzung ist ausgeschaltet.", "Rate limiting is turned off."), "settings:RateLimiting"));
                     else
-                        results.Add(new SelfTestResult(group, Lang.T("Ratenbegrenzung", "Rate limiting"), SelfTestStatus.Ok, Lang.T("Aktiv.", "Active.")));
+                        results.Add(new SelfTestResult(group, Lang.T("Ratenbegrenzung", "Rate limiting"), SelfTestStatus.Ok, Lang.T("Aktiv.", "Active."), "settings:RateLimiting"));
                 }
 
                 List<string> strictLimits = new List<string>();
@@ -422,10 +511,10 @@ namespace ZenitiumDns.Core
                     AddStrictLimit(strictLimits, "/" + limit.Key, limit.Key >= 64 ? 200 : 2000, limit.Value);
 
                 if (strictLimits.Count > 0)
-                    results.Add(new SelfTestResult(group, Lang.T("Ratenbegrenzung", "Rate limiting"), SelfTestStatus.Warning, Lang.T("Sehr niedrige Limits: " + string.Join(", ", strictLimits) + ". Hinter einer IPv4-Adresse mit CGNAT oder einem Firmen-NAT stehen oft Hunderte Nutzer, die dann gebremst werden. Empfohlen sind 1000 UDP und 5000 TCP je /32 und /64.", "Very low limits: " + string.Join(", ", strictLimits) + ". Behind an IPv4 address with CGNAT or corporate NAT there are often hundreds of users who then get throttled. 1000 UDP and 5000 TCP per /32 and /64 are recommended.")));
+                    results.Add(new SelfTestResult(group, Lang.T("Ratenbegrenzung", "Rate limiting"), SelfTestStatus.Warning, Lang.T("Sehr niedrige Limits: " + string.Join(", ", strictLimits) + ". Hinter einer IPv4-Adresse mit CGNAT oder einem Firmen-NAT stehen oft Hunderte Nutzer, die dann gebremst werden. Empfohlen sind 1000 UDP und 5000 TCP je /32 und /64.", "Very low limits: " + string.Join(", ", strictLimits) + ". Behind an IPv4 address with CGNAT or corporate NAT there are often hundreds of users who then get throttled. 1000 UDP and 5000 TCP per /32 and /64 are recommended."), "settings:RateLimiting"));
 
                 if (dnsServer.RateLimitUdpTruncationPercentage < 100)
-                    results.Add(new SelfTestResult(group, Lang.T("TC-Antworten", "TC responses"), SelfTestStatus.Info, Lang.T("Nur " + dnsServer.RateLimitUdpTruncationPercentage + " % der gebremsten UDP-Anfragen erhalten eine TC-Antwort. Die übrigen Clients laufen in Zeitüberschreitungen, statt auf TCP auszuweichen. 100 % ist für Clients hinter NAT am verträglichsten.", "Only " + dnsServer.RateLimitUdpTruncationPercentage + " % of throttled UDP queries receive a TC response. The remaining clients run into timeouts instead of switching to TCP. 100 % works best for clients behind NAT.")));
+                    results.Add(new SelfTestResult(group, Lang.T("TC-Antworten", "TC responses"), SelfTestStatus.Info, Lang.T("Nur " + dnsServer.RateLimitUdpTruncationPercentage + " % der gebremsten UDP-Anfragen erhalten eine TC-Antwort. Die übrigen Clients laufen in Zeitüberschreitungen, statt auf TCP auszuweichen. 100 % ist für Clients hinter NAT am verträglichsten.", "Only " + dnsServer.RateLimitUdpTruncationPercentage + " % of throttled UDP queries receive a TC response. The remaining clients run into timeouts instead of switching to TCP. 100 % works best for clients behind NAT."), "settings:RateLimiting"));
 
                 int disabledRules = 0;
 
@@ -454,9 +543,9 @@ namespace ZenitiumDns.Core
                     disabledRules++;
 
                 if (disabledRules == 0)
-                    results.Add(new SelfTestResult(group, Lang.T("Anfragefilter", "Request filter"), SelfTestStatus.Ok, Lang.T("Alle Regeln sind aktiv.", "All rules are active.")));
+                    results.Add(new SelfTestResult(group, Lang.T("Anfragefilter", "Request filter"), SelfTestStatus.Ok, Lang.T("Alle Regeln sind aktiv.", "All rules are active."), "settings:RequestFilter"));
                 else
-                    results.Add(new SelfTestResult(group, Lang.T("Anfragefilter", "Request filter"), dnsServer.Recursion == DnsServerRecursion.Allow ? SelfTestStatus.Warning : SelfTestStatus.Info, Lang.T(disabledRules + " von 8 Regeln sind ausgeschaltet.", disabledRules + " of 8 rules are turned off.")));
+                    results.Add(new SelfTestResult(group, Lang.T("Anfragefilter", "Request filter"), dnsServer.Recursion == DnsServerRecursion.Allow ? SelfTestStatus.Warning : SelfTestStatus.Info, Lang.T(disabledRules + " von 8 Regeln sind ausgeschaltet.", disabledRules + " of 8 rules are turned off."), "settings:RequestFilter"));
             }
 
             private void CheckFilters(List<SelfTestResult> results)
@@ -469,29 +558,67 @@ namespace ZenitiumDns.Core
                 if (clientBlockListManager.ListUrls.Count > 0)
                 {
                     if (clientBlockListManager.AddressRanges == 0)
-                        results.Add(new SelfTestResult(group, Lang.T("Client-Sperrlisten", "Client block lists"), SelfTestStatus.Error, Lang.T("Es sind Client-Sperrlisten eingetragen, aber keine Adresse ist geladen. Download-Fehler stehen im Log.", "Client block lists are configured, but no address is loaded. Download errors are in the log.")));
+                        results.Add(new SelfTestResult(group, Lang.T("Client-Sperrlisten", "Client block lists"), SelfTestStatus.Error, Lang.T("Es sind Client-Sperrlisten eingetragen, aber keine Adresse ist geladen. Download-Fehler stehen im Log.", "Client block lists are configured, but no address is loaded. Download errors are in the log."), "settings:RequestFilter"));
                     else if ((clientBlockListManager.UpdateIntervalHours > 0) && (clientBlockListManager.LastUpdatedOn != DateTime.MinValue) && ((DateTime.UtcNow - clientBlockListManager.LastUpdatedOn).TotalHours > (clientBlockListManager.UpdateIntervalHours * 3)))
-                        results.Add(new SelfTestResult(group, Lang.T("Client-Sperrlisten", "Client block lists"), SelfTestStatus.Warning, Lang.T(FormatNumber(clientBlockListManager.AddressRanges) + " Adressbereiche geladen, die letzte erfolgreiche Aktualisierung war aber am " + FormatDate(clientBlockListManager.LastUpdatedOn) + ".", FormatNumber(clientBlockListManager.AddressRanges) + " address ranges loaded, but the last successful update was on " + FormatDate(clientBlockListManager.LastUpdatedOn) + ".")));
+                        results.Add(new SelfTestResult(group, Lang.T("Client-Sperrlisten", "Client block lists"), SelfTestStatus.Warning, Lang.T(FormatNumber(clientBlockListManager.AddressRanges) + " Adressbereiche geladen, die letzte erfolgreiche Aktualisierung war aber am " + FormatDate(clientBlockListManager.LastUpdatedOn) + ".", FormatNumber(clientBlockListManager.AddressRanges) + " address ranges loaded, but the last successful update was on " + FormatDate(clientBlockListManager.LastUpdatedOn) + "."), "settings:RequestFilter"));
                     else
-                        results.Add(new SelfTestResult(group, Lang.T("Client-Sperrlisten", "Client block lists"), SelfTestStatus.Ok, Lang.T(FormatNumber(clientBlockListManager.AddressRanges) + " Adressbereiche geladen, " + FormatNumber(clientBlockListManager.Drops) + " Anfragen oder Verbindungen seit dem Start verworfen.", FormatNumber(clientBlockListManager.AddressRanges) + " address ranges loaded, " + FormatNumber(clientBlockListManager.Drops) + " queries or connections dropped since start.")));
+                        results.Add(new SelfTestResult(group, Lang.T("Client-Sperrlisten", "Client block lists"), SelfTestStatus.Ok, Lang.T(FormatNumber(clientBlockListManager.AddressRanges) + " Adressbereiche geladen, " + FormatNumber(clientBlockListManager.Drops) + " Anfragen oder Verbindungen seit dem Start verworfen.", FormatNumber(clientBlockListManager.AddressRanges) + " address ranges loaded, " + FormatNumber(clientBlockListManager.Drops) + " queries or connections dropped since start."), "settings:RequestFilter"));
                 }
 
-                if (!dnsServer.EnableBlocking || (blockListZoneManager.BlockListUrls.Count == 0))
-                    return;
-
-                if (blockListZoneManager.TotalZonesBlocked == 0)
-                {
-                    results.Add(new SelfTestResult(group, Lang.T("Blocklisten", "Block lists"), SelfTestStatus.Error, Lang.T("Es sind Blocklisten eingetragen, aber keine Domain ist geladen. Download-Fehler stehen im Log.", "Block lists are configured, but no domain is loaded. Download errors are in the log.")));
-                    return;
-                }
-
-                DateTime lastUpdatedOn = blockListZoneManager.BlockListLastUpdatedOn;
+                int enabledLists = 0;
+                long rules = 0;
+                List<string> failedLists = new List<string>();
+                List<string> staleLists = new List<string>();
                 int intervalHours = blockListZoneManager.BlockListUpdateIntervalHours;
+                DateTime utcNow = DateTime.UtcNow;
 
-                if ((intervalHours > 0) && (lastUpdatedOn != DateTime.MinValue) && ((DateTime.UtcNow - lastUpdatedOn).TotalHours > (intervalHours * 3)))
-                    results.Add(new SelfTestResult(group, Lang.T("Blocklisten", "Block lists"), SelfTestStatus.Warning, Lang.T(FormatNumber(blockListZoneManager.TotalZonesBlocked) + " Domains geladen, die letzte erfolgreiche Aktualisierung war aber am " + FormatDate(lastUpdatedOn) + ".", FormatNumber(blockListZoneManager.TotalZonesBlocked) + " domains loaded, but the last successful update was on " + FormatDate(lastUpdatedOn) + ".")));
-                else
-                    results.Add(new SelfTestResult(group, Lang.T("Blocklisten", "Block lists"), SelfTestStatus.Ok, Lang.T(FormatNumber(blockListZoneManager.TotalZonesBlocked) + " Domains geladen" + (lastUpdatedOn == DateTime.MinValue ? "." : ", zuletzt aktualisiert am " + FormatDate(lastUpdatedOn) + "."), FormatNumber(blockListZoneManager.TotalZonesBlocked) + " domains loaded" + (lastUpdatedOn == DateTime.MinValue ? "." : ", last updated on " + FormatDate(lastUpdatedOn) + "."))));
+                foreach (BlockListZoneManager.ListInfo info in blockListZoneManager.GetListInfos())
+                {
+                    if (!info.Enabled)
+                        continue;
+
+                    enabledLists++;
+
+                    BlockListZoneManager.ListStatus status = info.Status;
+                    if (status is null)
+                        continue;
+
+                    string label = string.IsNullOrEmpty(info.Name) ? info.Url : info.Name;
+
+                    rules += status.Domains + status.Exceptions + status.Regexes + status.Ips;
+
+                    if ((status.LoadError is not null) || (status.LastResult == "failed") || (status.LastResult == "notFound"))
+                        failedLists.Add(label);
+                    else if ((intervalHours > 0) && (status.LastCheckedOn != default) && ((utcNow - status.LastCheckedOn).TotalHours > (intervalHours * 3)))
+                        staleLists.Add(label);
+                }
+
+                static string Names(List<string> names)
+                {
+                    if (names.Count <= 3)
+                        return string.Join(", ", names);
+
+                    return string.Join(", ", names.GetRange(0, 3)) + Lang.T(" und " + (names.Count - 3) + " weitere", " and " + (names.Count - 3) + " more");
+                }
+
+                if (enabledLists > 0)
+                {
+                    if (!dnsServer.EnableBlocking)
+                        results.Add(new SelfTestResult(group, Lang.T("Blocklisten", "Block lists"), SelfTestStatus.Info, Lang.T("Die Blockierung ist ausgeschaltet. " + enabledLists + " Listen sind eingetragen, werden aber nicht angewendet.", "Blocking is turned off. " + enabledLists + " lists are configured but not applied."), "settings:Blocking"));
+                    else if ((rules == 0) && (failedLists.Count > 0))
+                        results.Add(new SelfTestResult(group, Lang.T("Blocklisten", "Block lists"), SelfTestStatus.Error, Lang.T("Keine Regel geladen. Nicht verfügbar: " + Names(failedLists) + ". Die Tabelle unter Einstellungen > Blockierung nennt die Fehler.", "No rule loaded. Not available: " + Names(failedLists) + ". The table under Settings > Blocking shows the errors."), "settings:Blocking"));
+                    else if (failedLists.Count > 0)
+                        results.Add(new SelfTestResult(group, Lang.T("Blocklisten", "Block lists"), SelfTestStatus.Warning, Lang.T(failedLists.Count + " von " + enabledLists + " Listen ließen sich nicht abrufen oder laden: " + Names(failedLists) + ". Für sie gilt der zuletzt geladene Stand oder gar keiner.", failedLists.Count + " of " + enabledLists + " lists could not be downloaded or loaded: " + Names(failedLists) + ". For them the last loaded version applies, or none."), "settings:Blocking"));
+                    else if (staleLists.Count > 0)
+                        results.Add(new SelfTestResult(group, Lang.T("Blocklisten", "Block lists"), SelfTestStatus.Warning, Lang.T("Seit mehr als " + (intervalHours * 3) + " Stunden nicht geprüft: " + Names(staleLists) + ".", "Not checked for more than " + (intervalHours * 3) + " hours: " + Names(staleLists) + "."), "settings:Blocking"));
+                    else
+                        results.Add(new SelfTestResult(group, Lang.T("Blocklisten", "Block lists"), SelfTestStatus.Ok, Lang.T(enabledLists + " Listen mit " + FormatNumber(rules) + " Regeln geladen" + (blockListZoneManager.BlockListLastUpdatedOn == DateTime.MinValue ? "." : ", zuletzt aktualisiert am " + FormatDate(blockListZoneManager.BlockListLastUpdatedOn) + "."), enabledLists + " lists with " + FormatNumber(rules) + " rules loaded" + (blockListZoneManager.BlockListLastUpdatedOn == DateTime.MinValue ? "." : ", last updated on " + FormatDate(blockListZoneManager.BlockListLastUpdatedOn) + ".")), "settings:Blocking"));
+                }
+
+                int profiles = dnsServer.ClientProfileManager.Count;
+
+                if (profiles > 0)
+                    results.Add(new SelfTestResult(group, Lang.T("Clientprofile", "Client profiles"), SelfTestStatus.Ok, Lang.T(profiles + " Profile eingerichtet" + (dnsServer.EnableBlocking ? "." : ", die Blockierung ist aber ausgeschaltet."), profiles + " profiles configured" + (dnsServer.EnableBlocking ? "." : ", but blocking is turned off.")), "clients"));
             }
 
             private void CheckApps(List<SelfTestResult> results)
@@ -500,7 +627,7 @@ namespace ZenitiumDns.Core
                 DnsApplicationManager appManager = _dnsWebService._dnsServer.DnsApplicationManager;
 
                 foreach (KeyValuePair<string, string> loadError in appManager.LoadErrors)
-                    results.Add(new SelfTestResult(group, loadError.Key, SelfTestStatus.Error, Lang.T("Die App konnte nicht geladen werden: ", "The app could not be loaded: ") + loadError.Value));
+                    results.Add(new SelfTestResult(group, loadError.Key, SelfTestStatus.Error, Lang.T("Die App konnte nicht geladen werden: ", "The app could not be loaded: ") + loadError.Value, "apps"));
 
                 int enabled = 0;
 
@@ -512,11 +639,11 @@ namespace ZenitiumDns.Core
                     enabled++;
 
                     if (application.Value.InitializationError is not null)
-                        results.Add(new SelfTestResult(group, application.Key, SelfTestStatus.Error, Lang.T("Die App meldet einen Fehler bei der Initialisierung: ", "The app reports an initialization error: ") + application.Value.InitializationError));
+                        results.Add(new SelfTestResult(group, application.Key, SelfTestStatus.Error, Lang.T("Die App meldet einen Fehler bei der Initialisierung: ", "The app reports an initialization error: ") + application.Value.InitializationError, "apps"));
                 }
 
                 if (appManager.LoadErrors.Count == 0)
-                    results.Add(new SelfTestResult(group, Lang.T("Geladene Apps", "Loaded apps"), SelfTestStatus.Ok, Lang.T(appManager.Applications.Count + " installiert, " + enabled + " aktiviert.", appManager.Applications.Count + " installed, " + enabled + " enabled.")));
+                    results.Add(new SelfTestResult(group, Lang.T("Geladene Apps", "Loaded apps"), SelfTestStatus.Ok, Lang.T(appManager.Applications.Count + " installiert, " + enabled + " aktiviert.", appManager.Applications.Count + " installed, " + enabled + " enabled."), "apps"));
             }
 
             private void CheckIanaData(List<SelfTestResult> results)
@@ -529,25 +656,125 @@ namespace ZenitiumDns.Core
                     var state = manager.GetZoneState(item);
 
                     if (!_dnsWebService._dnsServer.EnableCache)
-                        results.Add(new SelfTestResult(group, title, SelfTestStatus.Info, Lang.T("Nicht genutzt, weil der Cache ausgeschaltet ist.", "Not used because the cache is turned off.")));
+                        results.Add(new SelfTestResult(group, title, SelfTestStatus.Info, Lang.T("Nicht genutzt, weil der Cache ausgeschaltet ist.", "Not used because the cache is turned off."), "settings:Recursion"));
                     else if (state.Mode == IanaDataMode.Disabled)
-                        results.Add(new SelfTestResult(group, title, SelfTestStatus.Info, Lang.T("Ausgeschaltet, der Resolver fragt die zuständigen Nameserver.", "Turned off, the resolver queries the responsible name servers.")));
+                        results.Add(new SelfTestResult(group, title, SelfTestStatus.Info, Lang.T("Ausgeschaltet, der Resolver fragt die zuständigen Nameserver.", "Turned off, the resolver queries the responsible name servers."), "settings:Recursion"));
                     else if (state.Error is not null)
-                        results.Add(new SelfTestResult(group, title, SelfTestStatus.Warning, state.Error + (state.Active ? Lang.T(" Die zuletzt geprüfte Version ist weiter aktiv.", " The last verified version remains active.") : Lang.T(" Der Resolver fragt so lange die zuständigen Nameserver.", " Meanwhile the resolver queries the responsible name servers."))));
+                        results.Add(new SelfTestResult(group, title, SelfTestStatus.Warning, state.Error + (state.Active ? Lang.T(" Die zuletzt geprüfte Version ist weiter aktiv.", " The last verified version remains active.") : Lang.T(" Der Resolver fragt so lange die zuständigen Nameserver.", " Meanwhile the resolver queries the responsible name servers.")), "settings:Recursion"));
                     else if (state.Active)
-                        results.Add(new SelfTestResult(group, title, SelfTestStatus.Ok, Lang.T("Seriennummer " + state.Serial + ", " + FormatNumber(state.Delegations) + " Delegationen. ", "Serial " + state.Serial + ", " + FormatNumber(state.Delegations) + " delegations. ") + state.Message));
+                        results.Add(new SelfTestResult(group, title, SelfTestStatus.Ok, Lang.T("Seriennummer " + state.Serial + ", " + FormatNumber(state.Delegations) + " Delegationen. ", "Serial " + state.Serial + ", " + FormatNumber(state.Delegations) + " delegations. ") + state.Message, "settings:Recursion"));
                     else if (state.Mode == IanaDataMode.Custom)
-                        results.Add(new SelfTestResult(group, title, SelfTestStatus.Warning, Lang.T("Die eigene Version wird nicht verwendet: ", "The custom version is not used: ") + state.Message));
+                        results.Add(new SelfTestResult(group, title, SelfTestStatus.Warning, Lang.T("Die eigene Version wird nicht verwendet: ", "The custom version is not used: ") + state.Message, "settings:Recursion"));
                     else
-                        results.Add(new SelfTestResult(group, title, SelfTestStatus.Info, Lang.T("Wird kurz nach dem Start geladen und geprüft.", "Loaded and verified shortly after start.")));
+                        results.Add(new SelfTestResult(group, title, SelfTestStatus.Info, Lang.T("Wird kurz nach dem Start geladen und geprüft.", "Loaded and verified shortly after start."), "settings:Recursion"));
                 }
 
                 var anchors = manager.GetTrustAnchorState();
 
                 if (anchors.Error is not null)
-                    results.Add(new SelfTestResult(group, "Root-KSK", SelfTestStatus.Warning, anchors.Error));
+                    results.Add(new SelfTestResult(group, "Root-KSK", SelfTestStatus.Warning, anchors.Error, "settings:Recursion"));
                 else if (anchors.Source is not null)
-                    results.Add(new SelfTestResult(group, "Root-KSK", SelfTestStatus.Ok, Lang.T("Quelle ", "Source ") + anchors.Source + ". " + anchors.Message));
+                    results.Add(new SelfTestResult(group, "Root-KSK", SelfTestStatus.Ok, Lang.T("Quelle ", "Source ") + anchors.Source + ". " + anchors.Message, "settings:Recursion"));
+            }
+
+            private void CheckDhcp(List<SelfTestResult> results)
+            {
+                DhcpServer dhcpServer = _dnsWebService._dhcpServer;
+
+                if (dhcpServer is null)
+                    return;
+
+                DhcpSettings settings = dhcpServer.Settings;
+
+                if (!settings.Enabled)
+                    return;
+
+                string group = "DHCP";
+
+                IReadOnlyList<DhcpConfigError> configErrors = dhcpServer.ConfigErrors;
+                if (configErrors.Count > 0)
+                {
+                    DhcpConfigError first = configErrors[0];
+                    string where = first.Line > 0 ? Lang.T("Zeile " + first.Line + ": ", "line " + first.Line + ": ") : "";
+                    results.Add(new SelfTestResult(group, Lang.T("Konfiguration", "Configuration"), SelfTestStatus.Error, Lang.T("Die Konfiguration enthält " + configErrors.Count + " Fehler, der DHCP-Server vergibt deshalb keine Adressen. Erster Fehler, " + where + first.Message, "The configuration contains " + configErrors.Count + " error(s), so the DHCP server hands out no addresses. First error, " + where + first.Message), "dhcp"));
+                }
+
+                if (settings.Enabled)
+                {
+                    List<DhcpListenerStatus> listeners = dhcpServer.GetListenerStatus();
+                    List<string> failed = new List<string>();
+                    List<string> listening = new List<string>();
+
+                    foreach (DhcpListenerStatus listener in listeners)
+                    {
+                        if (!string.IsNullOrEmpty(listener.Error))
+                            failed.Add(listener.Interface + " (" + listener.Error + ")");
+                        else if (listener.Listening)
+                            listening.Add(listener.Interface + ((listener.Addresses is not null) && (listener.Addresses.Count > 0) ? " " + string.Join(", ", listener.Addresses) : ""));
+                    }
+
+                    if (failed.Count > 0)
+                        results.Add(new SelfTestResult(group, Lang.T("Schnittstellen", "Interfaces"), SelfTestStatus.Error, Lang.T("Kein Empfang auf: " + string.Join("; ", failed) + ". Meist belegt ein anderer DHCP-Server Port 67 oder die Schnittstelle hat keine IPv4-Adresse.", "Not receiving on: " + string.Join("; ", failed) + ". Usually another DHCP server occupies port 67 or the interface has no IPv4 address."), "dhcp"));
+                    else if (listening.Count == 0)
+                        results.Add(new SelfTestResult(group, Lang.T("Schnittstellen", "Interfaces"), SelfTestStatus.Error, Lang.T("Der DHCP-Server lauscht auf keiner Schnittstelle. Eine Schnittstelle mit IPv4-Adresse auswählen, die zu einem Adressbereich passt.", "The DHCP server is not listening on any interface. Select an interface with an IPv4 address that matches an address range."), "dhcp"));
+                    else
+                        results.Add(new SelfTestResult(group, Lang.T("Schnittstellen", "Interfaces"), SelfTestStatus.Ok, Lang.T("Empfang auf " + string.Join("; ", listening) + ".", "Receiving on " + string.Join("; ", listening) + "."), "dhcp"));
+
+                    if (!string.IsNullOrEmpty(dhcpServer.RawSenderError))
+                        results.Add(new SelfTestResult(group, Lang.T("Direkte Antworten", "Direct replies"), SelfTestStatus.Info, Lang.T("Antworten an Clients, die noch keine Adresse haben, gehen per Broadcast, weil kein Raw-Socket geöffnet werden kann (" + dhcpServer.RawSenderError + "). Das funktioniert, belastet aber alle Geräte im Netz. Dafür braucht der Dienst CAP_NET_RAW.", "Replies to clients without an address are broadcast because no raw socket can be opened (" + dhcpServer.RawSenderError + "). This works but reaches every device in the network. The service needs CAP_NET_RAW for direct replies."), "dhcp"));
+
+                    int foreignWindowSeconds = Math.Max(900, settings.RogueProbeIntervalSeconds * 3);
+                    DateTime recent = DateTime.UtcNow.AddSeconds(-foreignWindowSeconds);
+                    int foreignWindowMinutes = (foreignWindowSeconds + 59) / 60;
+                    List<string> foreign = new List<string>();
+
+                    foreach (DhcpForeignServer server in dhcpServer.GetForeignServers())
+                    {
+                        if (server.LastSeen >= recent)
+                            foreign.Add(server.Address + (string.IsNullOrEmpty(server.Interface) ? "" : " (" + server.Interface + ")"));
+                    }
+
+                    if (foreign.Count > 0)
+                    {
+                        string list = string.Join(", ", foreign);
+
+                        switch (settings.Priority)
+                        {
+                            case DhcpPriorityMode.Standby:
+                                results.Add(new SelfTestResult(group, Lang.T("Andere DHCP-Server", "Other DHCP servers"), SelfTestStatus.Info, Lang.T("Im Netz antwortet ein anderer DHCP-Server: " + list + ". Wie eingestellt (Reserve) bietet ZenitiumDNS keine neuen Adressen an, bis er " + foreignWindowMinutes + " Minuten lang nicht mehr zu sehen ist.", "Another DHCP server answers in the network: " + list + ". As configured (standby), ZenitiumDNS offers no new addresses until it has not been seen for " + foreignWindowMinutes + " minutes."), "dhcp"));
+                                break;
+
+                            case DhcpPriorityMode.Delayed:
+                                results.Add(new SelfTestResult(group, Lang.T("Andere DHCP-Server", "Other DHCP servers"), SelfTestStatus.Info, Lang.T("Im Netz antwortet ein anderer DHCP-Server: " + list + ". ZenitiumDNS antwortet wie eingestellt (Nachrangig) verzögert, Clients nehmen meist das schnellere Angebot des anderen Servers.", "Another DHCP server answers in the network: " + list + ". As configured (secondary), ZenitiumDNS answers with a delay, so clients usually take the faster offer of the other server."), "dhcp"));
+                                break;
+
+                            default:
+                                results.Add(new SelfTestResult(group, Lang.T("Andere DHCP-Server", "Other DHCP servers"), SelfTestStatus.Warning, Lang.T("Im Netz antwortet ein anderer DHCP-Server: " + list + ". Clients nehmen das erste Angebot, Adressen und Einstellungen hängen dann vom Zufall ab. Den anderen Server abschalten oder hier die Priorität auf „Nachrangig“ oder „Reserve“ stellen.", "Another DHCP server answers in the network: " + list + ". Clients take the first offer, so addresses and settings depend on chance. Turn the other server off or set the priority here to \"Secondary\" or \"Standby\"."), "dhcp"));
+                                break;
+                        }
+                    }
+                    else if (settings.RogueDetection && string.IsNullOrEmpty(dhcpServer.LastProbeError) && (dhcpServer.LastProbe > DateTime.MinValue))
+                    {
+                        results.Add(new SelfTestResult(group, Lang.T("Andere DHCP-Server", "Other DHCP servers"), SelfTestStatus.Ok, Lang.T("Bei der letzten Suche um " + FormatDate(dhcpServer.LastProbe) + " hat kein anderer DHCP-Server geantwortet.", "No other DHCP server answered the last search at " + FormatDate(dhcpServer.LastProbe) + "."), "dhcp"));
+                    }
+
+                    if (settings.RogueDetection && !string.IsNullOrEmpty(dhcpServer.LastProbeError))
+                        results.Add(new SelfTestResult(group, Lang.T("Suche nach anderen Servern", "Search for other servers"), SelfTestStatus.Warning, Lang.T("Die Suche nach anderen DHCP-Servern ist fehlgeschlagen: " + dhcpServer.LastProbeError, "The search for other DHCP servers failed: " + dhcpServer.LastProbeError), "dhcp"));
+
+                    (int total, int used) = dhcpServer.GetPoolUsage();
+                    if (total > 0)
+                    {
+                        int percent = (int)Math.Round(used * 100.0 / total);
+                        string usage = Lang.T(FormatNumber(used) + " von " + FormatNumber(total) + " Adressen vergeben (" + percent + " %).", FormatNumber(used) + " of " + FormatNumber(total) + " addresses in use (" + percent + " %).");
+
+                        if (used >= total)
+                            results.Add(new SelfTestResult(group, Lang.T("Adressbereich", "Address pool"), SelfTestStatus.Error, usage + Lang.T(" Neue Geräte erhalten keine Adresse. Den Bereich vergrößern oder die Lease-Zeit verkürzen.", " New devices get no address. Enlarge the range or shorten the lease time."), "dhcp"));
+                        else if (percent >= 90)
+                            results.Add(new SelfTestResult(group, Lang.T("Adressbereich", "Address pool"), SelfTestStatus.Warning, usage + Lang.T(" Der Bereich ist bald erschöpft.", " The pool will soon be exhausted."), "dhcp"));
+                        else
+                            results.Add(new SelfTestResult(group, Lang.T("Adressbereich", "Address pool"), SelfTestStatus.Ok, usage, "dhcp"));
+                    }
+                }
             }
 
             private void CheckWatchdog(List<SelfTestResult> results)
@@ -557,7 +784,7 @@ namespace ZenitiumDns.Core
 
                 if (!watchdog.Enabled)
                 {
-                    results.Add(new SelfTestResult(group, "Status", SelfTestStatus.Info, Lang.T("Der Wächter ist ausgeschaltet. Bei vollem Datenträger, Speichermangel oder ausgefallenen Diensten greift niemand automatisch ein.", "The watchdog is turned off. Nothing intervenes automatically when the disk is full, memory runs low or services fail.")));
+                    results.Add(new SelfTestResult(group, "Status", SelfTestStatus.Info, Lang.T("Der Wächter ist ausgeschaltet. Bei vollem Datenträger, Speichermangel oder ausgefallenen Diensten greift niemand automatisch ein.", "The watchdog is turned off. Nothing intervenes automatically when the disk is full, memory runs low or services fail."), "settings:General"));
                     return;
                 }
 
@@ -572,11 +799,11 @@ namespace ZenitiumDns.Core
                     if (shown++ >= 5)
                         break;
 
-                    results.Add(new SelfTestResult(group, watchdogEvent.Title.ToString(), SelfTestStatus.Warning, FormatDate(watchdogEvent.Time) + ": " + watchdogEvent.Message.ToString()));
+                    results.Add(new SelfTestResult(group, watchdogEvent.Title.ToString(), SelfTestStatus.Warning, FormatDate(watchdogEvent.Time) + ": " + watchdogEvent.Message.ToString(), "settings:General"));
                 }
 
                 if (shown == 0)
-                    results.Add(new SelfTestResult(group, "Status", SelfTestStatus.Ok, Lang.T("Aktiv, in den letzten 24 Stunden war kein Eingriff nötig.", "Active, no intervention was needed in the last 24 hours.")));
+                    results.Add(new SelfTestResult(group, "Status", SelfTestStatus.Ok, Lang.T("Aktiv, in den letzten 24 Stunden war kein Eingriff nötig.", "Active, no intervention was needed in the last 24 hours."), "settings:General"));
             }
 
             private async Task CheckClockOffsetAsync(List<SelfTestResult> results, string group)
@@ -663,9 +890,9 @@ namespace ZenitiumDns.Core
                         long workingSet = Environment.WorkingSet;
 
                         if ((memTotal > 0) && (memAvailable < memTotal / 10))
-                            results.Add(new SelfTestResult(group, Lang.T("Arbeitsspeicher", "Memory"), SelfTestStatus.Warning, Lang.T("Nur noch " + FormatSize(memAvailable) + " von " + FormatSize(memTotal) + " frei. ZenitiumDNS belegt " + FormatSize(workingSet) + ". Cache-Größe oder Blocklisten verkleinern.", "Only " + FormatSize(memAvailable) + " of " + FormatSize(memTotal) + " free. ZenitiumDNS uses " + FormatSize(workingSet) + ". Reduce the cache size or the block lists.")));
+                            results.Add(new SelfTestResult(group, Lang.T("Arbeitsspeicher", "Memory"), SelfTestStatus.Warning, Lang.T("Nur noch " + FormatSize(memAvailable) + " von " + FormatSize(memTotal) + " frei. ZenitiumDNS belegt " + FormatSize(workingSet) + ". Cache-Größe oder Blocklisten verkleinern.", "Only " + FormatSize(memAvailable) + " of " + FormatSize(memTotal) + " free. ZenitiumDNS uses " + FormatSize(workingSet) + ". Reduce the cache size or the block lists."), "settings:Cache"));
                         else if (memTotal > 0)
-                            results.Add(new SelfTestResult(group, Lang.T("Arbeitsspeicher", "Memory"), SelfTestStatus.Ok, Lang.T(FormatSize(memAvailable) + " von " + FormatSize(memTotal) + " frei, ZenitiumDNS belegt " + FormatSize(workingSet) + ".", FormatSize(memAvailable) + " of " + FormatSize(memTotal) + " free, ZenitiumDNS uses " + FormatSize(workingSet) + ".")));
+                            results.Add(new SelfTestResult(group, Lang.T("Arbeitsspeicher", "Memory"), SelfTestStatus.Ok, Lang.T(FormatSize(memAvailable) + " von " + FormatSize(memTotal) + " frei, ZenitiumDNS belegt " + FormatSize(workingSet) + ".", FormatSize(memAvailable) + " of " + FormatSize(memTotal) + " free, ZenitiumDNS uses " + FormatSize(workingSet) + "."), "settings:Cache"));
                     }
                     catch
                     { }
@@ -678,9 +905,9 @@ namespace ZenitiumDns.Core
                         long sendBuffer = dnsServer.UdpSendBufferSizeKB * 1024L;
 
                         if ((rmemMax < receiveBuffer) || (wmemMax < sendBuffer))
-                            results.Add(new SelfTestResult(group, Lang.T("UDP-Puffer", "UDP buffers"), SelfTestStatus.Warning, Lang.T("Der Kernel begrenzt die UDP-Puffer auf " + FormatSize(Math.Min(rmemMax, wmemMax)) + ", eingestellt sind " + FormatSize(Math.Max(receiveBuffer, sendBuffer)) + ". Bei Lastspitzen gehen Pakete verloren. Abhilfe: ", "The kernel limits the UDP buffers to " + FormatSize(Math.Min(rmemMax, wmemMax)) + ", configured are " + FormatSize(Math.Max(receiveBuffer, sendBuffer)) + ". Packets get lost during load peaks. Fix: ") + "sysctl -w net.core.rmem_max=" + receiveBuffer + " net.core.wmem_max=" + sendBuffer));
+                            results.Add(new SelfTestResult(group, Lang.T("UDP-Puffer", "UDP buffers"), SelfTestStatus.Warning, Lang.T("Der Kernel begrenzt die UDP-Puffer auf " + FormatSize(Math.Min(rmemMax, wmemMax)) + ", eingestellt sind " + FormatSize(Math.Max(receiveBuffer, sendBuffer)) + ". Bei Lastspitzen gehen Pakete verloren. Abhilfe: ", "The kernel limits the UDP buffers to " + FormatSize(Math.Min(rmemMax, wmemMax)) + ", configured are " + FormatSize(Math.Max(receiveBuffer, sendBuffer)) + ". Packets get lost during load peaks. Fix: ") + "sysctl -w net.core.rmem_max=" + receiveBuffer + " net.core.wmem_max=" + sendBuffer, "settings:Network"));
                         else
-                            results.Add(new SelfTestResult(group, Lang.T("UDP-Puffer", "UDP buffers"), SelfTestStatus.Ok, Lang.T("Die Kernel-Grenzen erlauben die eingestellten Puffergrößen.", "The kernel limits allow the configured buffer sizes.")));
+                            results.Add(new SelfTestResult(group, Lang.T("UDP-Puffer", "UDP buffers"), SelfTestStatus.Ok, Lang.T("Die Kernel-Grenzen erlauben die eingestellten Puffergrößen.", "The kernel limits allow the configured buffer sizes."), "settings:Network"));
                     }
                     catch
                     { }
@@ -774,33 +1001,36 @@ namespace ZenitiumDns.Core
                     }
                 }
 
+                async Task<List<SelfTestResult>> RunAsync(string group, string title, Func<List<SelfTestResult>, Task> check)
+                {
+                    List<SelfTestResult> asyncResults = new List<SelfTestResult>();
+
+                    try
+                    {
+                        await check(asyncResults);
+                    }
+                    catch (Exception ex)
+                    {
+                        asyncResults.Add(new SelfTestResult(group, title, SelfTestStatus.Warning, Lang.T("Die Prüfung ist fehlgeschlagen: ", "The check failed: ") + ex.Message));
+                    }
+
+                    return asyncResults;
+                }
+
+                Task<List<SelfTestResult>> resolution = RunAsync(Lang.T("Auflösung", "Resolution"), Lang.T("Prüfung", "Check"), CheckResolutionAsync);
+                Task<List<SelfTestResult>> clock = RunAsync("System", Lang.T("Systemzeit", "System time"), delegate (List<SelfTestResult> list) { return CheckClockOffsetAsync(list, "System"); });
+
                 Run(Lang.T("Dienste", "Services"), CheckServices);
-
-                try
-                {
-                    await CheckResolutionAsync(results);
-                }
-                catch (Exception ex)
-                {
-                    results.Add(new SelfTestResult(Lang.T("Auflösung", "Resolution"), Lang.T("Prüfung", "Check"), SelfTestStatus.Warning, Lang.T("Die Prüfung ist fehlgeschlagen: ", "The check failed: ") + ex.Message));
-                }
-
+                results.AddRange(await resolution);
+                Run("Cache", CheckCache);
                 Run(Lang.T("Zertifikate", "Certificates"), CheckCertificates);
                 Run(Lang.T("Root-Zone", "Root zone"), CheckIanaData);
                 Run(Lang.T("Sicherheit", "Security"), CheckSecurity);
                 Run("Filter", CheckFilters);
                 Run("Apps", CheckApps);
+                Run("DHCP", CheckDhcp);
                 Run(Lang.T("Wächter", "Watchdog"), CheckWatchdog);
-
-                try
-                {
-                    await CheckClockOffsetAsync(results, "System");
-                }
-                catch (Exception ex)
-                {
-                    results.Add(new SelfTestResult("System", Lang.T("Systemzeit", "System time"), SelfTestStatus.Warning, Lang.T("Die Prüfung ist fehlgeschlagen: ", "The check failed: ") + ex.Message));
-                }
-
+                results.AddRange(await clock);
                 Run("System", CheckSystem);
 
                 return results;
@@ -821,6 +1051,7 @@ namespace ZenitiumDns.Core
 
                 IReadOnlyList<SelfTestResult> results;
                 DateTime runOn;
+                double duration;
 
                 await _runLock.WaitAsync();
                 try
@@ -828,12 +1059,16 @@ namespace ZenitiumDns.Core
                     if (refresh || (_lastResults is null) || (_lastLanguage != Lang.Code) || (DateTime.UtcNow > _lastRunOn.AddSeconds(CACHE_SECONDS)))
                     {
                         _lastLanguage = Lang.Code;
+
+                        long start = Stopwatch.GetTimestamp();
                         _lastResults = await RunChecksAsync();
+                        _lastDuration = Stopwatch.GetElapsedTime(start).TotalMilliseconds;
                         _lastRunOn = DateTime.UtcNow;
                     }
 
                     results = _lastResults;
                     runOn = _lastRunOn;
+                    duration = _lastDuration;
                 }
                 finally
                 {
@@ -843,24 +1078,45 @@ namespace ZenitiumDns.Core
                 Utf8JsonWriter jsonWriter = context.GetCurrentJsonWriter();
 
                 jsonWriter.WriteString("runOn", runOn);
+                jsonWriter.WriteNumber("durationMs", Math.Round(duration));
 
                 int errors = 0;
                 int warnings = 0;
+                int infos = 0;
+                int oks = 0;
 
                 jsonWriter.WriteStartArray("results");
 
                 foreach (SelfTestResult result in results)
                 {
-                    if (result.Status == SelfTestStatus.Error)
-                        errors++;
-                    else if (result.Status == SelfTestStatus.Warning)
-                        warnings++;
+                    switch (result.Status)
+                    {
+                        case SelfTestStatus.Error:
+                            errors++;
+                            break;
+
+                        case SelfTestStatus.Warning:
+                            warnings++;
+                            break;
+
+                        case SelfTestStatus.Info:
+                            infos++;
+                            break;
+
+                        default:
+                            oks++;
+                            break;
+                    }
 
                     jsonWriter.WriteStartObject();
                     jsonWriter.WriteString("group", result.Group);
                     jsonWriter.WriteString("title", result.Title);
                     jsonWriter.WriteString("status", result.Status.ToString().ToLowerInvariant());
                     jsonWriter.WriteString("message", result.Message);
+
+                    if (result.Section is not null)
+                        jsonWriter.WriteString("section", result.Section);
+
                     jsonWriter.WriteEndObject();
                 }
 
@@ -868,6 +1124,8 @@ namespace ZenitiumDns.Core
 
                 jsonWriter.WriteNumber("errors", errors);
                 jsonWriter.WriteNumber("warnings", warnings);
+                jsonWriter.WriteNumber("infos", infos);
+                jsonWriter.WriteNumber("oks", oks);
             }
 
             #endregion
@@ -880,7 +1138,7 @@ namespace ZenitiumDns.Core
                 Error
             }
 
-            sealed record SelfTestResult(string Group, string Title, SelfTestStatus Status, string Message);
+            sealed record SelfTestResult(string Group, string Title, SelfTestStatus Status, string Message, string Section = null);
         }
     }
 }

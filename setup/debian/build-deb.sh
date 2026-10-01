@@ -105,6 +105,9 @@ echo "Veröffentliche ZenitiumDNS $version für $rid ..."
 
 [ -x "$installDir/ZenitiumDns" ] || fail "Die Veröffentlichung hat keine ausführbare Datei 'ZenitiumDns' erzeugt"
 
+echo "Verkleinere Weboberfläche und DoH-Seite ..."
+"$dotnet" run --project "$rootDir/tools/WebMinifier/WebMinifier.csproj" -c Release -v quiet -- "$installDir/www" "$installDir/dohwww" || fail "Die Web-Dateien konnten nicht verkleinert werden"
+
 rm -f "$installDir/install.sh" "$installDir/uninstall.sh" "$installDir/start.sh" "$installDir/openrc.service" "$installDir/systemd.service"
 
 extraDepends=""

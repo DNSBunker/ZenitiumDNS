@@ -287,6 +287,7 @@ namespace ZenitiumDns.Core
                 jsonWriter.WriteBoolean("enabled", systemMonitor.Enabled);
                 jsonWriter.WriteNumber("capacity", SystemMonitor.CAPACITY);
                 jsonWriter.WriteNumber("processorCount", Environment.ProcessorCount);
+                jsonWriter.WriteNumber("latestSeq", systemMonitor.LatestSequence);
 
                 jsonWriter.WriteStartArray("samples");
 

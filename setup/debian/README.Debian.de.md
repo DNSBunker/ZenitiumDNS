@@ -19,11 +19,11 @@ Das Paket enthält die .NET-Laufzeit, eine separate .NET-Installation ist nicht 
 | `/usr/share/zenitiumdns/apps` | Mitgelieferte DNS-Apps als ZIP-Dateien, werden beim Start deaktiviert installiert und bei Paket-Updates aktualisiert |
 | `/usr/lib/systemd/system/zenitiumdns.service` | systemd-Dienst |
 
-Der Dienst läuft als unprivilegierter Systembenutzer `zenitiumdns` und wird nach der Installation automatisch aktiviert und gestartet.
+Der Dienst läuft als unprivilegierter Systembenutzer `zenitiumdns` und wird nach der Installation automatisch aktiviert und gestartet. Er erhält nur die Capabilities `CAP_NET_BIND_SERVICE` (Ports unter 1024 wie 53, 67, 443 und 853) und `CAP_NET_RAW` (DHCP-Antworten direkt an die MAC-Adresse eines Geräts, das noch keine Adresse hat, über einen `AF_PACKET`-Socket).
 
 ## Erste Anmeldung
 
-Bei der Erstinstallation wird ein zufälliges Passwort für den Benutzer `admin` erzeugt. Der Installer gibt es aus und speichert es in `/etc/zenitiumdns/admin.password`. Rufe `http://<IP-Adresse-des-Servers>:5380/` auf, melde dich an, wähle die Sprache der Oberfläche (Deutsch oder Englisch) und ändere das Passwort im Kontomenü. Sobald das Passwort von `admin` nicht mehr mit dem in der Datei übereinstimmt, löscht der Server `/etc/zenitiumdns/admin.password` selbst, direkt nach der Änderung oder beim nächsten Start.
+Bei der Erstinstallation wird ein zufälliges Passwort für den Benutzer `admin` erzeugt. Der Installer gibt es aus und speichert es in `/etc/zenitiumdns/admin.password`. Rufe `http://<IP-Adresse-des-Servers>:5380/` auf, melde dich an, wähle die Sprache der Oberfläche (Deutsch oder Englisch) und ändere das Passwort im Kontomenü. Sobald das Passwort von `admin` nicht mehr mit dem in der Datei übereinstimmt, löscht der Server `/etc/zenitiumdns/admin.password` selbst, direkt nach der Änderung oder beim nächsten Start. Dasselbe geschieht, wenn der Benutzer `admin` gelöscht oder umbenannt wird.
 
 Die Sprache gilt für alle Benutzer des Servers und lässt sich jederzeit unter Einstellungen > Server > Sprache ändern. Aktualisierte bestehende Installationen bleiben auf Deutsch.
 
@@ -94,9 +94,11 @@ Die Übersicht der Weboberfläche zeigt Anfragen pro Sekunde, Antwortzeiten, Cac
 
 ## Arbeitsspeicher
 
-Den meisten Arbeitsspeicher belegen die Blocklisten, der Cache und die Statistik der laufenden Stunde. Mit HaGeZi TIF und PRO (2,5 Millionen Domains, rund 80 MB) und dauerhaft 2.000 Anfragen/s ist rund 1 GB belegter Speicher normal; ein Teil davon ist freier Platz im Heap, den die Garbage Collection ohne Pausen für Anfragen wiederverwendet. Die Größe des Caches steht unter Einstellungen > Cache, bei Speichermangel kürzt der Wächter den Cache.
+Den meisten Arbeitsspeicher belegen die Blocklisten, der Cache und die Statistik der laufenden Stunde. Mit HaGeZi TIF und PRO (2,5 Millionen Domains, rund 80 MB) und dauerhaft 2.000 Anfragen/s ist rund 1 GB belegter Speicher normal; ein Teil davon ist freier Platz im Heap, den die Garbage Collection ohne Pausen für Anfragen wiederverwendet. Die Größe des Caches steht unter Einstellungen > Cache. Wird der Speicher knapp, schützt sich der Server vor einem Absturz durch Speichermangel: Alle 2 Sekunden prüft er den Arbeitsspeicher des Systems, ein `MemoryMax` des Dienstes und die Heap-Grenze von .NET; ab 85 % wächst der Cache nicht mehr, ab 90 % werden die am längsten ungenutzten Einträge entfernt und der Speicher kompaktiert. Die Grenze fällt weg, sobald der Speicher fünf Minuten lang unter 75 % liegt.
 
 Ein Cache-Eintrag belegt grob 600 bis 700 Byte plus seine Einträge; mit DNSSEC-Signaturen, Delegationen und negativen Antworten sind es oft 2 bis 4 KB. Bei sehr vielen oder unbegrenzt vielen Einträgen empfiehlt sich eine Speichergrenze unter Einstellungen > Cache (etwa ein Drittel des Arbeitsspeichers der Maschine). Wird sie überschritten, entfernt die Cache-Wartung jede Minute die am längsten ungenutzten Einträge und kompaktiert den Heap nach großen Schnitten.
+
+Leitet ZenitiumDNS an einen cachenden Resolver wie Unbound weiter, lässt sich der Cache unter Einstellungen > Cache > Cache verwenden vollständig abschalten. Antworten werden dann nur für die Dauer einer einzelnen Auflösung gehalten, die Kopien von Root- und arpa-Zone werden nicht im Speicher gehalten, und der Cache belegt praktisch keinen Speicher.
 
 Ist der Speicher knapp, lässt sich die Garbage Collection in `/etc/default/zenitiumdns` anweisen, den Heap öfter zu verdichten:
 

@@ -22,7 +22,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
-using System.Threading;
 using System.Threading.Tasks;
 
 namespace LogExporter.Strategy
@@ -70,10 +69,12 @@ namespace LogExporter.Strategy
 
             foreach (KeyValuePair<Type, IExportStrategy> strategy in _exportStrategies)
             {
-                tasks.Add(Task.Factory.StartNew(delegate (object? state)
+                IExportStrategy exportStrategy = strategy.Value;
+
+                tasks.Add(Task.Run(delegate ()
                 {
-                    return strategy.Value.ExportAsync(logs);
-                }, null, CancellationToken.None, TaskCreationOptions.DenyChildAttach, TaskScheduler.Current));
+                    return exportStrategy.ExportAsync(logs);
+                }));
             }
 
             await Task.WhenAll(tasks);

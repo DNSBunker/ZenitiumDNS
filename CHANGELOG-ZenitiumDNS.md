@@ -2,14 +2,14 @@
 
 [Deutsche Version](CHANGELOG-ZenitiumDNS.de.md)
 
-This document only lists the differences between the original build **Technitium DNS Server 15.5** (released on 19 September 2026) and the build **ZenitiumDNS 15.5.1** (as of 30 September 2026). ZenitiumDNS 15.5.1 also contains all fixes from Technitium DNS Server 15.5.1; which of them ZenitiumDNS already had before is listed at the end. The complete version history is in [CHANGELOG.md](CHANGELOG.md).
+This document only lists the differences between the original build **Technitium DNS Server 15.5** (released on 19 September 2026) and the build **ZenitiumDNS 15.5.1** (as of 1 October 2026). ZenitiumDNS 15.5.1 also contains all fixes from Technitium DNS Server 15.5.1; which of them ZenitiumDNS already had before is listed at the end. The complete version history is in [CHANGELOG.md](CHANGELOG.md).
 
 ## Overview
 
 | Area | Technitium DNS Server 15.5 | ZenitiumDNS 15.5 |
 | ---- | -------------------------- | ---------------- |
 | Name, paths, service | Technitium, `/etc/dns`, service `dns` | ZenitiumDNS, `/etc/zenitiumdns`, service `zenitiumdns` |
-| Purpose | authoritative and recursive DNS server, DHCP server, clustering | public recursive resolver; authoritative zones, zone transfers, DHCP, clustering and Windows components removed |
+| Purpose | authoritative and recursive DNS server, DHCP server, clustering | public recursive resolver with an own DHCP server; authoritative zones, zone transfers, the DHCP server and clustering of Technitium and Windows components removed |
 | Update check and app store | hard-wired to Technitium servers | update check against the GitHub releases of ZenitiumDNS with changelog, app store removed |
 | Installation on Debian 13 | script downloads binaries and .NET from the internet | self-contained `.deb` package with built-in .NET runtime and `libmsquic` for DNS-over-QUIC |
 | Initial admin password | `admin` | randomly generated |
@@ -58,8 +58,14 @@ This document only lists the differences between the original build **Technitium
 | Operation without a cache (e.g. in front of Unbound) | not available | cache, prefetch, serve stale and local root zone can be switched off together |
 | Memory for 1.2 million cached names | about 1.5 GB of live objects | about 0.8 GB, optional memory limit that trims the cache |
 | systemd sandbox (`systemd-analyze security`) | 3.6 | 1.9 with a system call filter |
+| Memory almost full | the cache keeps growing until the process runs out of memory | the cache stops growing at 85 % of the system memory, the service or container limit or the .NET heap limit and is cut from 90 % |
+| Lock contention with recursive resolution and DNS-over-TLS | hundreds to thousands of contended locks per second (resolver pool that wakes all waiting loops, own scheduler for TCP, DoT and DoQ) | practically none: lock-free resolver pool, connections on the .NET thread pool |
+| CPU time per DNS-over-TLS query (8,000 queries/s, 4 CPUs) | 122 µs | 56 µs ([docs/Performance.md](docs/Performance.md)) |
+| DHCP | DHCP server with scopes | own DHCPv4 server: simple settings or configuration in the syntax of dnsmasq, detection of other DHCP servers with priority ([docs/DHCP.md](docs/DHCP.md)) |
 
 ## Measurements
+
+The current comparison with Technitium DNS Server 15.5.1, including DNS-over-TLS, recursive resolution, memory per cache entry and lock contention, is in [docs/Performance.md](docs/Performance.md). The values below are from earlier development builds.
 
 Measured on the same machine (20 cores) with `dnsperf` against an authoritative server and a caching resolver with 2,000 names. Values for authoritative answers / answers from the cache. The values for authoritative answers come from a build before the authoritative zones were removed and show the effect of the optimizations on the shared query path.
 
@@ -88,7 +94,7 @@ Functional tests in an isolated network namespace with a simulated DNS hierarchy
 - **Removed:**
   - authoritative zones of type primary, secondary, stub, secondary forwarder and catalog, including DNSSEC signing and SOA editing,
   - zone transfers (AXFR, IXFR, XFR-over-TLS/QUIC), DNS NOTIFY, dynamic updates and TSIG,
-  - DHCP server and clustering,
+  - the DHCP server and clustering of Technitium (15.5.1-12 brings an own DHCP server, see [docs/DHCP.md](docs/DHCP.md)),
   - importing DNS client responses into a local zone,
   - 16 apps for LAN and hosting scenarios (Auto PTR, Block Page, Default Records, DNS Block List, Failover, Filter AAAA, Geo Continent, Geo Country, Geo Distance, No Data, NX Domain Override, Split Horizon, Weighted Round Robin, What Is My DNS, Wild IP, Zone Alias),
   - Windows service, system tray, Windows firewall library and Windows installer.
@@ -170,6 +176,8 @@ Functional tests in an isolated network namespace with a simulated DNS hierarchy
 - Statistics data runs through a lock-free queue with its own thread, and unique clients are counted with HyperLogLog.
 - UDP receive threads only wake further threads on a sustained backlog, and send buffers are reused.
 - Server GC with concurrent garbage collection.
+- Recursive resolutions are limited by a lock-free counter instead of one waiting loop per allowed resolution, which were all woken for every new resolution; DNS over TCP, DoT and DoQ run on the .NET thread pool instead of an own scheduler. Lock contention at 700 recursive resolutions per second dropped from about 290 to 0 per second ([docs/Performance.md](docs/Performance.md#lock-contention)).
+- A short gen0 garbage collection runs as soon as 150 new cache entries were created, so single pauses stay at a few milliseconds even with many new names.
 
 ### Encrypted protocols
 - **DNS-over-TCP and DNS-over-TLS:** At most 100 running queries per connection by default, adjustable. The original allowed any number.
@@ -185,7 +193,8 @@ Functional tests in an isolated network namespace with a simulated DNS hierarchy
 - DNS-over-HTTPS via POST: requests over 65,535 bytes are rejected with 413 and read with a limit.
 - DNS messages with implausible record counts are dropped before parsing.
 - Values in inline handlers of the web interface are escaped for JavaScript.
-- systemd service with system call filter, restricted address families and `ProtectProc=invisible`; the initial admin password file is deleted automatically after the password was changed.
+- Translations of imported interface languages no longer contain straight quotes or backticks; they are replaced with typographic ones.
+- systemd service with system call filter, restricted address families and `ProtectProc=invisible`; the initial admin password file is deleted automatically after the password was changed or the user `admin` was deleted or renamed.
 - Content security policy without `unsafe-eval`, at most 1 MB per request without a valid session, HSTS with HTTPS redirection, `nosniff` and `Referrer-Policy`.
 - Container image with actions and base images pinned by hash, SBOM, provenance and cosign signature.
 
@@ -196,7 +205,11 @@ Functional tests in an isolated network namespace with a simulated DNS hierarchy
 - Web interface and documentation are translated into German.
 
 ### Apps and stability
-- Log Exporter app: syslog messages are no longer formatted twice according to RFC 5424 (upstream issue #2173).
+- Log Exporter app: syslog messages are no longer formatted twice according to RFC 5424 (upstream issue #2173); missing targets give a clear error, relative file paths refer to the app folder, Extended DNS Errors with `:` in the text are exported completely.
+- Advanced Forwarding app: no forwarding for clients without recursion rights; domain rules ignore case and a trailing dot.
+- DNS64 app: no AAAA synthesis for `REFUSED`, blocked or dropped answers.
+- Drop Requests app: queries to an allowed local endpoint no longer skip the rules for blocked questions.
+- Client profiles: one invalid profile no longer discards all profiles; IP addresses in profiles and block lists are parsed strictly (`1.2.3` or `010.1.1.1` are no addresses).
 - The timer of the load balancing proxy no longer fires after disposal.
 - An error while loading a zone file no longer leads to a `LockRecursionException`.
 
@@ -214,8 +227,8 @@ Functional tests in an isolated network namespace with a simulated DNS hierarchy
 
 - **Configuration:** Settings, users, conditional forwarder zones, block lists, allowed and blocked domains, statistics and backups of Technitium DNS Server 15.5 can be taken over. ZenitiumDNS saves the DNS settings in format version 14, the web interface settings in format version 6 and zone files with zone information version 15. The original can no longer read these files.
 - **Removed zone types:** Zone files of primary, secondary, stub, secondary forwarder and catalog zones stay in the `zones` folder but are skipped and logged at startup. They can be used further with the original if needed.
-- **DHCP and cluster:** DHCP scope files and the cluster configuration are ignored. Permissions for the DHCP section are discarded on load. An existing "DHCP Administrators" group remains as an ordinary group without special rights and can be deleted.
-- **HTTP API:** The API only serves the web interface. The calls for DNSSEC, catalog zones, zone conversion, resync, TSIG, DHCP and clustering, the app store, installing and uninstalling apps, API tokens and the Prometheus metrics under `api/dashboard/metrics/text` as well as the `node` parameter are gone; Prometheus metrics are available at `/metrics` instead. `api/zones/create` only accepts the type `Forwarder`.
+- **DHCP and cluster:** DHCP scope files and the cluster configuration of Technitium are ignored; scopes are not taken over into the DHCP server of ZenitiumDNS, which has its own settings (`dhcp.json`). Permissions for the DHCP section apply to the new DHCP server. Versions before 15.5.1-12 discarded them on load; when they are missing, the Administrators group gets full rights and the DNS Administrators group view rights for DHCP. An existing "DHCP Administrators" group keeps DHCP rights only when the configuration comes directly from Technitium.
+- **HTTP API:** The API only serves the web interface. The calls for DNSSEC, catalog zones, zone conversion, resync, TSIG, the DHCP scopes and clustering of Technitium, the app store, installing and uninstalling apps, API tokens and the Prometheus metrics under `api/dashboard/metrics/text` as well as the `node` parameter are gone; Prometheus metrics are available at `/metrics` instead. `api/zones/create` only accepts the type `Forwarder`.
 - **Cache file:** ZenitiumDNS saves the name server statistics in `cache.bin` in an extended format (version 2). If such a cache file is loaded by the original, the original discards the cache. The configuration is not affected.
 - **DNS apps:** The namespaces were renamed (`ZenitiumDns.*`, `ZenitiumLibrary.*`). Apps compiled for Technitium must be recompiled against `ZenitiumDns.ApplicationCommon`. All bundled apps are already adapted.
 - **Syslog export:** Because the double formatting was fixed, the format of the syslog messages of the Log Exporter app changes. The metadata is now contained in the message as real structured data according to RFC 5424.

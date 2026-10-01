@@ -38,7 +38,7 @@ ProtectKernelTunables=true
 ProtectProc=invisible
 ProtectSystem=strict
 RemoveIPC=true
-RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK AF_PACKET
 RestrictRealtime=true
 RestrictSUIDSGID=true
 RestrictNamespaces=true
@@ -48,8 +48,8 @@ SystemCallFilter=~@privileged
 SystemCallFilter=adjtimex clock_adjtime
 SystemCallErrorNumber=EPERM
 
-AmbientCapabilities=CAP_NET_BIND_SERVICE
-CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+AmbientCapabilities=CAP_NET_BIND_SERVICE CAP_NET_RAW
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE CAP_NET_RAW
 
 UMask=0077
 

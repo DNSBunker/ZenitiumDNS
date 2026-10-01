@@ -24,6 +24,7 @@ using LogExporter.Strategy;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.IO;
 using System.Net;
 using System.Threading;
 using System.Threading.Tasks;
@@ -47,6 +48,7 @@ namespace LogExporter
         readonly Timer _queueTimer;
         const int QUEUE_TIMER_INTERVAL = 10000;
         const int BULK_INSERT_COUNT = 1000;
+        const int DEFAULT_MAX_QUEUE_SIZE = 1000000;
 
         bool _disposed;
 
@@ -102,34 +104,46 @@ namespace LogExporter
             if (_config is null)
                 throw new DnsClientException(Lang.T("Ungültige App-Konfiguration.", "Invalid app configuration."));
 
-            if (_config.FileTarget!.Enabled)
+            if (_config.MaxQueueSize <= 0)
+                _config.MaxQueueSize = DEFAULT_MAX_QUEUE_SIZE;
+
+            _exportManager.RemoveStrategy(typeof(FileExportStrategy));
+
+            if ((_config.FileTarget is not null) && _config.FileTarget.Enabled)
             {
-                _exportManager.RemoveStrategy(typeof(FileExportStrategy));
-                _exportManager.AddStrategy(new FileExportStrategy(_config.FileTarget!.Path));
-            }
-            else
-            {
-                _exportManager.RemoveStrategy(typeof(FileExportStrategy));
+                if (string.IsNullOrWhiteSpace(_config.FileTarget.Path))
+                    throw new DnsClientException(Lang.T("Für den Dateiexport fehlt der Pfad (file.path).", "The file export has no path (file.path)."));
+
+                string path = _config.FileTarget.Path;
+                if (!Path.IsPathRooted(path))
+                    path = Path.Combine(_dnsServer.ApplicationFolder, path);
+
+                _exportManager.AddStrategy(new FileExportStrategy(Path.GetFullPath(path)));
             }
 
-            if (_config.HttpTarget!.Enabled)
+            _exportManager.RemoveStrategy(typeof(HttpExportStrategy));
+
+            if ((_config.HttpTarget is not null) && _config.HttpTarget.Enabled)
             {
-                _exportManager.RemoveStrategy(typeof(HttpExportStrategy));
-                _exportManager.AddStrategy(new HttpExportStrategy(_dnsServer, _config.HttpTarget.Endpoint, _config.HttpTarget.Headers));
-            }
-            else
-            {
-                _exportManager.RemoveStrategy(typeof(HttpExportStrategy));
+                if (!Uri.TryCreate(_config.HttpTarget.Endpoint, UriKind.Absolute, out Uri? endpoint) || ((endpoint.Scheme != Uri.UriSchemeHttp) && (endpoint.Scheme != Uri.UriSchemeHttps)))
+                    throw new DnsClientException(Lang.T("Der HTTP-Export braucht eine absolute http- oder https-Adresse (http.endpoint).", "The HTTP export needs an absolute http or https address (http.endpoint)."));
+
+                _exportManager.AddStrategy(new HttpExportStrategy(_dnsServer, endpoint.AbsoluteUri, _config.HttpTarget.Headers));
             }
 
-            if (_config.SyslogTarget!.Enabled)
+            _exportManager.RemoveStrategy(typeof(SyslogExportStrategy));
+
+            if ((_config.SyslogTarget is not null) && _config.SyslogTarget.Enabled)
             {
-                _exportManager.RemoveStrategy(typeof(SyslogExportStrategy));
-                _exportManager.AddStrategy(new SyslogExportStrategy(_config.SyslogTarget.Address, _config.SyslogTarget.Port, _config.SyslogTarget.Protocol));
-            }
-            else
-            {
-                _exportManager.RemoveStrategy(typeof(SyslogExportStrategy));
+                bool local = string.Equals(_config.SyslogTarget.Protocol, "local", StringComparison.OrdinalIgnoreCase);
+
+                if (!local && string.IsNullOrWhiteSpace(_config.SyslogTarget.Address))
+                    throw new DnsClientException(Lang.T("Für den Syslog-Export fehlt die Adresse (syslog.address).", "The syslog export has no address (syslog.address)."));
+
+                if ((_config.SyslogTarget.Port is not null) && ((_config.SyslogTarget.Port < 1) || (_config.SyslogTarget.Port > 65535)))
+                    throw new DnsClientException(Lang.T("Der Syslog-Port muss zwischen 1 und 65535 liegen.", "The syslog port must be between 1 and 65535."));
+
+                _exportManager.AddStrategy(new SyslogExportStrategy(_config.SyslogTarget.Address ?? "", _config.SyslogTarget.Port, _config.SyslogTarget.Protocol));
             }
 
             _enableLogging = _exportManager.HasStrategy();

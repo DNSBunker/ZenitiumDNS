@@ -427,6 +427,66 @@ namespace ZenitiumLibrary.Net
             return name.ToString();
         }
 
+        public static bool TryParseStrict(string value, out IPAddress address)
+        {
+            address = null;
+
+            if (string.IsNullOrEmpty(value))
+                return false;
+
+            if (value.Contains(':'))
+                return IPAddress.TryParse(value, out address) && (address.AddressFamily == AddressFamily.InterNetworkV6);
+
+            int parts = 0;
+            int partLength = 0;
+            bool leadingZero = false;
+
+            foreach (char c in value)
+            {
+                if (c == '.')
+                {
+                    if ((partLength == 0) || (leadingZero && (partLength > 1)))
+                        return false;
+
+                    parts++;
+                    partLength = 0;
+                    leadingZero = false;
+                    continue;
+                }
+
+                if ((c < '0') || (c > '9'))
+                    return false;
+
+                if (partLength == 0)
+                    leadingZero = c == '0';
+
+                partLength++;
+
+                if (partLength > 3)
+                    return false;
+            }
+
+            if ((parts != 3) || (partLength == 0) || (leadingZero && (partLength > 1)))
+                return false;
+
+            return IPAddress.TryParse(value, out address) && (address.AddressFamily == AddressFamily.InterNetwork);
+        }
+
+        public static bool TryParseStrictNetwork(string value, out NetworkAddress network)
+        {
+            network = null;
+
+            if (string.IsNullOrEmpty(value))
+                return false;
+
+            int i = value.IndexOf('/');
+
+            if (!TryParseStrict(i < 0 ? value : value.Substring(0, i), out _))
+                return false;
+
+            return NetworkAddress.TryParse(value, out network);
+        }
+
         public static IPAddress ParseReverseDomain(string ptrDomain)
         {
             if (TryParseReverseDomain(ptrDomain, out IPAddress address))

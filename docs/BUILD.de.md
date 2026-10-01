@@ -28,12 +28,19 @@ Hinweis: Wer DNS-over-QUIC und HTTP/3 nicht nutzen möchte, kann `libmsquic` weg
 dotnet publish src/ZenitiumDns/ZenitiumDns.csproj -c Release -o publish
 ```
 
+Bei Bedarf die Weboberfläche und die DoH-Infoseite verkleinern. Der Minifier entfernt Kommentare und Leerraum aus HTML-, CSS-, JavaScript- und JSON-Dateien und löscht Source Maps; Debian-Paket und Container-Image erledigen das automatisch.
+```
+dotnet run --project tools/WebMinifier/WebMinifier.csproj -c Release -- publish/www publish/dohwww
+```
+
 5. Bei Bedarf die mitgelieferten DNS-Apps bauen. Jede App landet in ihrem eigenen Ordner `apps/<AppName>/bin/Release`, der als ZIP-Datei gepackt und im Bereich Apps der Weboberfläche installiert werden kann.
 ```
 dotnet build apps/AdvancedBlockingApp/AdvancedBlockingApp.csproj -c Release
 ```
 
-6. Den DNS-Server als Dienst installieren. Der Installer kopiert die Dateien nach `/opt/zenitiumdns` und legt den Systembenutzer `zenitiumdns` an. Als Konfigurationsordner dient `/etc/zenitiumdns`, als Log-Ordner `/var/log/zenitiumdns`. Eingerichtet wird ein systemd- oder OpenRC-Dienst namens `zenitiumdns`.
+6. Den DNS-Server als Dienst installieren. Der Installer kopiert die Dateien nach `/opt/zenitiumdns` und legt den Systembenutzer `zenitiumdns` an. Als Konfigurationsordner dient `/etc/zenitiumdns`, als Log-Ordner `/var/log/zenitiumdns`. Eingerichtet wird ein systemd- oder OpenRC-Dienst namens `zenitiumdns`. Fehlt die ASP.NET Core Runtime 10, lädt der Installer sie nach `/opt/dotnet`.
+
+Bei der Erstinstallation stellt der Installer außerdem das System auf ZenitiumDNS um: Mit systemd stoppt und deaktiviert er `systemd-resolved` und setzt `dns=none` in `/etc/NetworkManager/NetworkManager.conf`; in beiden Fällen sichert er `/etc/resolv.conf` als `/opt/zenitiumdns/resolv.conf.bak` und ersetzt sie durch `nameserver 127.0.0.1`. Der Deinstaller stellt die gesicherte Datei wieder her. Das Debian-Paket weiter unten ändert `/etc/resolv.conf` nicht.
 
 ```
 sudo sh publish/install.sh
@@ -41,7 +48,7 @@ sudo sh publish/install.sh
 
 Zum Deinstallieren `sudo sh /opt/zenitiumdns/uninstall.sh` ausführen.
 
-7. Die Weboberfläche im Browser unter `http://<IP-Adresse-des-Servers>:5380/` öffnen, die Sprache der Oberfläche wählen und ein Passwort festlegen, um die Installation abzuschließen.
+7. Die Weboberfläche im Browser unter `http://<IP-Adresse-des-Servers>:5380/` öffnen, die Sprache der Oberfläche wählen und ein neues Passwort für den Benutzer `admin` festlegen, um die Installation abzuschließen.
 
 ## Debian-Paket
 
