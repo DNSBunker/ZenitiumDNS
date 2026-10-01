@@ -2,7 +2,7 @@
 
 [Deutsche Version](BlockLists.de.md)
 
-ZenitiumDNS reads block and allow lists in several formats and can apply different lists to different devices. Lists are entered under Settings > Blocking (one URL per line) and are downloaded and updated automatically. Local files work with `file:///path/to/list.txt`; with the Debian package they have to be readable by the service (see README.Debian).
+ZenitiumDNS reads block and allow lists in several formats and can apply different lists to different devices. Lists are entered under Filter > Block lists (one URL per line) and are downloaded and updated automatically. Local files work with `file:///path/to/list.txt`; with the Debian package they have to be readable by the service (see README.Debian).
 
 ## List formats
 
@@ -58,16 +58,18 @@ Client profiles (Filter > Clients) decide which lists apply to which devices, si
 
 A profile contains:
 
-- **Identifiers**, one per line: an IP address (`192.168.1.20`), a network (`192.168.2.0/24`) or a ClientID (`kids`, lower-case letters, digits and hyphens, at most 63 characters). An identifier can only belong to one profile.
+- **Identifiers**, one per line: an IP address (`192.168.1.20`), a MAC address (`aa:bb:cc:dd:ee:ff`), a network (`192.168.2.0/24`) or a ClientID (`kids`, lower-case letters, digits and hyphens, at most 63 characters). An identifier can only belong to one profile. **Add known device** offers the devices the server knows (see below).
 - **Blocking active**: switched off, all queries of these devices are answered unfiltered, including manually blocked domains.
 - **Use default block lists**: switched off, only the profile's own lists apply; manually blocked and allowed domains stay in effect.
 - **Own lists**: additional block or allow lists (`!` in front of the URL), in the same formats as above.
 
-Every list is downloaded and loaded only once, even if several profiles use it; each query is evaluated against the lists of its profile. The list status under Settings > Blocking shows which profiles use a list and marks lists that are only used by profiles.
+Every list is downloaded and loaded only once, even if several profiles use it; each query is evaluated against the lists of its profile. The list status under Filter > Block lists shows which profiles use a list and marks lists that are only used by profiles.
 
 ### Recognizing devices
 
-The profile is chosen in this order: ClientID, exact IP address, smallest network.
+The profile is chosen in this order: ClientID, MAC address, exact IP address, smallest network.
+
+A MAC address covers a device in the same network over IPv4 and IPv6, also with changing or temporary IPv6 addresses. The server learns the MAC address of a client address from its own DHCP leases (IPv4 and DHCPv6) and from the neighbor table of the system (ARP and NDP), so this also works when another DHCP server, for example the router, hands out the addresses. Devices behind a router in another network are only seen with the router's address; for them use IP addresses, networks or ClientIDs. The first query of a device that is not yet in the neighbor table can still be answered with the default lists.
 
 The ClientID is taken from encrypted DNS:
 
@@ -86,5 +88,7 @@ For DoT and DoQ the TLS certificate must also be valid for `*.dns.example.com`; 
 | `api/settings/clients/list` | none; returns the profiles, the default lists, the server name and ports needed for ClientIDs and whether the certificate covers ClientID server names (`hasTlsCertificate`, `tlsHostName`, `tlsWildcardDomains`) |
 | `api/settings/clients/set` | `name`, `identifiers` (line or comma separated), `blockingEnabled`, `useDefaultLists`, `blockListUrls` (line or comma separated), `originalName` to change an existing profile |
 | `api/settings/clients/delete` | `name` |
+| `api/settings/clients/assign` | `identifier` (IP address, MAC address, network or ClientID), `profile` (empty removes the identifier from every profile); moves a single identifier, used by the profile selection in the DHCP reservations and leases |
+| `api/dhcp/devices` | none; the devices known from DHCP leases, reservations and the neighbor table with MAC address, name, addresses, client ID, DUIDs and the profile that applies (permission to view DHCP or settings) |
 
 Reading requires the permission to view settings, changing requires the permission to modify them. Profiles are stored in `clients.json` in the configuration directory and are part of the backup together with the block lists.

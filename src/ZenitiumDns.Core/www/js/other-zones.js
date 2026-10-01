@@ -145,7 +145,7 @@ function refreshCachedZonesList(domain, direction) {
             }
 
             if (responseJSON.response.records.length > 0) {
-                preCachedZoneViewerBody.text(JSON.stringify(responseJSON.response.records, null, 2));
+                renderDnsRecordsView(preCachedZoneViewerBody, responseJSON.response.records);
                 preCachedZoneViewerBody.show();
             }
 
@@ -303,7 +303,7 @@ function refreshAllowedZonesList(domain, direction, fromPrimary) {
             }
 
             if (responseJSON.response.records.length > 0) {
-                preAllowedZoneViewerBody.text(JSON.stringify(responseJSON.response.records, null, 2));
+                renderDnsRecordsView(preAllowedZoneViewerBody, responseJSON.response.records);
                 preAllowedZoneViewerBody.show();
 
                 $("#btnDeleteAllowedZone").show();
@@ -466,7 +466,7 @@ function refreshBlockedZonesList(domain, direction, fromPrimary) {
             }
 
             if (responseJSON.response.records.length > 0) {
-                preBlockedZoneViewerBody.text(JSON.stringify(responseJSON.response.records, null, 2));
+                renderDnsRecordsView(preBlockedZoneViewerBody, responseJSON.response.records);
                 preBlockedZoneViewerBody.show();
 
                 $("#btnDeleteBlockedZone").show();

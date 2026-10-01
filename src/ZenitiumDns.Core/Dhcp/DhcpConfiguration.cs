@@ -105,6 +105,19 @@ namespace ZenitiumDns.Core.Dhcp
             return (HardwareType >= 0 ? HardwareType + "-" : "") + string.Join(':', parts);
         }
 
+        public byte[] GetFixedAddress()
+        {
+            if (HasWildcard || (Bytes.Length != 6) || ((HardwareType >= 0) && (HardwareType != 1)))
+                return null;
+
+            byte[] result = new byte[6];
+
+            for (int i = 0; i < 6; i++)
+                result[i] = (byte)Bytes[i];
+
+            return result;
+        }
+
         public static bool TryParse(string text, out DhcpHardwarePattern pattern)
         {
             pattern = null;
@@ -205,6 +218,10 @@ namespace ZenitiumDns.Core.Dhcp
         public uint LeaseTime { get; set; }
 
         public bool Ignore { get; set; }
+
+        public IPAddress Address6 { get; set; }
+
+        public bool Address6IsSuffix { get; set; }
     }
 
     public sealed class DhcpOptionRule
@@ -222,6 +239,109 @@ namespace ZenitiumDns.Core.Dhcp
         public bool IsViEncapsulated { get; set; }
 
         public byte Code { get; set; }
+
+        public byte[] Value { get; set; }
+
+        public bool Force { get; set; }
+
+        public bool Suppress { get; set; }
+
+        public bool UsesServerAddress { get; set; }
+
+        public bool Weak { get; set; }
+    }
+
+    public sealed class Dhcp6RangeRule
+    {
+        public int Line { get; set; }
+
+        public List<DhcpTagCondition> Conditions { get; } = new List<DhcpTagCondition>();
+
+        public string SetTag { get; set; }
+
+        public UInt128 Start { get; set; }
+
+        public UInt128 End { get; set; }
+
+        public string Constructor { get; set; }
+
+        public int PrefixLength { get; set; } = 64;
+
+        public uint LeaseTime { get; set; }
+
+        public bool RaOnly { get; set; }
+
+        public bool Slaac { get; set; }
+
+        public bool RaStateless { get; set; }
+
+        public bool RaNames { get; set; }
+
+        public bool OffLink { get; set; }
+
+        public bool StaticOnly { get; set; }
+
+        public bool AssignsAddresses
+        { get { return !RaOnly && !RaStateless && !StaticOnly && (End >= Start); } }
+
+        public bool OffersDhcp
+        { get { return !RaOnly; } }
+
+        public bool AutonomousFlag
+        { get { return RaOnly || RaStateless || Slaac || RaNames; } }
+
+        public bool EnablesRa
+        { get { return RaOnly || RaStateless || Slaac || RaNames; } }
+
+        public UInt128 HostMask
+        { get { return PrefixLength >= 128 ? UInt128.Zero : (UInt128.MaxValue >> PrefixLength); } }
+
+        public bool MatchesConstructor(string interfaceName)
+        {
+            if (Constructor is null)
+                return false;
+
+            if (Constructor.EndsWith('*'))
+                return interfaceName.StartsWith(Constructor.Substring(0, Constructor.Length - 1), StringComparison.Ordinal);
+
+            return string.Equals(Constructor, interfaceName, StringComparison.Ordinal);
+        }
+    }
+
+    public sealed class DhcpRaParam
+    {
+        public int Line { get; set; }
+
+        public string Interface { get; set; }
+
+        public int Mtu { get; set; }
+
+        public string MtuInterface { get; set; }
+
+        public bool MtuOff { get; set; }
+
+        public byte RouterPreference { get; set; }
+
+        public int Interval { get; set; }
+
+        public int RouterLifetime { get; set; } = -1;
+
+        public bool Matches(string interfaceName)
+        {
+            if (Interface.EndsWith('*'))
+                return interfaceName.StartsWith(Interface.Substring(0, Interface.Length - 1), StringComparison.Ordinal);
+
+            return string.Equals(Interface, interfaceName, StringComparison.Ordinal);
+        }
+    }
+
+    public sealed class Dhcp6OptionRule
+    {
+        public int Line { get; set; }
+
+        public List<DhcpTagCondition> Conditions { get; } = new List<DhcpTagCondition>();
+
+        public ushort Code { get; set; }
 
         public byte[] Value { get; set; }
 
@@ -366,6 +486,14 @@ namespace ZenitiumDns.Core.Dhcp
 
         public List<(int Line, List<DhcpTagCondition> Conditions, int Seconds)> ReplyDelays { get; } = new List<(int, List<DhcpTagCondition>, int)>();
 
+        public List<Dhcp6RangeRule> Ranges6 { get; } = new List<Dhcp6RangeRule>();
+
+        public List<Dhcp6OptionRule> Options6 { get; } = new List<Dhcp6OptionRule>();
+
+        public List<DhcpRaParam> RaParams { get; } = new List<DhcpRaParam>();
+
+        public bool EnableRa { get; set; }
+
         public List<DhcpConfigError> Errors { get; } = new List<DhcpConfigError>();
 
         public bool Authoritative { get; set; }
@@ -383,6 +511,19 @@ namespace ZenitiumDns.Core.Dhcp
         public bool NoPing { get; set; }
 
         public int LeaseMax { get; set; } = 1000;
+
+        public DhcpRaParam GetRaParam(string interfaceName)
+        {
+            DhcpRaParam match = null;
+
+            foreach (DhcpRaParam param in RaParams)
+            {
+                if (param.Matches(interfaceName))
+                    match = param;
+            }
+
+            return match;
+        }
 
         public bool IsInterfaceAllowed(string name)
         {

@@ -55,8 +55,10 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
     <script src="js/logs.js"></script>
     <script src="js/selftest.js"></script>
     <script src="js/preferences.js"></script>
+    <script src="js/themes.js"></script>
     <script src="js/clients.js"></script>
     <script src="js/dhcp.js"></script>
+    <script src="js/dhcp-expert.js"></script>
 </head>
 <body>
     <div class="AlertPlaceholder toast-region" role="status" aria-live="polite"></div>
@@ -654,7 +656,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
                                                     </div>
 
                                                     <div class="panel-body">
-                                                        <pre id="preCachedZoneViewerBody"></pre>
+                                                        <div id="preCachedZoneViewerBody" class="dns-records-view"></div>
                                                     </div>
                                                 </div>
                                             </div>
@@ -664,14 +666,66 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
                                 <div id="mainPanelTabPaneFilter" role="tabpanel" class="tab-pane" style="padding: 10px 0 0 0;">
                                     <ul class="nav nav-pills sub-nav" role="tablist">
-                                        <li id="filterTabListBlocked" role="presentation" class="active"><a href="#filterTabPaneBlocked" aria-controls="filterTabPaneBlocked" role="tab" data-toggle="tab">Blockierte Domains</a></li>
+                                        <li id="filterTabListBlockLists" role="presentation" class="active"><a href="#filterTabPaneBlockLists" aria-controls="filterTabPaneBlockLists" role="tab" data-toggle="tab">Blocklisten</a></li>
+                                        <li id="filterTabListBlocked" role="presentation"><a href="#filterTabPaneBlocked" aria-controls="filterTabPaneBlocked" role="tab" data-toggle="tab">Blockierte Domains</a></li>
                                         <li id="filterTabListAllowed" role="presentation"><a href="#filterTabPaneAllowed" aria-controls="filterTabPaneAllowed" role="tab" data-toggle="tab">Erlaubte Domains</a></li>
                                         <li id="filterTabListClients" role="presentation"><a href="#filterTabPaneClients" aria-controls="filterTabPaneClients" role="tab" data-toggle="tab">Clients</a></li>
-                                        <li id="filterTabListLists" role="presentation"><a href="#" onclick="showSettingsSection('settingsTabListBlocking'); return false;">Blocklisten &amp; Blockierverhalten <span class="glyphicon glyphicon-share-alt" aria-hidden="true"></span></a></li>
+                                        <li id="filterTabListBlocking" role="presentation"><a href="#filterTabPaneBlocking" aria-controls="filterTabPaneBlocking" role="tab" data-toggle="tab">Blockierverhalten</a></li>
                                     </ul>
 
                                     <div class="tab-content" style="padding-top: 12px;">
-                                        <div id="filterTabPaneBlocked" role="tabpanel" class="tab-pane active">
+                                        <div id="filterTabPaneBlockLists" role="tabpanel" class="tab-pane active">
+                                            <div class="section-intro">Blocklisten sind die Grundlage der Filterung. Sie werden regelmäßig heruntergeladen; der Status zeigt für jede Liste, wann sie zuletzt geprüft wurde und wie viele Einträge sie hat. Einzelne Domains lassen sich unter „Blockierte Domains“ und „Erlaubte Domains“ von Hand ergänzen.</div>
+                                            <div id="filterTabLockNoteBlockLists" class="settings-note settings-lock-note filter-lock-note" style="display: none;"><span class="fa fa-lock" aria-hidden="true"></span> Die Einstellungen sind schreibgeschützt. <button type="button" class="btn btn-default btn-xs" onclick="toggleSettingsLock();"><span class="fa fa-unlock" aria-hidden="true"></span> Entsperren</button></div>
+                                            <div class="filter-settings-loader" style="display: none;"></div>
+                                            <div class="filter-settings-body">
+                                            <fieldset class="settings-fieldset">
+<div class="well well-sm form-horizontal settings-section">
+                                    <h4 class="settings-section-title">Blocklisten</h4>
+                                    <p class="settings-section-desc">Listen werden heruntergeladen, zusammengeführt und im Arbeitsspeicher gehalten. Etwa 1 Million Domains benötigen rund 80 MB RAM; während einer Aktualisierung vorübergehend das Doppelte.</p>
+                                <div class="form-group">
+                                    <label for="txtBlockListUrls" class="col-sm-3 control-label">Listen-URLs</label>
+                                    <div class="col-sm-6">
+                                        <textarea id="txtBlockListUrls" class="form-control" rows="7" spellcheck="false"></textarea>
+                                        <label for="optQuickBlockList" class="control-label" style="padding-top: 8px;">Schnell hinzufügen</label>
+                                        <select id="optQuickBlockList" class="form-control" style="width: 100%;"></select>
+                                    </div>
+                                    <div class="col-sm-offset-3 col-sm-8 help-block-text">Eine URL pro Zeile. Verstanden werden hosts-Dateien, reine Domainlisten und <code>*.domain</code> (jeweils samt Subdomains) sowie die Regelsyntax von AdGuard Home und Adblock: <code>||domain^</code>, Ausnahmen mit <code>@@</code>, <code>|domain^</code> für genau diese Domain, <code>||*.domain^</code> nur für Subdomains, Platzhalter <code>*</code>, reguläre Ausdrücke <code>/…/</code> und die Modifikatoren <code>$important</code>, <code>$badfilter</code>, <code>$dnstype</code> und <code>$denyallow</code>. Listen im Pi-hole-Regex-Format (ein Ausdruck pro Zeile, optional <code>;querytype=</code>) funktionieren ebenfalls. IP-Adressen und Netze wie <code>192.0.2.1</code> oder <code>198.51.100.0/24</code> blockieren Antworten, deren A- oder AAAA-Einträge darauf zeigen. Lokale Dateien lassen sich per <code>file:///pfad/zur/liste.txt</code> einbinden. Ein vorangestelltes <code>!</code> macht die Liste zur Erlaubnisliste, <code>#</code> schaltet eine Zeile ab. Die Schnellauswahl bietet die Listen von HaGeZi im Adblock-Format vom Build-Mirror <code>hagezi-mirror.dnsbunker.org</code>, der jede neue Version sofort veröffentlicht, etwa alle 4 bis 8 Stunden. Aus der Gruppe „Multi“ genügt eine Stufe, die Threat Intelligence Feeds ergänzen sie.</div>
+                                </div>
+
+                                <div class="form-group">
+                                    <label for="txtBlockListUpdateIntervalHours" class="col-sm-3 control-label">Aktualisierungsintervall</label>
+                                    <div class="col-sm-8">
+                                        <input type="number" class="form-control" id="txtBlockListUpdateIntervalHours" placeholder="Stunden" style="width: 100px; display: inline;"> <span class="unit">Stunden (0–168, Standard 8, 0 = keine automatische Aktualisierung)</span>
+                                    </div>
+
+                                </div>
+
+                                <div class="form-group">
+                                    <label class="col-sm-3 control-label">Nächste Aktualisierung</label>
+                                    <div class="col-sm-8 form-control-static">
+                                        <span id="lblBlockListNextUpdatedOn" style="margin-right: 15px;"></span>
+                                        <button id="btnUpdateBlockListsNow" type="button" class="btn btn-default btn-sm" data-loading-text="Aktualisiere..." onclick="forceUpdateBlockLists();">Jetzt aktualisieren</button>
+                                    </div>
+
+                                </div>
+
+                                <div class="form-group">
+                                    <label class="col-sm-3 control-label">Status der Listen</label>
+                                    <div class="col-sm-9">
+                                        <div id="divBlockListStatus" class="blocklist-status"></div>
+                                        <div class="option-help" style="padding-left: 0;">Änderungen in dieser Tabelle (aktiv, Name, Entfernen) werden sofort gespeichert. „Geprüft“ ist der letzte Abruf, „Geändert“ der letzte Abruf mit neuem Inhalt. Änderungen an den Listen-URLs oben erscheinen hier nach dem Speichern.</div>
+                                    </div>
+                                </div>
+                                </div>
+                                            </fieldset>
+                                            <div class="settings-actions">
+                                                <button id="btnSaveBlockLists" type="button" class="btn btn-primary filter-settings-save" data-loading-text="Speichere..." onclick="saveDnsSettings(this);"><span class="glyphicon glyphicon-floppy-disk" aria-hidden="true"></span> Speichern</button>
+                                            </div>
+                                            </div>
+                                        </div>
+
+                                        <div id="filterTabPaneBlocked" role="tabpanel" class="tab-pane">
                                             <div class="section-intro">
                                                 Manuell blockierte Domains gelten inklusive aller Subdomains und haben Vorrang vor den Blocklisten. Erlaubte Domains haben wiederum Vorrang vor blockierten.
                                             </div>
@@ -704,7 +758,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
                                                     </div>
 
                                                     <div class="panel-body">
-                                                        <pre id="preBlockedZoneViewerBody"></pre>
+                                                        <div id="preBlockedZoneViewerBody" class="dns-records-view"></div>
                                                     </div>
                                                 </div>
                                             </div>
@@ -743,7 +797,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
                                                     </div>
 
                                                     <div class="panel-body">
-                                                        <pre id="preAllowedZoneViewerBody"></pre>
+                                                        <div id="preAllowedZoneViewerBody" class="dns-records-view"></div>
                                                     </div>
                                                 </div>
                                             </div>
@@ -762,6 +816,124 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
                                             <div id="divClientProfilesLoader" style="display: none; height: 120px;"></div>
                                             <div id="divClientProfiles"></div>
                                         </div>
+
+                                        <div id="filterTabPaneBlocking" role="tabpanel" class="tab-pane">
+                                            <div class="section-intro">Legt fest, wie der Server auf blockierte Domains antwortet, wer von der Blockierung ausgenommen ist und wie Browser-Signale beantwortet werden.</div>
+                                            <div id="filterTabLockNoteBlocking" class="settings-note settings-lock-note filter-lock-note" style="display: none;"><span class="fa fa-lock" aria-hidden="true"></span> Die Einstellungen sind schreibgeschützt. <button type="button" class="btn btn-default btn-xs" onclick="toggleSettingsLock();"><span class="fa fa-unlock" aria-hidden="true"></span> Entsperren</button></div>
+                                            <div class="filter-settings-loader" style="display: none;"></div>
+                                            <div class="filter-settings-body">
+                                            <fieldset class="settings-fieldset">
+<div class="well well-sm form-horizontal settings-section">
+                                    <h4 class="settings-section-title">Blockierung</h4>
+                                <div class="form-group">
+                                    <label class="col-sm-3 control-label">Status</label>
+                                    <div class="col-sm-8">
+                                        <div class="checkbox">
+                                            <label><input id="chkEnableBlocking" type="checkbox"> Blockierung aktivieren</label>
+                                        </div>
+                                        <div class="option-help">Domains aus den blockierten Domains und den Blocklisten werden nicht aufgelöst.</div>
+                                        <div class="checkbox">
+                                            <label><input id="chkAllowTxtBlockingReport" type="checkbox"> Blockierungsbericht ausgeben</label>
+                                        </div>
+                                        <div class="option-help">Beantwortet TXT-Anfragen zu blockierten Domains mit einem Bericht über den Grund. Zusätzlich enthält jede Blockierantwort einen Extended DNS Error (RFC 8914), sofern der Client EDNS unterstützt.</div>
+                                    </div>
+                                </div>
+
+                                <div class="form-group">
+                                    <label for="txtBlockingReportText" class="col-sm-3 control-label">Blockierungstext</label>
+                                    <div class="col-sm-6">
+                                        <input type="text" class="form-control" id="txtBlockingReportText" maxlength="255" placeholder="source={source}; domain={domain}">
+                                    </div>
+                                    <div class="col-sm-offset-3 col-sm-8 help-block-text">Eigener Text für den Extended DNS Error und den TXT-Bericht, zum Beispiel <code>Blockiert von Beispiel-DNS: {domain}</code>. Platzhalter: <code>{domain}</code> für die blockierte Domain, <code>{list}</code> für die Blocklisten-URL, <code>{source}</code> für die Quelle. Leer lassen für den Standardtext.</div>
+                                </div>
+
+                                <div class="form-group">
+                                    <label class="col-sm-3 control-label">Vorübergehend pausiert bis</label>
+                                    <div class="col-sm-8">
+                                        <div id="lblTemporaryDisableBlockingTill" style="padding-top: 7px;"></div>
+                                        <div style="padding-top: 8px;"><input type="number" class="form-control" id="txtTemporaryDisableBlockingMinutes" placeholder="Minuten" style="width: 100px; display: inline;"> <span class="unit">Minuten</span> <button id="btnTemporaryDisableBlockingNow" type="button" class="btn btn-default btn-sm" data-loading-text="Pausiere..." onclick="temporaryDisableBlockingNow();">Jetzt pausieren</button></div>
+                                    </div>
+
+                                </div>
+
+                                <div class="form-group">
+                                    <label for="txtBlockingBypassList" class="col-sm-3 control-label">Ausnahmen (Clients)</label>
+                                    <div class="col-sm-6">
+                                        <textarea id="txtBlockingBypassList" class="form-control" rows="3" spellcheck="false"></textarea>
+                                    </div>
+                                    <div class="col-sm-offset-3 col-sm-8 help-block-text">IP-Adressen oder Netze, eine pro Zeile, für die nie blockiert wird.</div>
+                                </div>
+
+                                <div class="form-group">
+                                    <label class="col-sm-3 control-label">Antwort auf blockierte Domains</label>
+                                    <div class="col-sm-8">
+                                        <div class="radio">
+                                            <label><input type="radio" name="rdBlockingType" id="rdBlockingTypeAnyAddress" value="AnyAddress"> Nulladresse</label>
+                                            <div class="option-help">Antwortet mit <code>0.0.0.0</code> bzw. <code>::</code>.</div>
+                                        </div>
+                                        <div class="radio">
+                                            <label><input type="radio" name="rdBlockingType" id="rdBlockingTypeNxDomain" value="NxDomain"> NXDOMAIN (empfohlen)</label>
+                                            <div class="option-help">Antwortet, als existiere die Domain nicht.</div>
+                                        </div>
+                                        <div class="radio">
+                                            <label><input type="radio" name="rdBlockingType" id="rdBlockingTypeCustomAddress" value="CustomAddress"> Eigene Adressen</label>
+                                            <div class="option-help">Antwortet mit den folgenden IP-Adressen, etwa um auf eine Hinweisseite umzuleiten.</div>
+                                        </div>
+                                        <div style="padding-top: 8px;">
+                                            <label for="txtCustomBlockingAddresses" class="control-label">Eigene Adressen</label>
+                                            <textarea id="txtCustomBlockingAddresses" class="form-control" rows="3" spellcheck="false"></textarea>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="form-group">
+                                    <label for="txtBlockingAnswerTtl" class="col-sm-3 control-label">TTL der Blockierantwort</label>
+                                    <div class="col-sm-8">
+                                        <input type="text" class="form-control" id="txtBlockingAnswerTtl" placeholder="TTL" style="width: 100px; display: inline;"> <span class="unit">Sekunden (Standard 300)</span>
+                                    </div>
+                                    <div class="col-sm-offset-3 col-sm-8 help-block-text">Wie lange Clients Blockierantworten mit Adressen (Nulladresse, eigene Adressen) und den TXT-Bericht zwischenspeichern.</div>
+                                </div>
+
+                                <div class="form-group">
+                                    <label for="txtBlockingNegativeTtl" class="col-sm-3 control-label">SOA für negatives Caching</label>
+                                    <div class="col-sm-8">
+                                        <input type="text" class="form-control" id="txtBlockingNegativeTtl" placeholder="TTL" style="width: 100px; display: inline;"> <span class="unit">Sekunden (Standard 300)</span>
+                                    </div>
+                                    <div class="col-sm-offset-3 col-sm-8 help-block-text">NXDOMAIN- und NODATA-Blockierantworten enthalten einen SOA-Eintrag. Dieser Wert ist dessen TTL und MINIMUM und legt fest, wie lange Clients und nachgelagerte Resolver die Antwort nach RFC 2308 negativ zwischenspeichern. Primärserver und Kontakt im SOA kommen aus dem Serverdomainnamen und der Kontaktadresse unter Server.</div>
+                                </div>
+                                </div>
+
+<div class="well well-sm form-horizontal settings-section">
+                                    <h4 class="settings-section-title">Browser-Signale</h4>
+                                    <p class="settings-section-desc">Browser fragen bestimmte Domains ab, um zu erkennen, ob sie den Resolver des Netzes umgehen dürfen. Beantwortet dieser Resolver sie mit NXDOMAIN, bleiben die Browser bei ihm. Beide Optionen wirken unabhängig davon, ob Blockieren eingeschaltet ist, und erscheinen in der Statistik als blockiert.</p>
+                                <div class="form-group">
+                                    <label class="col-sm-3 control-label">Signale</label>
+                                    <div class="col-sm-8">
+                                        <div class="checkbox">
+                                            <label><input id="chkBlockFirefoxCanaryDomain" type="checkbox"> Firefox: automatisches DoH abschalten</label>
+                                        </div>
+                                        <div class="option-help">Beantwortet die Canary-Domain <code>use-application-dns.net</code> mit NXDOMAIN. Firefox schaltet dann nicht mehr von selbst auf DNS-over-HTTPS eines Partneranbieters um und nutzt weiter diesen Resolver samt Blocklisten. Hat jemand DoH in Firefox selbst eingeschaltet, bleibt es aktiv.</div>
+                                        <div class="checkbox">
+                                            <label><input id="chkForceChromePreflight" type="checkbox"> Chrome: Preflight-Modus für vorab geladene Seiten erzwingen</label>
+                                        </div>
+                                        <div class="option-help">Beantwortet <code>dns-tunnel-check.googlezip.net</code> mit NXDOMAIN. Chrome lädt Seiten sonst über Googles Private Prefetch Proxy vor, ohne diesen Resolver zu fragen. Im Preflight-Modus fragt Chrome vor dem Öffnen einer vorab geladenen Seite zusätzlich hier nach, sodass Blocklisten auch dafür greifen.</div>
+                                    </div>
+                                </div>
+
+                                <div class="form-group">
+                                    <label class="col-sm-3 control-label">Nie blockiert</label>
+                                    <div class="col-sm-8">
+                                        <p id="lblAutoAllowedNames" class="form-control-static"></p>
+                                    </div>
+                                    <div class="col-sm-offset-3 col-sm-8 help-block-text">Der Serverdomainname und alle Namen im TLS-Zertifikat stehen automatisch auf der Allowlist, samt Subdomains. Sonst könnten Listen wie HaGeZis DoH-Bypass den eigenen DoH- oder DoT-Hostnamen sperren. Ein Name ohne Punkt, etwa ein reiner Rechnername, wird dabei nicht berücksichtigt.</div>
+                                </div>
+                                </div>
+                                            </fieldset>
+                                            <div class="settings-actions">
+                                                <button id="btnSaveBlockingBehavior" type="button" class="btn btn-primary filter-settings-save" data-loading-text="Speichere..." onclick="saveDnsSettings(this);"><span class="glyphicon glyphicon-floppy-disk" aria-hidden="true"></span> Speichern</button>
+                                            </div>
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
 
@@ -776,7 +948,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
                                     <div class="tab-content" style="padding-top: 12px;">
                                         <div id="dhcpTabPaneStatus" role="tabpanel" class="tab-pane active">
                                             <div class="section-intro">
-                                                <div style="max-width: 110ch;">Der DHCP-Server vergibt IPv4-Adressen und trägt die Namen der Geräte in das lokale DNS ein. Er erkennt andere DHCP-Server im Netz und kann ihnen den Vortritt lassen.</div>
+                                                <div style="max-width: 110ch;">Der DHCP-Server vergibt IPv4- und IPv6-Adressen, kündigt per Router Advertisement Präfix und DNS-Server an und trägt die Namen der Geräte in das lokale DNS ein. Er erkennt andere DHCP-Server und IPv6-Router im Netz und kann ihnen den Vortritt lassen.</div>
                                             </div>
 
                                             <div style="margin-bottom: 10px;">
@@ -810,7 +982,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
                                                             <label><input id="chkDhcpEnabled" type="checkbox"> DHCP-Server einschalten</label>
                                                         </div>
                                                     </div>
-                                                    <div class="col-sm-offset-3 col-sm-8 help-block-text">Der Server lauscht auf UDP-Port 67 aller Schnittstellen mit IPv4-Adresse und antwortet nur in Netzen, für die ein Adressbereich eingerichtet ist. Läuft auf diesem Rechner schon ein anderer DHCP-Server, zeigt der Status einen Fehler beim Öffnen des Ports.</div>
+                                                    <div class="col-sm-offset-3 col-sm-8 help-block-text">Der Server lauscht auf UDP-Port 67 (IPv4) und 547 (DHCPv6) und antwortet nur in Netzen, für die ein Adressbereich eingerichtet ist. Läuft auf diesem Rechner schon ein anderer DHCP-Server, zeigt der Status einen Fehler beim Öffnen des Ports.</div>
                                                 </div>
                                             </div>
 
@@ -831,7 +1003,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
                                                     <div class="col-sm-8">
                                                         <select id="optDhcpInterface" class="form-control" style="width: 320px;"></select>
                                                     </div>
-                                                    <div class="col-sm-offset-3 col-sm-8 help-block-text">Automatisch bedeutet: jede Schnittstelle, deren Netz zum Adressbereich passt. Im Cluster müssen fest eingetragene Schnittstellen auf allen Knoten gleich heißen.</div>
+                                                    <div class="col-sm-offset-3 col-sm-8 help-block-text">Automatisch bedeutet: jede Schnittstelle, deren Netz zum Adressbereich passt. Für IPv6 muss eine Schnittstelle gewählt sein, weil die Präfixe von ihr stammen.</div>
                                                 </div>
 
                                                 <div class="form-group dhcp-simple">
@@ -890,14 +1062,55 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
                                                 </div>
                                             </div>
 
+                                            <div id="divDhcpIpv6Section" class="well well-sm form-horizontal settings-section dhcp-simple">
+                                                <h4 class="settings-section-title">IPv6</h4>
+                                                <p class="settings-section-desc">Router Advertisements teilen den Geräten Präfix und DNS-Server mit, DHCPv6 vergibt auf Wunsch zusätzlich Adressen. Die Präfixe kommen aus den IPv6-Adressen der gewählten Schnittstelle und folgen automatisch, wenn der Anbieter sie wechselt.</p>
+                                                <div class="form-group">
+                                                    <label for="optDhcpIpv6Mode" class="col-sm-3 control-label">IPv6 im Netz</label>
+                                                    <div class="col-sm-8">
+                                                        <select id="optDhcpIpv6Mode" class="form-control" style="max-width: 420px;">
+                                                            <option value="off">Aus</option>
+                                                            <option value="slaac">SLAAC: Geräte bilden ihre Adressen selbst (empfohlen)</option>
+                                                            <option value="both">SLAAC und zusätzlich DHCPv6-Adressen</option>
+                                                            <option value="stateful">Nur DHCPv6-Adressen</option>
+                                                        </select>
+                                                    </div>
+                                                    <div id="lblDhcpIpv6ModeHelp" class="col-sm-offset-3 col-sm-8 help-block-text"></div>
+                                                </div>
+                                                <div class="form-group dhcp-ipv6-range">
+                                                    <label class="col-sm-3 control-label">DHCPv6-Bereich</label>
+                                                    <div class="col-sm-8">
+                                                        <input id="txtDhcpIpv6RangeStart" type="text" class="form-control" style="width: 150px; display: inline;" placeholder="::1000"> <span class="unit">bis</span>
+                                                        <input id="txtDhcpIpv6RangeEnd" type="text" class="form-control" style="width: 150px; display: inline;" placeholder="::1fff">
+                                                    </div>
+                                                    <div class="col-sm-offset-3 col-sm-8 help-block-text">Nur der hintere Teil der Adresse, der Präfix wird ergänzt. Hat die Schnittstelle mehrere Präfixe (etwa vom Anbieter und eine ULA), bekommt jedes Gerät aus jedem Präfix eine Adresse.</div>
+                                                </div>
+                                                <div class="form-group dhcp-ipv6-on">
+                                                    <label for="optDhcpIpv6Router" class="col-sm-3 control-label">Standard-Router</label>
+                                                    <div class="col-sm-8">
+                                                        <select id="optDhcpIpv6Router" class="form-control" style="max-width: 420px;">
+                                                            <option value="auto">Automatisch: nur wenn dieser Rechner IPv6 weiterleitet</option>
+                                                            <option value="no">Nein, nur Präfix und DNS-Server ankündigen</option>
+                                                            <option value="yes">Ja, als Standard-Router ankündigen</option>
+                                                        </select>
+                                                    </div>
+                                                    <div class="col-sm-offset-3 col-sm-8 help-block-text">Ist ein anderer Router für IPv6 zuständig, bleibt die Einstellung auf Automatisch oder Nein. Die Geräte behalten dann ihren Router und übernehmen von hier nur DNS-Server und Präfix.</div>
+                                                </div>
+                                                <div class="form-group dhcp-ipv6-on">
+                                                    <div class="col-sm-offset-3 col-sm-8">
+                                                        <div id="divDhcpIpv6Prefixes"></div>
+                                                    </div>
+                                                </div>
+                                            </div>
+
                                             <div class="well well-sm form-horizontal settings-section dhcp-simple">
                                                 <h4 class="settings-section-title">Reservierungen</h4>
-                                                <p class="settings-section-desc">Feste Adressen für einzelne Geräte, erkannt an der MAC-Adresse. Die Adresse darf außerhalb des Adressbereichs liegen, muss aber im selben Netz sein.</p>
+                                                <p class="settings-section-desc">Feste Adressen für einzelne Geräte, erkannt an der MAC-Adresse oder an <code>id:</code> mit Client-ID bzw. DUID. Die IPv4-Adresse darf außerhalb des Adressbereichs liegen, muss aber im selben Netz sein. Für IPv6 genügt der hintere Teil wie <code>::20</code>; er gilt in jedem Präfix. Das Profil legt fest, welche Filter für das Gerät gelten, über IPv4 und IPv6.</p>
                                                 <table class="table table-condensed dhcp-reservations">
-                                                    <thead><tr><th>MAC-Adresse</th><th>IP-Adresse</th><th>Hostname</th><th></th></tr></thead>
+                                                    <thead><tr><th>MAC-Adresse oder Client-ID</th><th>IPv4-Adresse</th><th>IPv6</th><th>Hostname</th><th class="dhcp-res-profile-col">Profil</th><th></th></tr></thead>
                                                     <tbody id="tbodyDhcpReservations"></tbody>
                                                 </table>
-                                                <button type="button" class="btn btn-default btn-sm" onclick="addDhcpReservationRow('', '', '');">Reservierung hinzufügen</button>
+                                                <button type="button" class="btn btn-default btn-sm" onclick="addDhcpReservationRow('', '', '', '');">Reservierung hinzufügen</button>
                                             </div>
 
                                             <div class="well well-sm form-horizontal settings-section">
@@ -956,7 +1169,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
                                                         </div>
                                                         <input id="txtDhcpDnsTtl" type="number" min="0" max="86400" class="form-control" style="width: 110px; display: inline;"> <span class="unit">Sekunden TTL</span>
                                                     </div>
-                                                    <div class="col-sm-offset-3 col-sm-8 help-block-text">Beantwortet A- und PTR-Anfragen für die Namen der Geräte, nur für Clients, die den Resolver nutzen dürfen.</div>
+                                                    <div class="col-sm-offset-3 col-sm-8 help-block-text">Beantwortet A-, AAAA- und PTR-Anfragen für die Namen der Geräte, nur für Clients, die den Resolver nutzen dürfen.</div>
                                                 </div>
                                             </div>
 
@@ -974,9 +1187,40 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
                                                 <pre id="preDhcpGenerated" class="dhcp-generated"></pre>
                                             </div>
 
-                                            <div class="form-group">
-                                                <label for="txtDhcpExpert">Eigene Konfiguration</label>
-                                                <textarea id="txtDhcpExpert" class="form-control dhcp-expert-editor" rows="18" spellcheck="false" autocomplete="off" placeholder="dhcp-range=set:gaeste,10.10.0.50,10.10.0.200,255.255.255.0,2h&#10;dhcp-option=tag:gaeste,option:router,10.10.0.1&#10;dhcp-host=aa:bb:cc:dd:ee:ff,192.168.1.20,drucker"></textarea>
+                                            <div class="dhcp-expert-toolbar">
+                                                <label class="dhcp-expert-label">Eigene Konfiguration</label>
+                                                <div class="btn-group btn-group-sm" role="group" aria-label="Ansicht">
+                                                    <button id="btnDhcpExpertViewList" type="button" class="btn btn-default" onclick="setDhcpExpertView('list');">Liste</button>
+                                                    <button id="btnDhcpExpertViewText" type="button" class="btn btn-default" onclick="setDhcpExpertView('text');">Text</button>
+                                                </div>
+                                                <div id="divDhcpExpertAdd" class="btn-group btn-group-sm">
+                                                    <button type="button" class="btn btn-default dropdown-toggle" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">Neuer Eintrag <span class="caret"></span></button>
+                                                    <ul class="dropdown-menu dropdown-menu-right">
+                                                        <li class="dropdown-header">Adressen</li>
+                                                        <li><a href="#" onclick="openDhcpEntryEditor('range4', -1); return false;">IPv4-Adressbereich</a></li>
+                                                        <li><a href="#" onclick="openDhcpEntryEditor('range6', -1); return false;">IPv6-Bereich oder Präfix</a></li>
+                                                        <li><a href="#" onclick="openDhcpEntryEditor('host', -1); return false;">Reservierung oder Geräteeintrag</a></li>
+                                                        <li class="dropdown-header">Optionen</li>
+                                                        <li><a href="#" onclick="openDhcpEntryEditor('option', -1); return false;">DHCP-Option (IPv4)</a></li>
+                                                        <li><a href="#" onclick="openDhcpEntryEditor('option6', -1); return false;">DHCPv6-Option</a></li>
+                                                        <li><a href="#" onclick="openDhcpEntryEditor('boot', -1); return false;">Netzwerkstart (PXE)</a></li>
+                                                        <li class="dropdown-header">Gruppen und Regeln</li>
+                                                        <li><a href="#" onclick="openDhcpEntryEditor('tag', -1); return false;">Gerätegruppe (Tag)</a></li>
+                                                        <li><a href="#" onclick="openDhcpEntryEditor('ignore', -1); return false;">Geräte nicht beantworten</a></li>
+                                                        <li><a href="#" onclick="openDhcpEntryEditor('domain', -1); return false;">Domain für Gerätenamen</a></li>
+                                                        <li class="dropdown-header">Allgemein</li>
+                                                        <li><a href="#" onclick="openDhcpEntryEditor('ra', -1); return false;">Router Advertisements einer Schnittstelle</a></li>
+                                                        <li><a href="#" onclick="openDhcpEntryEditor('switches', -1); return false;">Allgemeine Schalter</a></li>
+                                                        <li><a href="#" onclick="openDhcpEntryEditor('raw', -1); return false;">Freie Zeile</a></li>
+                                                    </ul>
+                                                </div>
+                                                <span id="lblDhcpExpertUnsaved" class="dhcp-expert-unsaved" style="display: none;">Nicht gespeicherte Änderungen</span>
+                                            </div>
+
+                                            <div id="divDhcpExpertList" class="dhcp-expert-list"></div>
+
+                                            <div id="divDhcpExpertText" class="form-group" style="display: none;">
+                                                <textarea id="txtDhcpExpert" class="form-control dhcp-expert-editor" rows="18" spellcheck="false" autocomplete="off" aria-label="Eigene Konfiguration" placeholder="dhcp-range=set:gaeste,10.10.0.50,10.10.0.200,255.255.255.0,2h&#10;dhcp-option=tag:gaeste,option:router,10.10.0.1&#10;dhcp-host=aa:bb:cc:dd:ee:ff,192.168.1.20,drucker"></textarea>
                                             </div>
 
                                             <div id="divDhcpExpertResult"></div>
@@ -998,6 +1242,9 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
                                                         <tr><td><code>dhcp-boot=[tag:&lt;tag&gt;,]&lt;datei&gt;[,&lt;servername&gt;[,&lt;serveradresse&gt;]]</code></td><td>PXE- und BOOTP-Boot.</td></tr>
                                                         <tr><td><code>domain=&lt;domain&gt;[,&lt;netz/präfix&gt;|&lt;start&gt;,&lt;ende&gt;][,local]</code></td><td>Domain für Gerätenamen; <code>local</code> beantwortet unbekannte Namen darin selbst.</td></tr>
                                                         <tr><td><code>dhcp-authoritative</code>, <code>dhcp-rapid-commit</code>, <code>dhcp-sequential-ip</code>, <code>dhcp-ignore-clid</code>, <code>dhcp-lease-max=&lt;n&gt;</code>, <code>dhcp-reply-delay=[tag:&lt;tag&gt;,]&lt;s&gt;</code>, <code>bootp-dynamic</code>, <code>no-ping</code></td><td>Globale Schalter.</td></tr>
+                                                        <tr><td><code>dhcp-range=[set:&lt;tag&gt;,]&lt;start6&gt;[,&lt;ende6&gt;][,constructor:&lt;schnittstelle&gt;][,ra-only|ra-stateless|slaac][,&lt;präfixlänge&gt;][,&lt;dauer&gt;]</code></td><td>IPv6-Bereich; mit <code>constructor:</code> nur der hintere Teil der Adresse, der Präfix kommt von der Schnittstelle.</td></tr>
+                                                        <tr><td><code>enable-ra</code>, <code>ra-param=&lt;schnittstelle&gt;,[mtu:&lt;wert&gt;,][high|low,]&lt;intervall&gt;[,&lt;router-lebensdauer&gt;]</code></td><td>Router Advertisements einschalten und je Schnittstelle einstellen.</td></tr>
+                                                        <tr><td><code>dhcp-option=[tag:&lt;tag&gt;,]option6:&lt;nr&gt;|&lt;name&gt;,[&lt;wert&gt;,…]</code></td><td>DHCPv6-Optionen; <code>[::]</code> steht für die Adresse dieses Servers.</td></tr>
                                                         <tr><td><code>interface=&lt;name&gt;</code>, <code>except-interface=&lt;name&gt;</code></td><td>Schnittstellen einschränken; jede Schnittstelle setzt automatisch ein Tag mit ihrem Namen, außerdem gibt es die Tags <code>known</code> und <code>bootp</code>.</td></tr>
                                                     </tbody>
                                                 </table>
@@ -1178,59 +1425,46 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
                                         <div id="logsTabPaneQueryLogs" class="tab-pane active" style="padding-top: 15px;">
 
-                                            <form id="frmQueryLogs" class="form-inline well" style="padding-bottom: 6px;">
+                                            <form id="frmQueryLogs" class="form-inline well query-logs-form" style="padding-bottom: 6px;">
+                                                <div id="divQueryLogsSource" class="query-logs-row" style="display: none;">
                                                 <div class="form-group">
                                                     <label for="optQueryLogsAppName">App</label>
                                                     <select class="form-control" id="optQueryLogsAppName">
                                                     </select>
                                                 </div>
-
                                                 <div class="form-group">
                                                     <label for="optQueryLogsClassPath">Klassenpfad</label>
                                                     <select class="form-control" id="optQueryLogsClassPath">
                                                     </select>
                                                 </div>
-
-                                                <div class="form-group">
-                                                    <label for="txtQueryLogPageNumber">Seite</label>
-                                                    <input id="txtQueryLogPageNumber" type="number" class="form-control" style="width: 120px;" value="1" />
                                                 </div>
 
+                                                <div class="query-logs-row">
                                                 <div class="form-group">
-                                                    <label for="optQueryLogsEntriesPerPage">Einträge je Seite</label>
-                                                    <select class="form-control" id="optQueryLogsEntriesPerPage">
-                                                        <option>10</option>
-                                                        <option>25</option>
-                                                        <option>50</option>
-                                                        <option>100</option>
-                                                        <option>250</option>
-                                                        <option>500</option>
-                                                    </select>
+                                                    <label for="txtQueryLogQName">Domain</label>
+                                                    <input id="txtQueryLogQName" type="text" class="form-control" style="min-width: 300px;" placeholder="example.com oder *.com" />
                                                 </div>
-
-                                                <div class="form-group">
-                                                    <label for="optQueryLogsDescendingOrder">Sortierung</label>
-                                                    <select class="form-control" id="optQueryLogsDescendingOrder">
-                                                        <option value="false">Aufsteigend</option>
-                                                        <option value="true" selected>Absteigend</option>
-                                                    </select>
-                                                </div>
-
-                                                <div class="form-group">
-                                                    <label for="txtQueryLogStart">Von</label>
-                                                    <input id="txtQueryLogStart" type="datetime-local" class="form-control" />
-                                                </div>
-
-                                                <div class="form-group">
-                                                    <label for="txtQueryLogEnd">Bis</label>
-                                                    <input id="txtQueryLogEnd" type="datetime-local" class="form-control" />
-                                                </div>
-
                                                 <div class="form-group">
                                                     <label for="txtQueryLogClientIpAddress">Client-IP-Adresse</label>
                                                     <input id="txtQueryLogClientIpAddress" type="text" class="form-control" style="min-width: 170px;" />
                                                 </div>
+                                                <div class="form-group">
+                                                    <label for="txtQueryLogQType">Typ</label>
+                                                    <input id="txtQueryLogQType" type="text" class="form-control" placeholder="A, AAAA usw." />
+                                                </div>
+                                                <div class="form-group">
+                                                    <label for="txtQueryLogStart">Von</label>
+                                                    <input id="txtQueryLogStart" type="datetime-local" class="form-control" />
+                                                </div>
+                                                <div class="form-group">
+                                                    <label for="txtQueryLogEnd">Bis</label>
+                                                    <input id="txtQueryLogEnd" type="datetime-local" class="form-control" />
+                                                </div>
+                                                </div>
 
+                                                <details class="query-logs-more">
+                                                    <summary>Weitere Filter</summary>
+                                                    <div class="query-logs-row">
                                                 <div class="form-group">
                                                     <label for="optQueryLogsProtocol">Protokoll</label>
                                                     <select class="form-control" id="optQueryLogsProtocol">
@@ -1244,7 +1478,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
                                                         <option value="TcpProxy">TCP-PROXY</option>
                                                     </select>
                                                 </div>
-
                                                 <div class="form-group">
                                                     <label for="optQueryLogsResponseType">Beantwortet durch</label>
                                                     <select class="form-control" id="optQueryLogsResponseType">
@@ -1257,7 +1490,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
                                                         <option>UpstreamBlockedCached</option>
                                                     </select>
                                                 </div>
-
                                                 <div class="form-group">
                                                     <label for="optQueryLogsResponseCode">RCODE</label>
                                                     <select class="form-control" id="optQueryLogsResponseCode">
@@ -1275,17 +1507,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
                                                         <option value="NotZone">NOTZONE</option>
                                                     </select>
                                                 </div>
-
-                                                <div class="form-group">
-                                                    <label for="txtQueryLogQName">Domain</label>
-                                                    <input id="txtQueryLogQName" type="text" class="form-control" style="min-width: 300px;" placeholder="example.com oder *.com" />
-                                                </div>
-
-                                                <div class="form-group">
-                                                    <label for="txtQueryLogQType">Typ</label>
-                                                    <input id="txtQueryLogQType" type="text" class="form-control" placeholder="A, AAAA usw." />
-                                                </div>
-
                                                 <div class="form-group">
                                                     <label for="optQueryLogQClass">Klasse</label>
                                                     <select class="form-control" id="optQueryLogQClass">
@@ -1298,19 +1519,45 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
                                                         <option>ANY</option>
                                                     </select>
                                                 </div>
+                                                    </div>
+                                                </details>
 
-                                                <div class="form-group" style="display: block;">
-                                                    <button type="submit" class="btn btn-primary" id="btnQueryLogs" data-loading-text="Frage ab..." onclick="queryLogs(); return false;" style="margin-right: 6px;">Suchen</button>
-                                                    <button type="button" class="btn btn-default" data-loading-text="Exportiere..." onclick="exportQueryLogsCsv(this);" style="margin-right: 6px;">Exportieren</button>
-                                                    <button type="button" class="btn btn-default" onclick="resetQueryLogsForm();" style="margin-right: 12px;">Zurücksetzen</button>
-
+                                                <div class="query-logs-row query-logs-actions">
+                                                    <button type="submit" class="btn btn-primary" id="btnQueryLogs" data-loading-text="Frage ab..." onclick="queryLogs(); return false;">Suchen</button>
+                                                    <button type="button" class="btn btn-default" onclick="resetQueryLogsForm();">Zurücksetzen</button>
                                                     <div class="checkbox">
                                                         <label>
                                                             <input type="checkbox" id="chkQueryLogsLiveUpdate"> Live-Ansicht
                                                         </label>
                                                     </div>
+                                                    <span class="query-logs-spacer"></span>
+                                                <div class="form-group">
+                                                    <label for="optQueryLogsEntriesPerPage">Einträge je Seite</label>
+                                                    <select class="form-control" id="optQueryLogsEntriesPerPage">
+                                                        <option>10</option>
+                                                        <option>25</option>
+                                                        <option>50</option>
+                                                        <option>100</option>
+                                                        <option>250</option>
+                                                        <option>500</option>
+                                                    </select>
+                                                </div>
+                                                <div class="form-group">
+                                                    <label for="optQueryLogsDescendingOrder">Sortierung</label>
+                                                    <select class="form-control" id="optQueryLogsDescendingOrder">
+                                                        <option value="false">Aufsteigend</option>
+                                                        <option value="true" selected>Absteigend</option>
+                                                    </select>
+                                                </div>
+                                                <div class="form-group">
+                                                    <label for="txtQueryLogPageNumber">Seite</label>
+                                                    <input id="txtQueryLogPageNumber" type="number" class="form-control" style="width: 120px;" value="1" />
+                                                </div>
+                                                    <button type="button" class="btn btn-default" data-loading-text="Exportiere..." onclick="exportQueryLogsCsv(this);">Exportieren</button>
                                                 </div>
                                             </form>
+
+                                            <div id="divQueryLogsNone" class="settings-note" style="display: none;"><span class="fa fa-info-circle" aria-hidden="true"></span> Es ist keine App für das Abfrageprotokoll aktiv. Unter Apps eine Query-Logs-App (SQLite, MySQL, PostgreSQL oder SQL Server) aktivieren, dann erscheinen die Anfragen hier. <button type="button" class="btn btn-default btn-xs" onclick="$('#mainPanelTabListApps a').trigger('click');">Zu den Apps</button></div>
 
                                             <div id="divQueryLogsLoader" style="margin-top: 20px; height: 300px;"></div>
 
@@ -1407,19 +1654,19 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
                                     <li id="settingsTabListRecursion" role="presentation"><a href="#settingsTabPaneRecursion" aria-controls="settingsTabPaneRecursion" role="tab" data-toggle="tab"><span class="fa fa-sitemap fa-fw" aria-hidden="true"></span> Resolver</a></li>
                                     <li id="settingsTabListProxyForwarders" role="presentation"><a href="#settingsTabPaneProxyForwarders" aria-controls="settingsTabPaneProxyForwarders" role="tab" data-toggle="tab"><span class="fa fa-share fa-fw" aria-hidden="true"></span> Weiterleitung & Proxy</a></li>
                                     <li id="settingsTabListCache" role="presentation"><a href="#settingsTabPaneCache" aria-controls="settingsTabPaneCache" role="tab" data-toggle="tab"><span class="fa fa-database fa-fw" aria-hidden="true"></span> Cache</a></li>
-                                    <li id="settingsTabListBlocking" role="presentation"><a href="#settingsTabPaneBlocking" aria-controls="settingsTabPaneBlocking" role="tab" data-toggle="tab"><span class="fa fa-ban fa-fw" aria-hidden="true"></span> Blockierung</a></li>
                                     <li id="settingsTabListRequestFilter" role="presentation"><a href="#settingsTabPaneRequestFilter" aria-controls="settingsTabPaneRequestFilter" role="tab" data-toggle="tab"><span class="fa fa-shield fa-fw" aria-hidden="true"></span> Anfragefilter</a></li>
                                     <li id="settingsTabListRateLimiting" role="presentation"><a href="#settingsTabPaneRateLimiting" aria-controls="settingsTabPaneRateLimiting" role="tab" data-toggle="tab"><span class="fa fa-sliders fa-fw" aria-hidden="true"></span> Ratenbegrenzung</a></li>
-                                    <li id="settingsTabListOptionalProtocols" role="presentation"><a href="#settingsTabPaneOptionalProtocols" aria-controls="settingsTabPaneOptionalProtocols" role="tab" data-toggle="tab"><span class="fa fa-lock fa-fw" aria-hidden="true"></span> Verschlüsselte Protokolle</a></li>
+                                    <li id="settingsTabListOptionalProtocols" role="presentation"><a href="#settingsTabPaneOptionalProtocols" aria-controls="settingsTabPaneOptionalProtocols" role="tab" data-toggle="tab"><span class="fa fa-plug fa-fw" aria-hidden="true"></span> Dienste</a></li>
                                     <li id="settingsTabListWebService" role="presentation"><a href="#settingsTabPaneWebService" aria-controls="settingsTabPaneWebService" role="tab" data-toggle="tab"><span class="fa fa-desktop fa-fw" aria-hidden="true"></span> Weboberfläche</a></li>
                                     <li id="settingsTabListLogging" role="presentation"><a href="#settingsTabPaneLogging" aria-controls="settingsTabPaneLogging" role="tab" data-toggle="tab"><span class="fa fa-file-text-o fa-fw" aria-hidden="true"></span> Protokollierung</a></li>
+                                    <li id="settingsTabListBackup" role="presentation"><a href="#settingsTabPaneBackup" aria-controls="settingsTabPaneBackup" role="tab" data-toggle="tab"><span class="fa fa-archive fa-fw" aria-hidden="true"></span> Sicherung</a></li>
                                 </ul>
                                                 </div>
                                                 <div class="col-md-9">
                                                     <div id="divSettingsLockedNote" class="settings-note settings-lock-note" style="display: none;"><span class="fa fa-lock" aria-hidden="true"></span> Die Einstellungen sind schreibgeschützt. Zum Ändern auf „Entsperren“ klicken; nach dem Speichern oder beim Verlassen der Seite wird wieder gesperrt. <a href="#" onclick="setSettingsLockPreference(false); return false;">Schreibschutz ausschalten</a></div>
-                                                    <fieldset id="fsSettings" class="settings-fieldset">
                                                     <div class="tab-content settings-content">
                                 <div id="settingsTabPaneGeneral" role="tabpanel" class="tab-pane active">
+                                <fieldset class="settings-fieldset">
                                 <div class="well well-sm form-horizontal settings-section" id="divSettingsGeneralLanguage">
                                     <h4 class="settings-section-title">Sprache</h4>
                                 <div class="form-group">
@@ -1527,8 +1774,14 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
                                     </div>
                                 </div>
 
+                                </div>
+
+                                <div class="well well-sm form-horizontal settings-section">
+                                    <h4 class="settings-section-title">Wächter</h4>
+                                    <div class="settings-section-desc">Überwacht Speicherplatz, Arbeitsspeicher, Warteschlangen und die DNS-Dienste und greift bei schweren Problemen ein, bevor der Server ausfällt.</div>
+
                                 <div class="form-group">
-                                    <label class="col-sm-3 control-label">Wächter</label>
+                                    <label class="col-sm-3 control-label">Eingriffe</label>
                                     <div class="col-sm-8">
                                         <div class="checkbox">
                                             <label><input id="chkEnableWatchdog" type="checkbox"> Bei schweren Problemen automatisch eingreifen</label>
@@ -1537,8 +1790,10 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
                                     </div>
                                 </div>
                                 </div>
-                                </div>
+                                </fieldset>
+</div>
                                 <div id="settingsTabPaneNetwork" role="tabpanel" class="tab-pane">
+                                <fieldset class="settings-fieldset">
                                 <div class="well well-sm form-horizontal settings-section" id="divSettingsGeneralIpv6">
                                     <h4 class="settings-section-title">IPv6 für ausgehende Anfragen</h4>
                                     <p class="settings-section-desc">Legt fest, ob der Resolver Nameserver über IPv6 abfragt.</p>
@@ -1658,16 +1913,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
                                 </div>
 
                                 <div class="well well-sm form-horizontal settings-section" id="divSettingsGeneralAdvancedOptions">
-                                    <h4 class="settings-section-title">Verbindungen & Zeitlimits</h4>
+                                    <h4 class="settings-section-title">Eingehende Verbindungen</h4>
                                     <p class="settings-section-desc">Grenzen für eingehende Verbindungen. Sie schützen einen öffentlichen Resolver vor Ressourcenerschöpfung.</p>
-                                <div class="form-group">
-                                    <label for="txtClientTimeout" class="col-sm-3 control-label">Client-Zeitlimit</label>
-                                    <div class="col-sm-8">
-                                        <input type="number" class="form-control" id="txtClientTimeout" placeholder="ms" style="width: 100px; display: inline;"> <span class="unit">ms (1000–10000, Standard 2000)</span>
-                                    </div>
-                                    <div class="col-sm-offset-3 col-sm-8 help-block-text">So lange wartet der Server auf eine Auflösung, bevor er dem Client mit <code>SERVFAIL</code> antwortet (oder mit veralteten Daten, siehe Cache).</div>
-                                </div>
-
                                 <div class="form-group">
                                     <label for="txtTcpSendTimeout" class="col-sm-3 control-label">TCP-Sendezeitlimit</label>
                                     <div class="col-sm-8">
@@ -1693,22 +1940,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
                                 </div>
 
                                 <div class="form-group">
-                                    <label for="txtQuicIdleTimeout" class="col-sm-3 control-label">QUIC-Leerlaufzeit</label>
-                                    <div class="col-sm-8">
-                                        <input type="number" class="form-control" id="txtQuicIdleTimeout" placeholder="ms" style="width: 100px; display: inline;"> <span class="unit">ms (1000–90000, Standard 60000)</span>
-                                    </div>
-                                    <div class="col-sm-offset-3 col-sm-8 help-block-text">Nach dieser Zeit ohne Aktivität wird eine QUIC-Verbindung geschlossen.</div>
-                                </div>
-
-                                <div class="form-group">
-                                    <label for="txtQuicMaxInboundStreams" class="col-sm-3 control-label">QUIC-Streams je Verbindung</label>
-                                    <div class="col-sm-8">
-                                        <input type="number" class="form-control" id="txtQuicMaxInboundStreams" placeholder="100" style="width: 100px; display: inline;"> <span class="unit">(1–1000, Standard 100)</span>
-                                    </div>
-                                    <div class="col-sm-offset-3 col-sm-8 help-block-text">Maximale Anzahl gleichzeitiger bidirektionaler Streams pro QUIC-Verbindung.</div>
-                                </div>
-
-                                <div class="form-group">
                                     <label for="txtListenBacklog" class="col-sm-3 control-label">Listen-Backlog</label>
                                     <div class="col-sm-8">
                                         <input type="number" class="form-control" id="txtListenBacklog" placeholder="1024" style="width: 100px; display: inline;"> <span class="unit">(Standard 1024)</span>
@@ -1716,16 +1947,11 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
                                     <div class="col-sm-offset-3 col-sm-8 help-block-text">Maximale Anzahl wartender eingehender Verbindungen für TCP, TLS, TCP-PROXY und QUIC.</div>
                                 </div>
 
-                                <div class="form-group">
-                                    <label for="txtMaxConcurrentResolutionsPerCore" class="col-sm-3 control-label">Gleichzeitige Auflösungen</label>
-                                    <div class="col-sm-8">
-                                        <input type="number" class="form-control" id="txtMaxConcurrentResolutionsPerCore" placeholder="100" style="width: 100px; display: inline;"> <span class="unit">je CPU-Kern (Standard 100)</span>
-                                    </div>
-                                    <div class="col-sm-offset-3 col-sm-8 help-block-text">Obergrenze für parallel laufende ausgehende Auflösungen je CPU-Kern. Darüber hinaus werden Anfragen mit <code>SERVFAIL</code> beantwortet, statt den Server zu überlasten.</div>
                                 </div>
-                                </div>
-                                </div>
+                                </fieldset>
+</div>
                                 <div id="settingsTabPaneRecursion" role="tabpanel" class="tab-pane">
+                                <fieldset class="settings-fieldset">
                                 <div class="well well-sm form-horizontal settings-section">
                                     <h4 class="settings-section-title">Zugriff auf die Rekursion</h4>
                                     <p class="settings-section-desc">Legt fest, wer den Server als rekursiven Resolver nutzen darf. Maßgeblich ist das RD-Flag der Anfrage, auch wenn Forwarder konfiguriert sind.</p>
@@ -1824,6 +2050,22 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
                                         <input type="number" class="form-control" id="txtResolverMaxStackCount" placeholder="Anzahl" style="width: 100px; display: inline;"> <span class="unit">(10–30, Standard 16)</span>
                                     </div>
                                     <div class="col-sm-offset-3 col-sm-8 help-block-text">Obergrenze für verschachtelte Auflösungen, etwa beim Auflösen von Nameserver-Adressen ohne Glue.</div>
+                                </div>
+
+                                <div class="form-group">
+                                    <label for="txtClientTimeout" class="col-sm-3 control-label">Client-Zeitlimit</label>
+                                    <div class="col-sm-8">
+                                        <input type="number" class="form-control" id="txtClientTimeout" placeholder="ms" style="width: 100px; display: inline;"> <span class="unit">ms (1000–10000, Standard 2000)</span>
+                                    </div>
+                                    <div class="col-sm-offset-3 col-sm-8 help-block-text">So lange wartet der Server auf eine Auflösung, bevor er dem Client mit <code>SERVFAIL</code> antwortet (oder mit veralteten Daten, siehe Cache).</div>
+                                </div>
+
+                                <div class="form-group">
+                                    <label for="txtMaxConcurrentResolutionsPerCore" class="col-sm-3 control-label">Gleichzeitige Auflösungen</label>
+                                    <div class="col-sm-8">
+                                        <input type="number" class="form-control" id="txtMaxConcurrentResolutionsPerCore" placeholder="100" style="width: 100px; display: inline;"> <span class="unit">je CPU-Kern (Standard 100)</span>
+                                    </div>
+                                    <div class="col-sm-offset-3 col-sm-8 help-block-text">Obergrenze für parallel laufende ausgehende Auflösungen je CPU-Kern. Darüber hinaus werden Anfragen mit <code>SERVFAIL</code> beantwortet, statt den Server zu überlasten.</div>
                                 </div>
                                 </div>
 
@@ -1949,8 +2191,10 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
                                 <div class="settings-note"><b>Hinweis:</b> Der Cache muss Antworten je Subnetz getrennt vorhalten. Das erhöht Speicherbedarf und Cache-Fehlschläge deutlich.</div>
 
                                 </div>
-                                </div>
+                                </fieldset>
+</div>
                                 <div id="settingsTabPaneProxyForwarders" role="tabpanel" class="tab-pane">
+                                <fieldset class="settings-fieldset">
                                 <div class="well well-sm form-horizontal settings-section">
                                     <h4 class="settings-section-title">Forwarder</h4>
                                     <p class="settings-section-desc">Sind Forwarder eingetragen, löst der Server nicht mehr selbst über die Root-Server auf, sondern leitet alle Anfragen an diese Server weiter. Für einzelne Domains lässt sich das stattdessen gezielt über Weiterleitungszonen steuern.</p>
@@ -2098,8 +2342,10 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
                                     <div class="col-sm-offset-3 col-sm-8 help-block-text">Kennung, die der Server bei allen HTTP-Abrufen mitschickt: Blocklisten, Client-Sperrlisten, IANA-Daten, Update-Prüfung, Weiterleitung über DNS-over-HTTPS und Apps. Leer lassen für den Standardwert. Nützlich, wenn ein Listenanbieter unbekannte Kennungen abweist.</div>
                                 </div>
                                 </div>
-                                </div>
+                                </fieldset>
+</div>
                                 <div id="settingsTabPaneCache" role="tabpanel" class="tab-pane">
+                                <fieldset class="settings-fieldset">
                                 <div class="well well-sm form-horizontal settings-section">
                                     <h4 class="settings-section-title">Cache verwenden</h4>
                                 <div class="form-group">
@@ -2258,155 +2504,10 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
                                     </div>
                                 </div>
                                 </div>
-                                </div>
-                                <div id="settingsTabPaneBlocking" role="tabpanel" class="tab-pane">
-                                <div class="well well-sm form-horizontal settings-section">
-                                    <h4 class="settings-section-title">Blockierung</h4>
-                                    <p class="settings-section-desc">Manuell blockierte Domains und Blocklisten verwalten Sie im Bereich Filter.</p>
-                                <div class="form-group">
-                                    <label class="col-sm-3 control-label">Status</label>
-                                    <div class="col-sm-8">
-                                        <div class="checkbox">
-                                            <label><input id="chkEnableBlocking" type="checkbox"> Blockierung aktivieren</label>
-                                        </div>
-                                        <div class="option-help">Domains aus den blockierten Domains und den Blocklisten werden nicht aufgelöst.</div>
-                                        <div class="checkbox">
-                                            <label><input id="chkAllowTxtBlockingReport" type="checkbox"> Blockierungsbericht ausgeben</label>
-                                        </div>
-                                        <div class="option-help">Beantwortet TXT-Anfragen zu blockierten Domains mit einem Bericht über den Grund. Zusätzlich enthält jede Blockierantwort einen Extended DNS Error (RFC 8914), sofern der Client EDNS unterstützt.</div>
-                                    </div>
-                                </div>
-
-                                <div class="form-group">
-                                    <label for="txtBlockingReportText" class="col-sm-3 control-label">Blockierungstext</label>
-                                    <div class="col-sm-6">
-                                        <input type="text" class="form-control" id="txtBlockingReportText" maxlength="255" placeholder="source={source}; domain={domain}">
-                                    </div>
-                                    <div class="col-sm-offset-3 col-sm-8 help-block-text">Eigener Text für den Extended DNS Error und den TXT-Bericht, zum Beispiel <code>Blockiert von Beispiel-DNS: {domain}</code>. Platzhalter: <code>{domain}</code> für die blockierte Domain, <code>{list}</code> für die Blocklisten-URL, <code>{source}</code> für die Quelle. Leer lassen für den Standardtext.</div>
-                                </div>
-
-                                <div class="form-group">
-                                    <label class="col-sm-3 control-label">Vorübergehend pausiert bis</label>
-                                    <div class="col-sm-8">
-                                        <div id="lblTemporaryDisableBlockingTill" style="padding-top: 7px;"></div>
-                                        <div style="padding-top: 8px;"><input type="number" class="form-control" id="txtTemporaryDisableBlockingMinutes" placeholder="Minuten" style="width: 100px; display: inline;"> <span class="unit">Minuten</span> <button id="btnTemporaryDisableBlockingNow" type="button" class="btn btn-default btn-sm" data-loading-text="Pausiere..." onclick="temporaryDisableBlockingNow();">Jetzt pausieren</button></div>
-                                    </div>
-
-                                </div>
-
-                                <div class="form-group">
-                                    <label for="txtBlockingBypassList" class="col-sm-3 control-label">Ausnahmen (Clients)</label>
-                                    <div class="col-sm-6">
-                                        <textarea id="txtBlockingBypassList" class="form-control" rows="3" spellcheck="false"></textarea>
-                                    </div>
-                                    <div class="col-sm-offset-3 col-sm-8 help-block-text">IP-Adressen oder Netze, eine pro Zeile, für die nie blockiert wird.</div>
-                                </div>
-
-                                <div class="form-group">
-                                    <label class="col-sm-3 control-label">Antwort auf blockierte Domains</label>
-                                    <div class="col-sm-8">
-                                        <div class="radio">
-                                            <label><input type="radio" name="rdBlockingType" id="rdBlockingTypeAnyAddress" value="AnyAddress"> Nulladresse</label>
-                                            <div class="option-help">Antwortet mit <code>0.0.0.0</code> bzw. <code>::</code>.</div>
-                                        </div>
-                                        <div class="radio">
-                                            <label><input type="radio" name="rdBlockingType" id="rdBlockingTypeNxDomain" value="NxDomain"> NXDOMAIN (empfohlen)</label>
-                                            <div class="option-help">Antwortet, als existiere die Domain nicht.</div>
-                                        </div>
-                                        <div class="radio">
-                                            <label><input type="radio" name="rdBlockingType" id="rdBlockingTypeCustomAddress" value="CustomAddress"> Eigene Adressen</label>
-                                            <div class="option-help">Antwortet mit den folgenden IP-Adressen, etwa um auf eine Hinweisseite umzuleiten.</div>
-                                        </div>
-                                        <div style="padding-top: 8px;">
-                                            <label for="txtCustomBlockingAddresses" class="control-label">Eigene Adressen</label>
-                                            <textarea id="txtCustomBlockingAddresses" class="form-control" rows="3" spellcheck="false"></textarea>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <div class="form-group">
-                                    <label for="txtBlockingAnswerTtl" class="col-sm-3 control-label">TTL der Blockierantwort</label>
-                                    <div class="col-sm-8">
-                                        <input type="text" class="form-control" id="txtBlockingAnswerTtl" placeholder="TTL" style="width: 100px; display: inline;"> <span class="unit">Sekunden (Standard 300)</span>
-                                    </div>
-                                    <div class="col-sm-offset-3 col-sm-8 help-block-text">Wie lange Clients Blockierantworten mit Adressen (Nulladresse, eigene Adressen) und den TXT-Bericht zwischenspeichern.</div>
-                                </div>
-
-                                <div class="form-group">
-                                    <label for="txtBlockingNegativeTtl" class="col-sm-3 control-label">SOA für negatives Caching</label>
-                                    <div class="col-sm-8">
-                                        <input type="text" class="form-control" id="txtBlockingNegativeTtl" placeholder="TTL" style="width: 100px; display: inline;"> <span class="unit">Sekunden (Standard 300)</span>
-                                    </div>
-                                    <div class="col-sm-offset-3 col-sm-8 help-block-text">NXDOMAIN- und NODATA-Blockierantworten enthalten einen SOA-Eintrag. Dieser Wert ist dessen TTL und MINIMUM und legt fest, wie lange Clients und nachgelagerte Resolver die Antwort nach RFC 2308 negativ zwischenspeichern. Primärserver und Kontakt im SOA kommen aus dem Serverdomainnamen und der Kontaktadresse unter Server.</div>
-                                </div>
-                                </div>
-
-                                <div class="well well-sm form-horizontal settings-section">
-                                    <h4 class="settings-section-title">Browser-Signale</h4>
-                                    <p class="settings-section-desc">Browser fragen bestimmte Domains ab, um zu erkennen, ob sie den Resolver des Netzes umgehen dürfen. Beantwortet dieser Resolver sie mit NXDOMAIN, bleiben die Browser bei ihm. Beide Optionen wirken unabhängig davon, ob Blockieren eingeschaltet ist, und erscheinen in der Statistik als blockiert.</p>
-                                <div class="form-group">
-                                    <label class="col-sm-3 control-label">Signale</label>
-                                    <div class="col-sm-8">
-                                        <div class="checkbox">
-                                            <label><input id="chkBlockFirefoxCanaryDomain" type="checkbox"> Firefox: automatisches DoH abschalten</label>
-                                        </div>
-                                        <div class="option-help">Beantwortet die Canary-Domain <code>use-application-dns.net</code> mit NXDOMAIN. Firefox schaltet dann nicht mehr von selbst auf DNS-over-HTTPS eines Partneranbieters um und nutzt weiter diesen Resolver samt Blocklisten. Hat jemand DoH in Firefox selbst eingeschaltet, bleibt es aktiv.</div>
-                                        <div class="checkbox">
-                                            <label><input id="chkForceChromePreflight" type="checkbox"> Chrome: Preflight-Modus für vorab geladene Seiten erzwingen</label>
-                                        </div>
-                                        <div class="option-help">Beantwortet <code>dns-tunnel-check.googlezip.net</code> mit NXDOMAIN. Chrome lädt Seiten sonst über Googles Private Prefetch Proxy vor, ohne diesen Resolver zu fragen. Im Preflight-Modus fragt Chrome vor dem Öffnen einer vorab geladenen Seite zusätzlich hier nach, sodass Blocklisten auch dafür greifen.</div>
-                                    </div>
-                                </div>
-
-                                <div class="form-group">
-                                    <label class="col-sm-3 control-label">Nie blockiert</label>
-                                    <div class="col-sm-8">
-                                        <p id="lblAutoAllowedNames" class="form-control-static"></p>
-                                    </div>
-                                    <div class="col-sm-offset-3 col-sm-8 help-block-text">Der Serverdomainname und alle Namen im TLS-Zertifikat stehen automatisch auf der Allowlist, samt Subdomains. Sonst könnten Listen wie HaGeZis DoH-Bypass den eigenen DoH- oder DoT-Hostnamen sperren. Ein Name ohne Punkt, etwa ein reiner Rechnername, wird dabei nicht berücksichtigt.</div>
-                                </div>
-                                </div>
-
-                                <div class="well well-sm form-horizontal settings-section">
-                                    <h4 class="settings-section-title">Blocklisten</h4>
-                                    <p class="settings-section-desc">Listen werden heruntergeladen, zusammengeführt und im Arbeitsspeicher gehalten. Etwa 1 Million Domains benötigen rund 80 MB RAM; während einer Aktualisierung vorübergehend das Doppelte.</p>
-                                <div class="form-group">
-                                    <label for="txtBlockListUrls" class="col-sm-3 control-label">Listen-URLs</label>
-                                    <div class="col-sm-6">
-                                        <textarea id="txtBlockListUrls" class="form-control" rows="7" spellcheck="false"></textarea>
-                                        <label for="optQuickBlockList" class="control-label" style="padding-top: 8px;">Schnell hinzufügen</label>
-                                        <select id="optQuickBlockList" class="form-control" style="width: 100%;"></select>
-                                    </div>
-                                    <div class="col-sm-offset-3 col-sm-8 help-block-text">Eine URL pro Zeile. Verstanden werden hosts-Dateien, reine Domainlisten und <code>*.domain</code> (jeweils samt Subdomains) sowie die Regelsyntax von AdGuard Home und Adblock: <code>||domain^</code>, Ausnahmen mit <code>@@</code>, <code>|domain^</code> für genau diese Domain, <code>||*.domain^</code> nur für Subdomains, Platzhalter <code>*</code>, reguläre Ausdrücke <code>/…/</code> und die Modifikatoren <code>$important</code>, <code>$badfilter</code>, <code>$dnstype</code> und <code>$denyallow</code>. Listen im Pi-hole-Regex-Format (ein Ausdruck pro Zeile, optional <code>;querytype=</code>) funktionieren ebenfalls. IP-Adressen und Netze wie <code>192.0.2.1</code> oder <code>198.51.100.0/24</code> blockieren Antworten, deren A- oder AAAA-Einträge darauf zeigen. Lokale Dateien lassen sich per <code>file:///pfad/zur/liste.txt</code> einbinden. Ein vorangestelltes <code>!</code> macht die Liste zur Erlaubnisliste, <code>#</code> schaltet eine Zeile ab. Die Schnellauswahl bietet die Listen von HaGeZi im Adblock-Format vom Build-Mirror <code>hagezi-mirror.dnsbunker.org</code>, der jede neue Version sofort veröffentlicht, etwa alle 4 bis 8 Stunden. Aus der Gruppe „Multi“ genügt eine Stufe, die Threat Intelligence Feeds ergänzen sie.</div>
-                                </div>
-
-                                <div class="form-group">
-                                    <label for="txtBlockListUpdateIntervalHours" class="col-sm-3 control-label">Aktualisierungsintervall</label>
-                                    <div class="col-sm-8">
-                                        <input type="number" class="form-control" id="txtBlockListUpdateIntervalHours" placeholder="Stunden" style="width: 100px; display: inline;"> <span class="unit">Stunden (0–168, Standard 8, 0 = keine automatische Aktualisierung)</span>
-                                    </div>
-
-                                </div>
-
-                                <div class="form-group">
-                                    <label class="col-sm-3 control-label">Nächste Aktualisierung</label>
-                                    <div class="col-sm-8 form-control-static">
-                                        <span id="lblBlockListNextUpdatedOn" style="margin-right: 15px;"></span>
-                                        <button id="btnUpdateBlockListsNow" type="button" class="btn btn-default btn-sm" data-loading-text="Aktualisiere..." onclick="forceUpdateBlockLists();">Jetzt aktualisieren</button>
-                                    </div>
-
-                                </div>
-
-                                <div class="form-group">
-                                    <label class="col-sm-3 control-label">Status der Listen</label>
-                                    <div class="col-sm-9">
-                                        <div id="divBlockListStatus" class="blocklist-status"></div>
-                                        <div class="option-help" style="padding-left: 0;">Änderungen in dieser Tabelle (aktiv, Name, Entfernen) werden sofort gespeichert. „Geprüft“ ist der letzte Abruf, „Geändert“ der letzte Abruf mit neuem Inhalt. Änderungen an den Listen-URLs oben erscheinen hier nach dem Speichern.</div>
-                                    </div>
-                                </div>
-                                </div>
-                                </div>
-                                <div id="settingsTabPaneRequestFilter" role="tabpanel" class="tab-pane">
+                                </fieldset>
+</div>
+<div id="settingsTabPaneRequestFilter" role="tabpanel" class="tab-pane">
+                                <fieldset class="settings-fieldset">
                                 <div class="well well-sm form-horizontal settings-section" id="divSettingsRequestFilter">
                                     <h4 class="settings-section-title">Anfragen, die ein öffentlicher Resolver nicht braucht</h4>
                                     <p class="settings-section-desc">Diese Regeln greifen vor jeder weiteren Verarbeitung und vor den DNS-Apps. Über UDP werden passende Anfragen stillschweigend verworfen, damit der Server nicht als Reflektor für Angriffe mit gefälschten Absenderadressen dient. Über TCP, TLS, HTTPS und QUIC antwortet der Server mit REFUSED, weil ein Verwerfen dort die ganze Verbindung samt anderer Anfragen trennen würde. Anfragen von Loopback-Adressen sind ausgenommen, etwa vom DNS-Client dieser Weboberfläche. Die Zahlen neben den Regeln zeigen die Treffer seit dem Start.</p>
@@ -2524,8 +2625,10 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
                                     </div>
                                 </div>
                                 </div>
-                                </div>
+                                </fieldset>
+</div>
                                 <div id="settingsTabPaneRateLimiting" role="tabpanel" class="tab-pane">
+                                <fieldset class="settings-fieldset">
                                 <div class="well well-sm form-horizontal settings-section" id="divSettingsGeneralRateLimiting">
                                     <h4 class="settings-section-title">Anfragen pro Sekunde (QPS)</h4>
                                     <p class="settings-section-desc">Begrenzt die Anfragen je Client-Subnetz mit einem Token-Bucket, wie bei dnsdist. Das schützt einen öffentlichen Resolver davor, mit gefälschten Absendern für Amplification-Angriffe missbraucht zu werden. Gebremste Clients erscheinen in der Übersicht orange markiert und werden im Log gemeldet.</p>
@@ -2596,8 +2699,10 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
                                     <div class="col-sm-offset-3 col-sm-8 help-block-text">IP-Adressen oder Netze, eine pro Zeile, die nie begrenzt werden. Loopback-Adressen sind immer ausgenommen.</div>
                                 </div>
                                 </div>
-                                </div>
+                                </fieldset>
+</div>
                                 <div id="settingsTabPaneOptionalProtocols" role="tabpanel" class="tab-pane">
+                                <fieldset class="settings-fieldset">
                                 <div class="well well-sm form-horizontal settings-section">
                                     <h4 class="settings-section-title">Unverschlüsseltes DNS (Do53)</h4>
                                     <p class="settings-section-desc">Legt fest, was der Resolver über UDP und TCP auf Port 53 beantwortet, auch hinter einem PROXY-Protokoll-Load-Balancer. Die Adressen stehen unter Netzwerk.</p>
@@ -2691,6 +2796,22 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
                                 </div>
 
                                 <div class="form-group">
+                                    <label for="txtQuicIdleTimeout" class="col-sm-3 control-label">QUIC-Leerlaufzeit</label>
+                                    <div class="col-sm-8">
+                                        <input type="number" class="form-control" id="txtQuicIdleTimeout" placeholder="ms" style="width: 100px; display: inline;"> <span class="unit">ms (1000–90000, Standard 60000)</span>
+                                    </div>
+                                    <div class="col-sm-offset-3 col-sm-8 help-block-text">Nach dieser Zeit ohne Aktivität wird eine QUIC-Verbindung geschlossen.</div>
+                                </div>
+
+                                <div class="form-group">
+                                    <label for="txtQuicMaxInboundStreams" class="col-sm-3 control-label">QUIC-Streams je Verbindung</label>
+                                    <div class="col-sm-8">
+                                        <input type="number" class="form-control" id="txtQuicMaxInboundStreams" placeholder="100" style="width: 100px; display: inline;"> <span class="unit">(1–1000, Standard 100)</span>
+                                    </div>
+                                    <div class="col-sm-offset-3 col-sm-8 help-block-text">Maximale Anzahl gleichzeitiger bidirektionaler Streams pro QUIC-Verbindung.</div>
+                                </div>
+
+                                <div class="form-group">
                                     <label for="txtDnsTlsCertificatePath" class="col-sm-3 control-label">TLS-Zertifikat</label>
                                     <div class="col-sm-6">
                                         <input type="text" class="form-control" id="txtDnsTlsCertificatePath" placeholder="Pfad auf dem Server" maxlength="255">
@@ -2726,7 +2847,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
                                 <div class="settings-note"><b>Hinweis:</b> Client-Konfiguration: DoT <code id="lblDoTHost">tls-certificate-domain:853</code>, DoQ <code id="lblDoQHost">tls-certificate-domain:853</code>, DoH <code>https://<span id="lblDoHsHost">tls-certificate-domain</span>/dns-query</code>.</div>
                                 <div class="settings-note"><b>Hinweis:</b> Der Dienstbenutzer braucht Leserechte auf Zertifikat und Schlüssel. Für Let's Encrypt eignet sich ein Deploy-Hook, der die Dateien nach jeder Erneuerung kopiert: <code>certbot renew --deploy-hook 'install -o zenitiumdns -g zenitiumdns -m 0644 "$RENEWED_LINEAGE/fullchain.pem" /etc/zenitiumdns/fullchain.pem; install -o zenitiumdns -g zenitiumdns -m 0600 "$RENEWED_LINEAGE/privkey.pem" /etc/zenitiumdns/privkey.pem'</code></div>
-                                <div class="settings-note"><b>0-RTT:</b> TLS Early Data (0-RTT) bietet der TLS- und QUIC-Stack von .NET serverseitig nicht an, deshalb gibt es dafür keine Einstellung. Für DNS-over-HTTPS lässt sich 0-RTT mit einem vorgeschalteten Reverse Proxy nutzen, etwa nginx mit <code>ssl_early_data on;</code>, der an DNS-over-HTTP weiterleitet (siehe „Hinter einem Reverse Proxy“). DNS-Anfragen sind wiederholbar, daher ist 0-RTT dafür unkritisch.</div>
+                                <div class="settings-note"><b>0-RTT:</b> TLS Early Data (0-RTT) bietet der TLS- und QUIC-Stack von .NET serverseitig nicht an, deshalb gibt es dafür keine Einstellung. Für DNS-over-HTTPS lässt sich 0-RTT mit einem vorgeschalteten Reverse Proxy nutzen, etwa nginx mit <code>ssl_early_data on;</code>, der an DNS-over-HTTP weiterleitet (siehe „DNS hinter einem Reverse Proxy“). DNS-Anfragen sind wiederholbar, daher ist 0-RTT dafür unkritisch.</div>
 
                                 </div>
 
@@ -2770,7 +2891,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
                                 </div>
 
                                 <div class="well well-sm form-horizontal settings-section">
-                                    <h4 class="settings-section-title">Hinter einem Reverse Proxy</h4>
+                                    <h4 class="settings-section-title">DNS hinter einem Reverse Proxy</h4>
                                     <p class="settings-section-desc">Für Setups, in denen ein vorgeschalteter Proxy (z. B. nginx oder HAProxy) TLS terminiert oder das PROXY-Protokoll spricht.</p>
                                 <div class="form-group">
                                     <label class="col-sm-3 control-label">Eingänge</label>
@@ -2856,8 +2977,10 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
                                     <div class="col-sm-offset-3 col-sm-8 help-block-text">HTTP-Header, aus dem die echte Client-Adresse gelesen wird, wenn die Anfrage von einem erlaubten Proxy kommt. Beispiel für nginx: <code id="lblDnsOverHttpRealIpNginx">proxy_set_header X-Real-IP $remote_addr;</code></div>
                                 </div>
                                 </div>
-                                </div>
+                                </fieldset>
+</div>
                                 <div id="settingsTabPaneWebService" role="tabpanel" class="tab-pane">
+                                <fieldset class="settings-fieldset">
                                 <div class="well well-sm form-horizontal settings-section">
                                     <h4 class="settings-section-title">Weboberfläche</h4>
                                     <p class="settings-section-desc">Adressen und Ports der Weboberfläche und der HTTP-API. Änderungen werden ohne Neustart übernommen; die Seite leitet danach automatisch auf die neue Adresse um.</p>
@@ -2962,7 +3085,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
                                 </div>
 
                                 <div class="well well-sm form-horizontal settings-section">
-                                    <h4 class="settings-section-title">Hinter einem Reverse Proxy</h4>
+                                    <h4 class="settings-section-title">Weboberfläche hinter einem Reverse Proxy</h4>
 
                                 <div class="form-group">
                                     <label for="txtWebServiceReverseProxyAddresses" class="col-sm-3 control-label">Erlaubte Proxys (ACL)</label>
@@ -3030,8 +3153,10 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
                                     <div class="col-sm-offset-3 col-sm-8 help-block-text">Eintrag für <code>scrape_configs</code> in <code>prometheus.yml</code>. Beschreibung aller Kennzahlen in <code>docs/Metrics.md</code>.</div>
                                 </div>
                                 </div>
-                                </div>
+                                </fieldset>
+</div>
                                 <div id="settingsTabPaneLogging" role="tabpanel" class="tab-pane">
+                                <fieldset class="settings-fieldset">
                                 <div class="well well-sm form-horizontal settings-section">
                                     <h4 class="settings-section-title">Protokollierung</h4>
 
@@ -3101,21 +3226,32 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
                                 <div class="settings-note settings-warning"><b>Achtung:</b> Das Protokollieren aller Anfragen vergrößert die Protokolldateien erheblich.</div>
 
                                 </div>
+                                </fieldset>
+</div>
+                                <div id="settingsTabPaneBackup" role="tabpanel" class="tab-pane">
+                                <div class="well well-sm form-horizontal settings-section">
+                                    <h4 class="settings-section-title">Sicherung</h4>
+                                    <div class="settings-section-desc">Eine Sicherung ist eine ZIP-Datei mit den ausgewählten Teilen der Konfiguration: Einstellungen, Benutzer, Weiterleitungszonen, Blocklisten und Clientprofile, DHCP, Apps, Statistik und auf Wunsch die Protokolle. Vor einem Update oder einem Umzug auf einen anderen Server erstellen. Beim Wiederherstellen lässt sich wählen, welche Teile übernommen werden.</div>
+
+                                <div class="form-group">
+                                    <div class="col-sm-offset-3 col-sm-8">
+                                        <button id="btnShowBackupSettingsModal" type="button" class="btn btn-default" onclick="resetBackupSettingsModal();" data-toggle="modal" data-target="#modalBackupSettings"><span class="fa fa-download" aria-hidden="true"></span> Sicherung erstellen</button>
+                                        <button id="btnShowRestoreSettingsModal" type="button" class="btn btn-default" onclick="resetRestoreSettingsModal();" data-toggle="modal" data-target="#modalRestoreSettings" style="margin-left: 6px;"><span class="fa fa-upload" aria-hidden="true"></span> Sicherung wiederherstellen</button>
+                                    </div>
+                                    <div class="col-sm-offset-3 col-sm-8 help-block-text">Bei eingeschaltetem Schreibschutz lassen sich Sicherungen erstellen, aber nicht wiederherstellen.</div>
+                                </div>
+                                </div>
                                 </div>
                                                     </div>
-                                                    </fieldset>
                                                 </div>
                                             </div>
 
-                                            <div class="settings-actions">
+                                            <div id="divSettingsActions" class="settings-actions">
                                                 <div class="pull-left">
                                                     <button id="btnSaveSettings" type="button" class="btn btn-primary" data-loading-text="Speichere..." onclick="saveDnsSettings(this);"><span class="glyphicon glyphicon-floppy-disk" aria-hidden="true"></span> Einstellungen speichern</button>
-                                                    <button id="btnSettingsFlushCache" type="button" class="btn btn-danger" data-loading-text="Leere..." onclick="flushDnsCache(this);" style="margin-left: 6px;">Cache leeren</button>
                                                 </div>
                                                 <div class="pull-right">
-                                                    <button id="btnSettingsLock" type="button" class="btn btn-default" onclick="toggleSettingsLock();" style="margin-right: 6px;"><span class="fa fa-lock" aria-hidden="true"></span> <span id="lblSettingsLock">Schreibschutz einschalten</span></button>
-                                                    <button id="btnShowBackupSettingsModal" type="button" class="btn btn-default" onclick="resetBackupSettingsModal();" data-toggle="modal" data-target="#modalBackupSettings">Sicherung erstellen</button>
-                                                    <button id="btnShowRestoreSettingsModal" type="button" class="btn btn-default" onclick="resetRestoreSettingsModal();" data-toggle="modal" data-target="#modalRestoreSettings" style="margin-left: 6px;">Sicherung wiederherstellen</button>
+                                                    <button id="btnSettingsLock" type="button" class="btn btn-default" onclick="toggleSettingsLock();"><span class="fa fa-lock" aria-hidden="true"></span> <span id="lblSettingsLock">Schreibschutz einschalten</span></button>
                                                 </div>
                                                 <div class="clearfix"></div>
                                             </div>
@@ -3660,6 +3796,30 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
         </form>
     </div>
 
+    <div id="modalDhcpEntry" class="modal fade" tabindex="-1" role="dialog">
+        <div class="modal-dialog modal-lg" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Schließen"><span aria-hidden="true">&times;</span></button>
+                    <h4 id="titleDhcpEntry" class="modal-title">DHCP-Eintrag</h4>
+                </div>
+                <div class="modal-body form-horizontal">
+                    <p id="lblDhcpEntryIntro" class="dhcp-entry-intro"></p>
+                    <div id="divDhcpEntryForm"></div>
+                    <div class="dhcp-entry-preview">
+                        <div class="dhcp-entry-preview-label">Ergebnis</div>
+                        <pre id="preDhcpEntryLine"></pre>
+                    </div>
+                    <div id="divDhcpEntryAlert"></div>
+                </div>
+                <div class="modal-footer">
+                    <button id="btnDhcpEntryApply" type="button" class="btn btn-primary" onclick="applyDhcpEntryEditor();">Übernehmen</button>
+                    <button type="button" class="btn btn-default" data-dismiss="modal">Abbrechen</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div id="modalChangePassword" class="modal fade" tabindex="-1" role="dialog">
         <form class="form-horizontal">
             <div class="modal-dialog" role="document">
@@ -3834,6 +3994,9 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
                                         Bernstein
                                     </label>
                                 </div>
+                                <div class="theme-section-label">Vorlagen</div>
+                                <div id="divThemePresetList"></div>
+                                <div class="theme-section-label">Eigene</div>
                                 <div id="divCustomThemeList"></div>
                                 <div style="padding-top: 6px;"><button id="btnNewCustomTheme" type="button" class="btn btn-default btn-sm" onclick="newCustomTheme();"><span class="fa fa-plus" aria-hidden="true"></span> Eigenes Farbschema erstellen</button></div>
                                 <div class="option-help" style="padding-left: 0;">Eigene Farbschemata werden in deinem Konto gespeichert und gelten auf jedem Gerät, an dem du dich anmeldest.</div>
@@ -3849,20 +4012,52 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
                                 </div>
                             </div>
                             <div class="form-group">
-                                <label for="optCustomThemeBase" class="col-sm-4 control-label">Grundlage</label>
+                                <label for="optCustomThemeBase" class="col-sm-4 control-label">Grundton</label>
                                 <div class="col-sm-7">
-                                    <select id="optCustomThemeBase" class="form-control" onchange="changeCustomThemeBase();">
+                                    <select id="optCustomThemeBase" class="form-control" onchange="changeCustomThemeSpec();">
                                         <option value="light">Hell</option>
                                         <option value="dark">Dunkel</option>
-                                        <option value="amber">Bernstein</option>
                                     </select>
                                 </div>
                             </div>
                             <div class="form-group">
-                                <label class="col-sm-4 control-label">Farben</label>
+                                <label for="txtCustomThemeAccent" class="col-sm-4 control-label">Akzentfarbe</label>
+                                <div class="col-sm-7">
+                                    <input type="color" id="txtCustomThemeAccent" class="theme-color-input" oninput="changeCustomThemeSpec();">
+                                    <div class="option-help" style="padding-left: 0;">Knöpfe, Links, aktive Elemente und die erste Diagrammfarbe. Text darauf wird automatisch schwarz oder weiß.</div>
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label for="txtCustomThemeTint" class="col-sm-4 control-label">Hintergrundton</label>
+                                <div class="col-sm-7">
+                                    <input type="color" id="txtCustomThemeTint" class="theme-color-input" oninput="changeCustomThemeSpec();">
+                                    <div class="option-help" style="padding-left: 0;">Färbt Hintergrund, Flächen und Text leicht ein. Die Helligkeit kommt aus dem Grundton.</div>
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label for="optCustomThemeSidebar" class="col-sm-4 control-label">Seitenleiste</label>
+                                <div class="col-sm-7">
+                                    <select id="optCustomThemeSidebar" class="form-control" onchange="changeCustomThemeSpec();">
+                                        <option value="dark">Dunkel</option>
+                                        <option value="light">Hell</option>
+                                        <option value="accent">Akzentfarbe</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label class="col-sm-4 control-label">Lesbarkeit</label>
                                 <div class="col-sm-8">
-                                    <div id="divCustomThemeColors" class="theme-color-grid"></div>
-                                    <div class="option-help" style="padding-left: 0;">Änderungen sind sofort als Vorschau zu sehen. Nicht angepasste Farben kommen aus der Grundlage.</div>
+                                    <div id="divCustomThemeContrast" class="theme-contrast-list"></div>
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <div class="col-sm-offset-4 col-sm-8">
+                                    <details id="detailsCustomThemeColors">
+                                        <summary>Feineinstellung einzelner Farben</summary>
+                                        <div id="divCustomThemeColors" class="theme-color-grid"></div>
+                                        <div class="option-help" style="padding-left: 0;">Alle Farben werden aus den Angaben oben abgeleitet. Hier geänderte Farben bleiben fest, auch wenn sich die Angaben oben ändern.</div>
+                                        <button type="button" class="btn btn-default btn-xs" onclick="resetCustomThemeOverrides();">Feineinstellungen zurücksetzen</button>
+                                    </details>
                                 </div>
                             </div>
                             <div class="form-group">
@@ -3926,7 +4121,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
                         <p>Das Paket auf dem Server herunterladen und mit apt installieren. Die Einstellungen bleiben erhalten, der Dienst startet danach automatisch neu.</p>
                         <pre id="preUpdateInstall" class="update-command"></pre>
                         <p><a id="lnkUpdateDownload" href="#" target="_blank" rel="noopener noreferrer"></a> <a id="lnkUpdateChecksums" href="#" target="_blank" rel="noopener noreferrer" style="margin-left: 12px;">SHA256SUMS</a></p>
-                        <p class="update-hint">Der Dienst läuft aus Sicherheitsgründen ohne Root-Rechte und installiert Updates deshalb nicht selbst. Vorher unter Einstellungen eine Sicherung erstellen und nach dem Update die Seite neu laden.</p>
+                        <p class="update-hint">Der Dienst läuft aus Sicherheitsgründen ohne Root-Rechte und installiert Updates deshalb nicht selbst. Vorher unter Einstellungen > Sicherung eine Sicherung erstellen. Nach dem Update lädt sich die Seite von selbst neu.</p>
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -4800,9 +4995,10 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
                         <div class="form-group">
                             <label for="txtClientProfileIdentifiers" class="col-sm-3 control-label">Kennungen</label>
                             <div class="col-sm-8">
-                                <textarea class="form-control" id="txtClientProfileIdentifiers" rows="4" placeholder="192.168.1.20&#10;192.168.2.0/24&#10;kinder"></textarea>
+                                <textarea class="form-control" id="txtClientProfileIdentifiers" rows="4" placeholder="192.168.1.20&#10;aa:bb:cc:dd:ee:ff&#10;192.168.2.0/24&#10;kinder"></textarea>
+                                <select id="optClientProfileDevice" class="form-control input-sm client-profile-device" aria-label="Bekanntes Gerät hinzufügen"></select>
                             </div>
-                            <div class="col-sm-offset-3 col-sm-8 help-block-text">Eine Kennung pro Zeile: IP-Adresse, Netz in CIDR-Schreibweise oder ClientID aus Kleinbuchstaben, Ziffern und Bindestrichen. Eine ClientID hat Vorrang vor der IP-Adresse, eine einzelne IP-Adresse vor einem Netz, ein kleineres Netz vor einem größeren.</div>
+                            <div class="col-sm-offset-3 col-sm-8 help-block-text">Eine Kennung pro Zeile: IP-Adresse, MAC-Adresse, Netz in CIDR-Schreibweise oder ClientID aus Kleinbuchstaben, Ziffern und Bindestrichen. Eine MAC-Adresse erfasst ein Gerät im selben Netz über IPv4 und IPv6, auch mit wechselnden Adressen; der Server kennt sie aus seinen DHCP-Leases und der Nachbartabelle des Systems, auch wenn ein anderer DHCP-Server die Adressen vergibt. Vorrang: ClientID, MAC-Adresse, einzelne IP-Adresse, kleineres vor größerem Netz.</div>
                         </div>
 
                         <div class="form-group">

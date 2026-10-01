@@ -1965,6 +1965,31 @@ namespace ZenitiumDns.Core
                 ClientProfileManager.WriteProfile(jsonWriter, profile);
             }
 
+            public void AssignClientIdentifier(HttpContext context)
+            {
+                User sessionUser = CheckBlockListModifyPermission(context);
+                string identifier = context.Request.GetQueryOrForm("identifier");
+                string profile = context.Request.QueryOrForm("profile") ?? "";
+                string previous;
+
+                try
+                {
+                    previous = _dnsWebService._dnsServer.ClientProfileManager.AssignIdentifier(identifier, profile);
+                }
+                catch (ArgumentException ex)
+                {
+                    throw new DnsWebServiceException(ex.Message);
+                }
+
+                _dnsWebService._log.Write(_dnsWebService.GetRemoteEndPoint(context), "[" + sessionUser.Username + "] Client identifier " + identifier + " was assigned to " + (profile == "" ? "no profile" : "the client profile " + profile) + (previous is null ? "." : " (before: " + previous + ")."));
+
+                Utf8JsonWriter jsonWriter = context.GetCurrentJsonWriter();
+                jsonWriter.WriteString("profile", profile);
+
+                if (previous is not null)
+                    jsonWriter.WriteString("previous", previous);
+            }
+
             public void DeleteClientProfile(HttpContext context)
             {
                 User sessionUser = CheckBlockListModifyPermission(context);

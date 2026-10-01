@@ -50,7 +50,7 @@ ZenitiumDNS ist ein Fork von [Technitium DNS Server](https://github.com/Techniti
 - Gegen Technitium DNS Server 15.5.1 auf derselben Maschine mit einem reproduzierbaren Benchmark-Kit gemessen, siehe [Performance](docs/Performance.de.md).
 - Deutlich weniger Speicherbedarf: 2,5 Millionen Domains aus Blocklisten belegen rund 80 statt 395 MB, die Statistik behält von jeder abgeschlossenen Minute nur die Top 1000, und ein Cache-Eintrag braucht etwa halb so viel Speicher. Unter Last ist rund 70 % weniger Speicher belegt. Eine optionale Speichergrenze verkleinert den Cache automatisch.
 - Blocklisten in der Syntax von AdGuard Home, Adblock und Pi-hole-Regex neben hosts-Dateien und reinen Domainlisten, mit Ausnahmen, Platzhaltern, regulären Ausdrücken und Modifikatoren sowie Blockierung über die IP-Adresse in der Antwort.
-- Clientprofile nach dem Vorbild von AdGuard Home: Geräte werden über IP-Adresse, Netz oder ClientID (DoH-Pfad, DoT/DoQ-Servername) erkannt und bekommen eigene Listen, lassen die Standardlisten aus oder werden gar nicht gefiltert.
+- Clientprofile nach dem Vorbild von AdGuard Home: Geräte werden über IP-Adresse, MAC-Adresse, Netz oder ClientID (DoH-Pfad, DoT/DoQ-Servername) erkannt und bekommen eigene Listen, lassen die Standardlisten aus oder werden gar nicht gefiltert.
 - DNS-Cookies ([RFC 7873](https://www.rfc-editor.org/rfc/rfc7873.html), [RFC 9018](https://www.rfc-editor.org/rfc/rfc9018.html)) gegenüber Clients und Nameservern; Clients mit gültigem Cookie lässt die Ratenbegrenzung durch.
 - Zusätzliche Fehler- und Sicherheitskorrekturen im Cache, in den Query-Log-Apps, der Weboberfläche und bei DNS-over-TCP/TLS.
 
@@ -97,9 +97,11 @@ ZenitiumDNS ist ein Fork von [Technitium DNS Server](https://github.com/Techniti
 - HTTP- und SOCKS5-Proxys für ausgehende Anfragen, etwa über das [Tor-Netzwerk](https://www.torproject.org/).
 
 ## DHCP
-- Neuer DHCPv4-Server mit einfachen Einstellungen für ein Netz und einer Expertenkonfiguration in der Syntax von dnsmasq (Bereiche, Reservierungen, Tags, Hersteller- und Benutzerklassen, Relays mit Option 82, PXE/BOOTP, gekapselte Herstelleroptionen, Rapid Commit).
-- Erkennt andere DHCP-Server im Netz und kann ihnen den Vortritt lassen (primär, nachrangig mit verzögerten Angeboten, Reserve).
-- Die Namen der Geräte werden im DNS beantwortet (A und PTR).
+- Neuer DHCP-Server mit einfachen Einstellungen für ein Netz und einer Expertenkonfiguration in der Syntax von dnsmasq (Bereiche, Reservierungen, Tags, Hersteller- und Benutzerklassen, Relays mit Option 82, PXE/BOOTP, gekapselte Herstelleroptionen, Rapid Commit).
+- DHCPv6 (RFC 8415) und Router Advertisements mit RDNSS und DNSSL: SLAAC, zustandslos oder zustandsbehaftet, Präfixe aus der Schnittstelle, die Anbieterwechseln folgen, Relays, Reservierungen nach DUID oder MAC-Adresse.
+- Erkennt andere DHCP-Server und IPv6-Router im Netz und kann ihnen den Vortritt lassen (primär, nachrangig mit verzögerten Angeboten, Reserve); warnt, wenn ein Router per IPv6 andere DNS-Server ankündigt.
+- Die Namen der Geräte werden im DNS beantwortet (A, AAAA und PTR).
+- Ein Gerät bleibt ein Gerät über IPv4, DHCPv6 und Clientprofile hinweg: Reservierungen nach MAC-Adresse oder Client-ID, Profile nach MAC-Adresse (auch wenn ein anderer DHCP-Server die Adressen vergibt), Gerätenamen im Abfrageprotokoll.
 
 ## Betrieb und Überwachung
 - Übersicht mit Anfragen pro Sekunde, Antwortzeiten (Median, 95./99. Perzentil), Cache-Trefferquote, Fehler- und Blockierquote, Verlauf und Top-Listen.

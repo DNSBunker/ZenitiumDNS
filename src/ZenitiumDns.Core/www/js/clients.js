@@ -26,6 +26,25 @@ $(function () {
 
     $("#txtClientProfileIdentifiers").on("input", updateClientProfileUsage);
 
+    $("#optClientProfileDevice").on("change", function () {
+        var value = $("#optClientProfileDevice").val();
+
+        if (value === "")
+            return;
+
+        var text = $("#txtClientProfileIdentifiers").val();
+        var lines = text.split(/[\r\n]+/);
+
+        if (lines.indexOf(value) < 0) {
+            if ((text.length > 0) && (text.charAt(text.length - 1) !== "\n"))
+                text += "\n";
+
+            $("#txtClientProfileIdentifiers").val(text + value + "\n").trigger("input");
+        }
+
+        $("#optClientProfileDevice").val("");
+    });
+
     $("#chkClientProfileBlockingEnabled").on("change", function () {
         var enabled = $("#chkClientProfileBlockingEnabled").prop("checked");
 
@@ -103,6 +122,7 @@ function refreshClientProfiles() {
         success: function (responseJSON) {
             clientProfilesData = responseJSON.response;
             renderClientProfiles();
+            loadKnownDevices(renderClientProfiles);
         },
         error: function () {
             div.html("");
@@ -151,8 +171,13 @@ function renderClientProfiles() {
         var profile = profiles[i];
         var identifiers = "";
 
-        for (var j = 0; j < profile.identifiers.length; j++)
-            identifiers += "<code>" + htmlEncode(profile.identifiers[j]) + "</code> ";
+        for (var j = 0; j < profile.identifiers.length; j++) {
+            var identifier = profile.identifiers[j];
+            var device = knownDevicesByMac[identifier] || knownDevicesByAddress[identifier];
+            var deviceName = device != null ? device.hostName : "";
+
+            identifiers += "<span class=\"client-profile-identifier\"><code>" + htmlEncode(identifier) + "</code>" + (deviceName !== "" ? " <span class=\"text-muted\">" + htmlEncode(deviceName) + "</span>" : "") + "</span> ";
+        }
 
         if (identifiers === "")
             identifiers = "<span class=\"text-muted\">" + htmlEncode(tr("keine")) + "</span>";
@@ -198,12 +223,39 @@ function showClientProfileModal(name) {
     $("#chkClientProfileBlockingEnabled").trigger("change");
 
     updateClientProfileUsage();
+    renderClientProfileDeviceOptions();
+    loadKnownDevices(renderClientProfileDeviceOptions);
 
     $("#modalClientProfile").modal("show");
 
     setTimeout(function () {
         $("#txtClientProfileName").trigger("focus");
     }, 500);
+}
+
+function renderClientProfileDeviceOptions() {
+    var select = $("#optClientProfileDevice");
+    var devices = knownDevices || [];
+
+    if (devices.length === 0) {
+        select.hide();
+        return;
+    }
+
+    var html = "<option value=\"\">" + htmlEncode(tr("Bekanntes Gerät hinzufügen …")) + "</option>";
+
+    for (var i = 0; i < devices.length; i++) {
+        var device = devices[i];
+        var value = device.mac != null ? device.mac : (device.ipv4.length > 0 ? device.ipv4[0] : (device.ipv6.length > 0 ? device.ipv6[0] : null));
+
+        if (value == null)
+            continue;
+
+        var label = (device.hostName !== "" ? device.hostName + " – " : "") + value + (device.mac != null && device.ipv4.length > 0 ? " (" + device.ipv4.join(", ") + ")" : "") + (device.profile != null ? " · " + tr("Profil {0}", device.profile) : "");
+        html += "<option value=\"" + htmlEncode(value) + "\">" + htmlEncode(label) + "</option>";
+    }
+
+    select.html(html).show();
 }
 
 function updateClientProfileUsage() {
@@ -219,7 +271,7 @@ function updateClientProfileUsage() {
     }
 
     if ((clientIds.length === 0) || (clientProfilesData == null)) {
-        div.html("<span class=\"text-muted\">" + htmlEncode(tr("Geräte werden über ihre IP-Adresse erkannt. Mit einer ClientID erscheinen hier die Adressen für verschlüsseltes DNS.")) + "</span>");
+        div.html("<span class=\"text-muted\">" + htmlEncode(tr("Geräte werden über IP- oder MAC-Adresse erkannt. Mit einer ClientID erscheinen hier die Adressen für verschlüsseltes DNS.")) + "</span>");
         return;
     }
 

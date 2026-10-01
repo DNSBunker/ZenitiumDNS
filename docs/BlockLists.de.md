@@ -2,7 +2,7 @@
 
 [English version](BlockLists.md)
 
-ZenitiumDNS liest Block- und Erlaubnislisten in mehreren Formaten und kann verschiedenen Geräten verschiedene Listen zuweisen. Listen werden unter Einstellungen > Blockierung eingetragen (eine URL pro Zeile) und automatisch heruntergeladen und aktualisiert. Lokale Dateien funktionieren mit `file:///pfad/zur/liste.txt`; beim Debian-Paket muss der Dienst sie lesen dürfen (siehe README.Debian).
+ZenitiumDNS liest Block- und Erlaubnislisten in mehreren Formaten und kann verschiedenen Geräten verschiedene Listen zuweisen. Listen werden unter Filter > Blocklisten eingetragen (eine URL pro Zeile) und automatisch heruntergeladen und aktualisiert. Lokale Dateien funktionieren mit `file:///pfad/zur/liste.txt`; beim Debian-Paket muss der Dienst sie lesen dürfen (siehe README.Debian).
 
 ## Listenformate
 
@@ -58,16 +58,18 @@ Clientprofile (Filter > Clients) legen fest, welche Listen für welche Geräte g
 
 Ein Profil enthält:
 
-- **Kennungen**, eine pro Zeile: eine IP-Adresse (`192.168.1.20`), ein Netz (`192.168.2.0/24`) oder eine ClientID (`kinder`, Kleinbuchstaben, Ziffern und Bindestriche, höchstens 63 Zeichen). Eine Kennung kann nur zu einem Profil gehören.
+- **Kennungen**, eine pro Zeile: eine IP-Adresse (`192.168.1.20`), eine MAC-Adresse (`aa:bb:cc:dd:ee:ff`), ein Netz (`192.168.2.0/24`) oder eine ClientID (`kinder`, Kleinbuchstaben, Ziffern und Bindestriche, höchstens 63 Zeichen). Eine Kennung kann nur zu einem Profil gehören. **Bekanntes Gerät hinzufügen** bietet die Geräte an, die der Server kennt (siehe unten).
 - **Blockierung aktiv**: ausgeschaltet werden alle Anfragen dieser Geräte ungefiltert beantwortet, auch manuell blockierte Domains.
 - **Standard-Blocklisten verwenden**: ausgeschaltet gelten nur die eigenen Listen des Profils; manuell blockierte und erlaubte Domains bleiben wirksam.
 - **Eigene Listen**: zusätzliche Block- oder Erlaubnislisten (`!` vor der URL) in denselben Formaten wie oben.
 
-Jede Liste wird nur einmal heruntergeladen und geladen, auch wenn mehrere Profile sie nutzen; jede Anfrage wird gegen die Listen ihres Profils geprüft. Der Listenstatus unter Einstellungen > Blockierung zeigt, welche Profile eine Liste nutzen, und kennzeichnet Listen, die nur von Profilen genutzt werden.
+Jede Liste wird nur einmal heruntergeladen und geladen, auch wenn mehrere Profile sie nutzen; jede Anfrage wird gegen die Listen ihres Profils geprüft. Der Listenstatus unter Filter > Blocklisten zeigt, welche Profile eine Liste nutzen, und kennzeichnet Listen, die nur von Profilen genutzt werden.
 
 ### Geräte erkennen
 
-Das Profil wird in dieser Reihenfolge gewählt: ClientID, genaue IP-Adresse, kleinstes Netz.
+Das Profil wird in dieser Reihenfolge gewählt: ClientID, MAC-Adresse, genaue IP-Adresse, kleinstes Netz.
+
+Eine MAC-Adresse erfasst ein Gerät im selben Netz über IPv4 und IPv6, auch mit wechselnden oder temporären IPv6-Adressen. Die MAC-Adresse zu einer Client-Adresse kennt der Server aus seinen eigenen DHCP-Leases (IPv4 und DHCPv6) und aus der Nachbartabelle des Systems (ARP und NDP); das funktioniert daher auch, wenn ein anderer DHCP-Server, etwa der Router, die Adressen vergibt. Geräte hinter einem Router in einem anderen Netz erscheinen nur mit der Adresse des Routers; für sie gelten IP-Adressen, Netze oder ClientIDs. Die erste Anfrage eines Geräts, das noch nicht in der Nachbartabelle steht, kann noch mit den Standardlisten beantwortet werden.
 
 Die ClientID kommt aus verschlüsseltem DNS:
 
@@ -86,5 +88,7 @@ Für DoT und DoQ muss das TLS-Zertifikat auch für `*.dns.example.com` gelten; d
 | `api/settings/clients/list` | keine; liefert die Profile, die Standardlisten, Servername und Ports, die für ClientIDs gebraucht werden, und ob das Zertifikat die Servernamen mit ClientID abdeckt (`hasTlsCertificate`, `tlsHostName`, `tlsWildcardDomains`) |
 | `api/settings/clients/set` | `name`, `identifiers` (zeilen- oder kommagetrennt), `blockingEnabled`, `useDefaultLists`, `blockListUrls` (zeilen- oder kommagetrennt), `originalName` zum Ändern eines vorhandenen Profils |
 | `api/settings/clients/delete` | `name` |
+| `api/settings/clients/assign` | `identifier` (IP-Adresse, MAC-Adresse, Netz oder ClientID), `profile` (leer entfernt die Kennung aus allen Profilen); verschiebt eine einzelne Kennung, genutzt von der Profilauswahl bei DHCP-Reservierungen und -Leases |
+| `api/dhcp/devices` | keine; die aus DHCP-Leases, Reservierungen und der Nachbartabelle bekannten Geräte mit MAC-Adresse, Name, Adressen, Client-ID, DUIDs und dem geltenden Profil (Berechtigung zum Lesen von DHCP oder Einstellungen) |
 
 Lesen erfordert die Berechtigung, Einstellungen anzusehen, Ändern die Berechtigung, sie zu ändern. Profile stehen in `clients.json` im Konfigurationsverzeichnis und sind zusammen mit den Blocklisten Teil der Sicherung.

@@ -47,7 +47,7 @@ The password is also stored in `/etc/zenitiumdns/admin.password`. Open `http://<
 | 853 | UDP | DNS-over-QUIC |
 | 443 | TCP, UDP | DNS-over-HTTPS with HTTP/2 and HTTP/3 |
 
-Only publish the ports of the services you enable. Certificates for the encrypted protocols belong into the configuration volume, for example `/etc/zenitiumdns/fullchain.pem` and `/etc/zenitiumdns/privkey.pem`, readable for uid 1053; enter them under Settings > Encrypted protocols relative to the configuration folder.
+Only publish the ports of the services you enable. Certificates for the encrypted protocols belong into the configuration volume, for example `/etc/zenitiumdns/fullchain.pem` and `/etc/zenitiumdns/privkey.pem`, readable for uid 1053; enter them under Settings > Services relative to the configuration folder.
 
 ## Volumes
 

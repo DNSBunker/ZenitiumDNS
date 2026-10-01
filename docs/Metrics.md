@@ -141,6 +141,14 @@ Only present while the DHCP server is switched on ([DHCP.md](DHCP.md)).
 | `zenitiumdns_dhcp_conflicts_total` | counter | | Addresses found in use by the ping check or reported by DHCPDECLINE. |
 | `zenitiumdns_dhcp_pool_addresses` | gauge | `state` | Addresses of the dynamic ranges: `total` and `used`. |
 | `zenitiumdns_dhcp_foreign_servers` | gauge | | Other DHCP servers seen in the network within the last 15 minutes (or three search intervals). |
+| `zenitiumdns_dhcp6_messages_total` | counter | `type` | Processed DHCPv6 messages: `solicit`, `advertise`, `request`, `reply`, `renew`, `rebind`, `release`, `decline`, `confirm`, `information_request`. |
+| `zenitiumdns_dhcp6_packets_total` | counter | `result` | DHCPv6 packets: `received`, `sent`, `malformed`, `ignored`, `relayed` (arrived through a relay). |
+| `zenitiumdns_dhcp6_no_addresses_total` | counter | | DHCPv6 requests that found no free address. |
+| `zenitiumdns_dhcp6_leases_active` | gauge | | Active DHCPv6 leases. |
+| `zenitiumdns_dhcp6_foreign_servers` | gauge | | Other DHCPv6 servers that devices addressed within the last 15 minutes. |
+| `zenitiumdns_ra_sent_total` | counter | | Router advertisements sent. |
+| `zenitiumdns_ra_solicitations_total` | counter | | Router solicitations received. |
+| `zenitiumdns_ra_foreign_routers` | gauge | `kind` | Other IPv6 routers seen within the last hour: `all`, and `rdnss` for those that announce DNS servers. |
 
 ### Process and .NET runtime
 

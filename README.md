@@ -50,7 +50,7 @@ ZenitiumDNS is a fork of [Technitium DNS Server](https://github.com/TechnitiumSo
 - Measured against Technitium DNS Server 15.5.1 on the same machine with a reproducible benchmark kit, see [Performance](docs/Performance.md).
 - Much lower memory use: 2.5 million block list domains take about 80 instead of 395 MB, the statistics keep only the top 1,000 entries of every completed minute, and a cache entry needs about half the memory. Under load, about 70 % less memory is in use. An optional memory limit trims the cache automatically.
 - Block lists in AdGuard Home, Adblock and Pi-hole regex syntax next to hosts files and plain domain lists, with exceptions, wildcards, regular expressions and modifiers, and blocking by the IP address in the answer.
-- Client profiles in the style of AdGuard Home: devices are recognized by IP address, network or ClientID (DoH path, DoT/DoQ server name) and get their own lists, skip the default lists or are not filtered at all.
+- Client profiles in the style of AdGuard Home: devices are recognized by IP address, MAC address, network or ClientID (DoH path, DoT/DoQ server name) and get their own lists, skip the default lists or are not filtered at all.
 - DNS cookies ([RFC 7873](https://www.rfc-editor.org/rfc/rfc7873.html), [RFC 9018](https://www.rfc-editor.org/rfc/rfc9018.html)) towards clients and name servers; clients with a valid cookie are let through by the rate limiting.
 - Additional bug and security fixes in the cache, the query log apps, the web interface and DNS-over-TCP/TLS.
 
@@ -97,9 +97,11 @@ ZenitiumDNS is a fork of [Technitium DNS Server](https://github.com/TechnitiumSo
 - HTTP and SOCKS5 proxies for outgoing queries, for example via the [Tor network](https://www.torproject.org/).
 
 ## DHCP
-- New DHCPv4 server with simple settings for one network and an expert configuration in the syntax of dnsmasq (ranges, reservations, tags, vendor and user classes, relays with option 82, PXE/BOOTP, encapsulated vendor options, rapid commit).
-- Detects other DHCP servers on the network and can give way to them (primary, secondary with delayed offers, standby).
-- Names of the devices are answered in DNS (A and PTR).
+- New DHCP server with simple settings for one network and an expert configuration in the syntax of dnsmasq (ranges, reservations, tags, vendor and user classes, relays with option 82, PXE/BOOTP, encapsulated vendor options, rapid commit).
+- DHCPv6 (RFC 8415) and router advertisements with RDNSS and DNSSL: SLAAC, stateless or stateful, prefixes taken from the interface and following provider changes, relays, reservations by DUID or MAC address.
+- Detects other DHCP servers and IPv6 routers on the network and can give way to them (primary, secondary with delayed offers, standby); warns when a router announces other DNS servers over IPv6.
+- Names of the devices are answered in DNS (A, AAAA and PTR).
+- A device is one device across IPv4, DHCPv6 and the client profiles: reservations by MAC address or client ID, profiles by MAC address (also when another DHCP server hands out the addresses), device names in the query log.
 
 ## Operation and monitoring
 - Dashboard with queries per second, response times (median, 95th/99th percentile), cache hit rate, failure and block rate, history and top lists.

@@ -18,11 +18,11 @@ Die Advanced Blocking App erweitert die Blockierung des DNS-Servers. Administrat
 
 > **Ist diese App aktiviert, arbeitet sie unabhängig von der eingebauten Blockierung des DNS-Servers.**
 >
-> Die Advanced Blocking App verwendet **nicht** die Blocklisten aus den Einstellungen des DNS-Servers unter Einstellungen > Blockierung. Alle Blocklisten, Allowlists und das Blockierverhalten werden in der eigenen Konfiguration der App festgelegt.
+> Die Advanced Blocking App verwendet **nicht** die Blocklisten aus den Einstellungen des DNS-Servers unter Filter > Blocklisten. Alle Blocklisten, Allowlists und das Blockierverhalten werden in der eigenen Konfiguration der App festgelegt.
 >
 > **Entscheide dich für einen Weg:**
 >
-> - **Variante A:** Die eingebaute Blockierung des DNS-Servers verwenden (Einstellungen > Blockierung) und diese App **nicht** aktivieren
+> - **Variante A:** Die eingebaute Blockierung des DNS-Servers verwenden (Filter > Blocklisten) und diese App **nicht** aktivieren
 > - **Variante B:** Diese App aktivieren und **alle** Blockierregeln hier festlegen, die eingebauten Blockiereinstellungen bleiben dann ungenutzt
 >
 > Beides gleichzeitig zu verwenden führt leicht zu Verwirrung, weil beide Anfragen unabhängig voneinander verarbeiten. Die Blockierung der App wird während der Anfrageverarbeitung ausgewertet und kann je nach Reihenfolge Vorrang haben.

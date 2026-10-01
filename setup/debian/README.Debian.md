@@ -69,7 +69,7 @@ The service runs as the user `zenitiumdns` and may not read `/etc/letsencrypt/li
 sudo certbot certonly --standalone -d dns.example.org --deploy-hook 'install -o zenitiumdns -g zenitiumdns -m 0644 "$RENEWED_LINEAGE/fullchain.pem" /etc/zenitiumdns/fullchain.pem; install -o zenitiumdns -g zenitiumdns -m 0600 "$RENEWED_LINEAGE/privkey.pem" /etc/zenitiumdns/privkey.pem'
 ```
 
-Then enter `fullchain.pem` as TLS certificate and `privkey.pem` as private key under Settings > Encrypted protocols, both relative to the configuration folder. The same applies to the web interface under Settings > Web interface. Encrypted keys must be in PKCS#8 format (`BEGIN ENCRYPTED PRIVATE KEY`).
+Then enter `fullchain.pem` as TLS certificate and `privkey.pem` as private key under Settings > Services, both relative to the configuration folder. The same applies to the web interface under Settings > Web interface. Encrypted keys must be in PKCS#8 format (`BEGIN ENCRYPTED PRIVATE KEY`).
 
 For Windows 11, iOS and macOS to switch to DoH, DoT or DoQ automatically via DDR, the certificate should also contain the IP addresses of the server. Let's Encrypt does not issue such certificates. The self-test shows whether the certificate contains IP addresses.
 
@@ -82,7 +82,7 @@ sudo install -d -o zenitiumdns -g zenitiumdns -m 0750 /etc/zenitiumdns/lists
 sudo install -o zenitiumdns -g zenitiumdns -m 0640 my-list.txt /etc/zenitiumdns/lists/
 ```
 
-Then add `file:///etc/zenitiumdns/lists/my-list.txt` under Settings > Blocking.
+Then add `file:///etc/zenitiumdns/lists/my-list.txt` under Filter > Block lists.
 
 ## Root zone and trust anchors
 

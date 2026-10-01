@@ -604,15 +604,15 @@ namespace ZenitiumDns.Core
                 if (enabledLists > 0)
                 {
                     if (!dnsServer.EnableBlocking)
-                        results.Add(new SelfTestResult(group, Lang.T("Blocklisten", "Block lists"), SelfTestStatus.Info, Lang.T("Die Blockierung ist ausgeschaltet. " + enabledLists + " Listen sind eingetragen, werden aber nicht angewendet.", "Blocking is turned off. " + enabledLists + " lists are configured but not applied."), "settings:Blocking"));
+                        results.Add(new SelfTestResult(group, Lang.T("Blocklisten", "Block lists"), SelfTestStatus.Info, Lang.T("Die Blockierung ist ausgeschaltet. " + enabledLists + " Listen sind eingetragen, werden aber nicht angewendet.", "Blocking is turned off. " + enabledLists + " lists are configured but not applied."), "filter-lists"));
                     else if ((rules == 0) && (failedLists.Count > 0))
-                        results.Add(new SelfTestResult(group, Lang.T("Blocklisten", "Block lists"), SelfTestStatus.Error, Lang.T("Keine Regel geladen. Nicht verfügbar: " + Names(failedLists) + ". Die Tabelle unter Einstellungen > Blockierung nennt die Fehler.", "No rule loaded. Not available: " + Names(failedLists) + ". The table under Settings > Blocking shows the errors."), "settings:Blocking"));
+                        results.Add(new SelfTestResult(group, Lang.T("Blocklisten", "Block lists"), SelfTestStatus.Error, Lang.T("Keine Regel geladen. Nicht verfügbar: " + Names(failedLists) + ". Die Tabelle unter Filter > Blocklisten nennt die Fehler.", "No rule loaded. Not available: " + Names(failedLists) + ". The table under Filter > Block lists shows the errors."), "filter-lists"));
                     else if (failedLists.Count > 0)
-                        results.Add(new SelfTestResult(group, Lang.T("Blocklisten", "Block lists"), SelfTestStatus.Warning, Lang.T(failedLists.Count + " von " + enabledLists + " Listen ließen sich nicht abrufen oder laden: " + Names(failedLists) + ". Für sie gilt der zuletzt geladene Stand oder gar keiner.", failedLists.Count + " of " + enabledLists + " lists could not be downloaded or loaded: " + Names(failedLists) + ". For them the last loaded version applies, or none."), "settings:Blocking"));
+                        results.Add(new SelfTestResult(group, Lang.T("Blocklisten", "Block lists"), SelfTestStatus.Warning, Lang.T(failedLists.Count + " von " + enabledLists + " Listen ließen sich nicht abrufen oder laden: " + Names(failedLists) + ". Für sie gilt der zuletzt geladene Stand oder gar keiner.", failedLists.Count + " of " + enabledLists + " lists could not be downloaded or loaded: " + Names(failedLists) + ". For them the last loaded version applies, or none."), "filter-lists"));
                     else if (staleLists.Count > 0)
-                        results.Add(new SelfTestResult(group, Lang.T("Blocklisten", "Block lists"), SelfTestStatus.Warning, Lang.T("Seit mehr als " + (intervalHours * 3) + " Stunden nicht geprüft: " + Names(staleLists) + ".", "Not checked for more than " + (intervalHours * 3) + " hours: " + Names(staleLists) + "."), "settings:Blocking"));
+                        results.Add(new SelfTestResult(group, Lang.T("Blocklisten", "Block lists"), SelfTestStatus.Warning, Lang.T("Seit mehr als " + (intervalHours * 3) + " Stunden nicht geprüft: " + Names(staleLists) + ".", "Not checked for more than " + (intervalHours * 3) + " hours: " + Names(staleLists) + "."), "filter-lists"));
                     else
-                        results.Add(new SelfTestResult(group, Lang.T("Blocklisten", "Block lists"), SelfTestStatus.Ok, Lang.T(enabledLists + " Listen mit " + FormatNumber(rules) + " Regeln geladen" + (blockListZoneManager.BlockListLastUpdatedOn == DateTime.MinValue ? "." : ", zuletzt aktualisiert am " + FormatDate(blockListZoneManager.BlockListLastUpdatedOn) + "."), enabledLists + " lists with " + FormatNumber(rules) + " rules loaded" + (blockListZoneManager.BlockListLastUpdatedOn == DateTime.MinValue ? "." : ", last updated on " + FormatDate(blockListZoneManager.BlockListLastUpdatedOn) + ".")), "settings:Blocking"));
+                        results.Add(new SelfTestResult(group, Lang.T("Blocklisten", "Block lists"), SelfTestStatus.Ok, Lang.T(enabledLists + " Listen mit " + FormatNumber(rules) + " Regeln geladen" + (blockListZoneManager.BlockListLastUpdatedOn == DateTime.MinValue ? "." : ", zuletzt aktualisiert am " + FormatDate(blockListZoneManager.BlockListLastUpdatedOn) + "."), enabledLists + " lists with " + FormatNumber(rules) + " rules loaded" + (blockListZoneManager.BlockListLastUpdatedOn == DateTime.MinValue ? "." : ", last updated on " + FormatDate(blockListZoneManager.BlockListLastUpdatedOn) + ".")), "filter-lists"));
                 }
 
                 int profiles = dnsServer.ClientProfileManager.Count;
@@ -774,7 +774,114 @@ namespace ZenitiumDns.Core
                         else
                             results.Add(new SelfTestResult(group, Lang.T("Adressbereich", "Address pool"), SelfTestStatus.Ok, usage, "dhcp"));
                     }
+
+                    CheckDhcp6(results, dhcpServer, settings, group);
                 }
+            }
+
+            private void CheckDhcp6(List<SelfTestResult> results, DhcpServer dhcpServer, DhcpSettings settings, string group)
+            {
+                DhcpConfiguration config = dhcpServer.Configuration;
+                bool configured = config.Ranges6.Count > 0;
+                List<RaInterfaceStatus> raStatus = dhcpServer.GetRaStatus();
+                HashSet<string> ownDns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                bool stateful = false;
+
+                foreach (Dhcp6RangeRule rule in config.Ranges6)
+                {
+                    if (rule.AssignsAddresses)
+                        stateful = true;
+                }
+
+                if (configured)
+                {
+                    List<string> failed = new List<string>();
+                    List<string> advertising = new List<string>();
+                    List<string> listening = new List<string>();
+
+                    foreach (DhcpListenerStatus listener in dhcpServer.GetListener6Status())
+                    {
+                        if (!string.IsNullOrEmpty(listener.Error))
+                            failed.Add(listener.Interface + " (" + listener.Error + ")");
+                        else if (listener.Listening)
+                            listening.Add(listener.Interface);
+                    }
+
+                    foreach (RaInterfaceStatus status in raStatus)
+                    {
+                        if (!status.Active)
+                        {
+                            failed.Add(status.Interface + " (" + status.Error + ")");
+                            continue;
+                        }
+
+                        List<string> prefixes = new List<string>();
+                        foreach (RaPrefix prefix in status.Plan.Prefixes)
+                            prefixes.Add(prefix.ToString());
+
+                        List<string> dns = new List<string>();
+                        foreach (IPAddress address in status.Plan.DnsServers)
+                        {
+                            dns.Add(address.ToString());
+                            ownDns.Add(address.ToString());
+                        }
+
+                        advertising.Add(Lang.T(status.Interface + " mit " + string.Join(", ", prefixes) + ", DNS " + string.Join(", ", dns), status.Interface + " with " + string.Join(", ", prefixes) + ", DNS " + string.Join(", ", dns)));
+                    }
+
+                    if (failed.Count > 0)
+                        results.Add(new SelfTestResult(group, "IPv6", SelfTestStatus.Warning, Lang.T("Router Advertisements oder DHCPv6 laufen nicht auf: " + string.Join("; ", failed) + ". Ohne globale oder ULA-Adresse auf der Schnittstelle gibt es keinen Präfix; ohne CAP_NET_RAW keine Router Advertisements.", "Router advertisements or DHCPv6 do not run on: " + string.Join("; ", failed) + ". Without a global or ULA address on the interface there is no prefix; without CAP_NET_RAW there are no router advertisements."), "dhcp"));
+                    else if (advertising.Count > 0)
+                        results.Add(new SelfTestResult(group, "IPv6", SelfTestStatus.Ok, Lang.T("Router Advertisements auf " + string.Join("; ", advertising) + ".", "Router advertisements on " + string.Join("; ", advertising) + "."), "dhcp"));
+                    else if (listening.Count > 0)
+                        results.Add(new SelfTestResult(group, "IPv6", SelfTestStatus.Info, Lang.T("DHCPv6 empfängt auf " + string.Join(", ", listening) + ", es werden aber keine Router Advertisements gesendet. Geräte fragen DHCPv6 nur, wenn ein Router das M- oder O-Flag setzt; dafür enable-ra eintragen oder einen SLAAC-Modus wählen.", "DHCPv6 receives on " + string.Join(", ", listening) + ", but no router advertisements are sent. Devices only ask DHCPv6 when a router sets the M or O flag; add enable-ra or choose a SLAAC mode."), "dhcp"));
+                }
+
+                DateTime recent = DateTime.UtcNow.AddHours(-1);
+                List<string> foreignDns = new List<string>();
+                List<string> foreignManaged = new List<string>();
+
+                foreach (RaForeignRouter router in dhcpServer.GetForeignRouters())
+                {
+                    if (router.LastSeen < recent)
+                        continue;
+
+                    List<string> other = new List<string>();
+                    foreach (string server in router.DnsServers)
+                    {
+                        if (!ownDns.Contains(server))
+                            other.Add(server);
+                    }
+
+                    if (other.Count > 0)
+                        foreignDns.Add(router.Address + " (" + router.Interface + "): " + string.Join(", ", other));
+
+                    if (router.Managed)
+                        foreignManaged.Add(router.Address + " (" + router.Interface + ")");
+                }
+
+                if (foreignDns.Count > 0)
+                {
+                    if (configured)
+                        results.Add(new SelfTestResult(group, Lang.T("IPv6-DNS anderer Router", "IPv6 DNS of other routers"), SelfTestStatus.Warning, Lang.T("Andere Router kündigen per IPv6 eigene DNS-Server an: " + string.Join("; ", foreignDns) + ". Geräte können diese statt ZenitiumDNS fragen, dann greifen Filter und Gerätenamen nicht. Im Router die DNS-Ankündigung (RDNSS) abschalten oder auf diesen Server setzen.", "Other routers announce their own DNS servers over IPv6: " + string.Join("; ", foreignDns) + ". Devices may ask them instead of ZenitiumDNS, and then filters and device names do not apply. Disable the DNS announcement (RDNSS) in the router or point it to this server."), "dhcp"));
+                    else
+                        results.Add(new SelfTestResult(group, Lang.T("IPv6-DNS anderer Router", "IPv6 DNS of other routers"), SelfTestStatus.Warning, Lang.T("Router kündigen per IPv6 eigene DNS-Server an: " + string.Join("; ", foreignDns) + ". Geräte mit IPv6 fragen diese womöglich statt ZenitiumDNS. Im Router die DNS-Ankündigung (RDNSS) abschalten oder auf diesen Server setzen, oder hier unter DHCP > IPv6 SLAAC einschalten, damit auch ZenitiumDNS angekündigt wird.", "Routers announce their own DNS servers over IPv6: " + string.Join("; ", foreignDns) + ". Devices with IPv6 may ask them instead of ZenitiumDNS. Disable the DNS announcement (RDNSS) in the router or point it to this server, or turn on SLAAC under DHCP > IPv6 so that ZenitiumDNS is announced as well."), "dhcp"));
+                }
+
+                if (configured && stateful && (foreignManaged.Count > 0))
+                    results.Add(new SelfTestResult(group, Lang.T("Andere DHCPv6-Server", "Other DHCPv6 servers"), SelfTestStatus.Info, Lang.T("Diese Router setzen das M-Flag und verteilen vermutlich selbst DHCPv6-Adressen: " + string.Join("; ", foreignManaged) + ". Geräte können dann Adressen von beiden Servern bekommen.", "These routers set the M flag and probably hand out DHCPv6 addresses themselves: " + string.Join("; ", foreignManaged) + ". Devices may then get addresses from both servers."), "dhcp"));
+
+                List<string> foreignServers = new List<string>();
+                DateTime serverWindow = DateTime.UtcNow.AddSeconds(-Math.Max(900, settings.RogueProbeIntervalSeconds * 3));
+
+                foreach (DhcpForeignServer server in dhcpServer.GetForeignServers6())
+                {
+                    if (server.LastSeen >= serverWindow)
+                        foreignServers.Add(server.ServerId + " (" + server.Interface + ")");
+                }
+
+                if (configured && (foreignServers.Count > 0))
+                    results.Add(new SelfTestResult(group, Lang.T("Andere DHCPv6-Server", "Other DHCPv6 servers"), settings.Priority == DhcpPriorityMode.Primary ? SelfTestStatus.Warning : SelfTestStatus.Info, Lang.T("Geräte haben einen anderen DHCPv6-Server angesprochen (DUID " + string.Join(", ", foreignServers) + ")." + (settings.Priority == DhcpPriorityMode.Standby ? " Wie eingestellt (Reserve) vergibt ZenitiumDNS solange keine neuen IPv6-Adressen." : " Den anderen Server abschalten oder die Priorität anpassen."), "Devices addressed another DHCPv6 server (DUID " + string.Join(", ", foreignServers) + ")." + (settings.Priority == DhcpPriorityMode.Standby ? " As configured (standby), ZenitiumDNS hands out no new IPv6 addresses meanwhile." : " Turn the other server off or adjust the priority.")), "dhcp"));
             }
 
             private void CheckWatchdog(List<SelfTestResult> results)

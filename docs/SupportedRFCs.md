@@ -90,6 +90,15 @@ The DHCP server of ZenitiumDNS ([DHCP.md](DHCP.md)):
 | RFC 3397 | Dynamic Host Configuration Protocol (DHCP) Domain Search Option |
 | RFC 3442 | The Classless Static Route Option for Dynamic Host Configuration Protocol (DHCP) version 4 |
 | RFC 3527 | Link Selection sub-option for the Relay Agent Information Option for DHCPv4 |
+| RFC 3646 | DNS Configuration options for Dynamic Host Configuration Protocol for IPv6 (DHCPv6) |
 | RFC 4039 | Rapid Commit Option for the Dynamic Host Configuration Protocol version 4 (DHCPv4) |
+| RFC 4075 | Simple Network Time Protocol (SNTP) Configuration Option for DHCPv6 |
 | RFC 4702 | The Dynamic Host Configuration Protocol (DHCP) Client Fully Qualified Domain Name (FQDN) Option |
+| RFC 4704 | The Dynamic Host Configuration Protocol for IPv6 (DHCPv6) Client Fully Qualified Domain Name (FQDN) Option |
+| RFC 4861 | Neighbor Discovery for IP version 6 (IPv6), router advertisements |
+| RFC 5908 | Network Time Protocol (NTP) Server Option for DHCPv6 |
+| RFC 6355 | Definition of the UUID-Based DHCPv6 Unique Identifier (DUID-UUID) |
 | RFC 6842 | Client Identifier Option in DHCP Server Replies |
+| RFC 6939 | Client Link-Layer Address Option in DHCPv6 |
+| RFC 8106 | IPv6 Router Advertisement Options for DNS Configuration |
+| RFC 8415 | Dynamic Host Configuration Protocol for IPv6 (DHCPv6) |

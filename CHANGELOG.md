@@ -2,6 +2,39 @@
 
 [Deutsche Version](CHANGELOG.de.md)
 
+## ZenitiumDNS 15.5.1 (package 15.5.1-13)
+Released: 1 October 2026
+
+### New
+- DHCPv6 and router advertisements, details in [docs/DHCP.md](docs/DHCP.md#ipv6):
+  - simple settings under DHCP > Settings > **IPv6**: SLAAC (recommended), SLAAC plus DHCPv6 addresses or DHCPv6 addresses only, the DHCPv6 range as host part (`::1000` to `::1fff`), and whether the server announces itself as default router (automatic: only if it forwards IPv6). The prefixes are taken from the global and ULA addresses of the interface and follow provider changes; prefixes that disappear are announced as invalid for two hours,
+  - DHCPv6 server according to RFC 8415 (SOLICIT/ADVERTISE, REQUEST, RENEW, REBIND, CONFIRM, RELEASE, DECLINE, INFORMATION-REQUEST, rapid commit, relays), one address per device from every prefix of the interface, reservations by DUID, by the MAC address in the DUID or from the relay (RFC 6939), client FQDN (RFC 4704), DNS, domain, NTP and SNTP options,
+  - router advertisements according to RFC 4861 with RDNSS and DNSSL (RFC 8106); the announced DNS server is the address of this server on the link, preferring a ULA and fixed addresses,
+  - expert configuration in dnsmasq syntax: IPv6 `dhcp-range` with `constructor:`, `ra-only`, `ra-stateless`, `slaac`, `off-link`, plus `enable-ra`, `ra-param`, `dhcp-option=option6:…` and `dhcp-host=…,[::20]`,
+  - reservations in the simple settings have an IPv6 column; "Reserve" also works for DHCPv6 leases,
+  - device names are answered with AAAA and `ip6.arpa` PTR records as well,
+  - while the DHCP server is on, it observes the router advertisements of other routers; the status, the self-test and the metrics show routers that announce other DNS servers over IPv6 (devices may then bypass ZenitiumDNS and its filters), routers with the M flag and other DHCPv6 servers,
+  - DHCPv6 leases (`dhcp6-leases.json`) are part of the backup; new metrics `zenitiumdns_dhcp6_*` and `zenitiumdns_ra_*`.
+- Devices are recognized across DHCP, DHCPv6 and the client profiles:
+  - client profiles accept MAC addresses as identifiers. A MAC address covers a device in the same network over IPv4 and IPv6, also with changing IPv6 addresses; the server finds it through its DHCP leases and the neighbor table of the system (ARP/NDP), so it also works when the router hands out the addresses. Order: ClientID, MAC address, IP address, network,
+  - DHCPv6 leases get the MAC address of the device from the DUID, the relay, the IPv4 lease with the same DUID (client identifier according to RFC 4361), an EUI-64 link-local address or the neighbor table, so reservations, names and profiles by MAC address also apply to DHCPv6,
+  - reservations can name a device by MAC address or by `id:` with client identifier or DUID and have a profile column; the lease list shows the client identifier or DUID and has a profile selection per lease,
+  - the query log shows the names of known devices under their address, and the client profile dialog offers the known devices (new API `api/dhcp/devices`, `api/settings/clients/assign`).
+- DHCP expert configuration with selection instead of text only: the **Expert** tab shows the lines as a list of readable entries with edit, move and remove; **New entry** opens forms for ranges (IPv4 and IPv6), reservations, DHCP and DHCPv6 options (picked from a list with descriptions, value fields matching the option type), device groups, rules, network boot, domains, router advertisement parameters and general switches. The text view remains; both show the same configuration. Faulty lines are marked in the list while editing.
+
+### Web interface
+- Block lists and the blocking behavior moved from the settings to the **Filter** tab ("Block lists" and "Blocking behavior"), next to blocked and allowed domains and the client profiles. Both tabs load the current settings when opened and have their own save button; write protection applies there as well.
+- Backups have their own section under Settings > **Backup**. The "Clear cache" button left the bar of every settings page; the cache is cleared under Resolver > Cache.
+- Settings: the watchdog has its own section under Server; the client timeout and the limit of concurrent resolutions moved from Network to Resolver, the QUIC limits to the DNS-over-QUIC settings; "Encrypted protocols" is called **Services** because it also covers unencrypted DNS (Do53); the two sections "Behind a reverse proxy" are named after what they apply to (DNS or web interface).
+- The cache and the lists of blocked and allowed domains show their records as a table (name, type, TTL, readable data, DNSSEC state); a click on a row shows all details, as before as JSON.
+- Color schemes: eight new presets (Ocean, Lavender, Sun, Slate, Forest, Nord, Berry, High contrast). Own color schemes are now created from a base (light or dark), an accent color, a background tint and the style of the sidebar; all other colors are derived from these, text on the accent automatically becomes black or white, and a readability check shows the contrast of text, links and sidebar. Single colors can still be fine-tuned. Every preset can be used as a starting point ("Customize"). Color schemes created with earlier versions keep looking the same until they are edited.
+- Query log: the frequent filters (domain, client, type, period) come first, the others under "More filters"; the selection of app and class path only appears when several query log sources are active, and without one there is a note with a link to the apps.
+
+### Fixed
+- DHCP: messages such as "the range overlaps the range in line 5" counted the lines of the simple settings and the expert configuration together; they now name the line of the own configuration or "the simple settings".
+- DHCP: an unexpected error while reading a single configuration line no longer stops the whole DHCP server from starting; the line is reported as an error instead.
+- DHCP settings: the help text of the interface still mentioned the removed cluster.
+
 ## ZenitiumDNS 15.5.1 (package 15.5.1-12)
 Released: 1 October 2026
 

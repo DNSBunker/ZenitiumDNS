@@ -19,6 +19,12 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 var dhcpSettingsData = null;
 var dhcpLeasesData = null;
+var dhcpLeases6Data = null;
+var dhcpLeaseProfiles = null;
+var knownDevices = null;
+var knownDevicesLoaded = 0;
+var knownDevicesByAddress = {};
+var knownDevicesByMac = {};
 
 $(function () {
     $("#dhcpTabListStatus a").on("shown.bs.tab", function () {
@@ -45,11 +51,114 @@ $(function () {
     $("#chkDhcpPingCheck").on("change", function () { $("#txtDhcpPingTimeout").prop("disabled", !$("#chkDhcpPingCheck").prop("checked")); });
     $("#chkDhcpRogueDetection").on("change", function () { $("#txtDhcpRogueInterval").prop("disabled", !$("#chkDhcpRogueDetection").prop("checked")); });
     $("#chkDhcpRegisterDns").on("change", function () { $("#txtDhcpDnsTtl").prop("disabled", !$("#chkDhcpRegisterDns").prop("checked")); });
-    $("#optDhcpInterface").on("change", updateDhcpGatewayHint);
+    $("#optDhcpInterface").on("change", function () {
+        updateDhcpGatewayHint();
+        updateDhcpIpv6State();
+    });
+    $("#optDhcpIpv6Mode").on("change", updateDhcpIpv6State);
 });
 
 function canModifyDhcp() {
     return (sessionData != null) && (sessionData.info.permissions.DhcpServer != null) && sessionData.info.permissions.DhcpServer.canModify;
+}
+
+function canViewDevices() {
+    if (sessionData == null)
+        return false;
+
+    var p = sessionData.info.permissions;
+    return ((p.DhcpServer != null) && p.DhcpServer.canView) || ((p.Settings != null) && p.Settings.canView);
+}
+
+function loadKnownDevices(callback, force) {
+    if (!force && (knownDevices != null) && (Date.now() - knownDevicesLoaded < 60000)) {
+        if (callback != null)
+            callback();
+
+        return;
+    }
+
+    if (!canViewDevices()) {
+        if (callback != null)
+            callback();
+
+        return;
+    }
+
+    HTTPRequest({
+        url: "api/dhcp/devices",
+        token: sessionData.token,
+        success: function (responseJSON) {
+            knownDevices = responseJSON.response.devices;
+            knownDevicesLoaded = Date.now();
+            knownDevicesByAddress = {};
+            knownDevicesByMac = {};
+
+            for (var i = 0; i < knownDevices.length; i++) {
+                var device = knownDevices[i];
+                var addresses = device.ipv4.concat(device.ipv6);
+
+                for (var j = 0; j < addresses.length; j++)
+                    knownDevicesByAddress[addresses[j]] = device;
+
+                if (device.mac != null)
+                    knownDevicesByMac[device.mac] = device;
+            }
+
+            if (callback != null)
+                callback();
+        },
+        error: function () {
+            if (callback != null)
+                callback();
+        },
+        invalidToken: function () {
+            showPageLogin();
+        },
+        objAlertPlaceholder: $("<div>")
+    });
+}
+
+function getKnownDeviceLabel(device) {
+    if (device == null)
+        return "";
+
+    if (device.hostName !== "")
+        return device.hostName;
+
+    return device.mac || "";
+}
+
+function assignClientProfile(identifier, profile, onDone) {
+    HTTPRequest({
+        url: "api/settings/clients/assign",
+        method: "POST",
+        data: "identifier=" + encodeURIComponent(identifier) + "&profile=" + encodeURIComponent(profile),
+        token: sessionData.token,
+        success: function () {
+            knownDevicesLoaded = 0;
+
+            if (onDone != null)
+                onDone(true);
+        },
+        error: function () {
+            if (onDone != null)
+                onDone(false);
+        },
+        invalidToken: function () {
+            showPageLogin();
+        }
+    });
+}
+
+function renderProfileSelect(cssClass, profiles, selected, dataAttributes) {
+    var html = "<select class=\"form-control input-sm " + cssClass + "\"" + (dataAttributes || "") + ">";
+    html += "<option value=\"\">" + htmlEncode(tr("Standard")) + "</option>";
+
+    for (var i = 0; i < profiles.length; i++)
+        html += "<option value=\"" + htmlEncode(profiles[i].name) + "\"" + (profiles[i].name === selected ? " selected" : "") + ">" + htmlEncode(profiles[i].name) + "</option>";
+
+    return html + "</select>";
 }
 
 function canDeleteDhcp() {
@@ -184,7 +293,128 @@ function renderDhcpStatus(status) {
         "<td>DECLINE <b>" + formatNumber(c.decline) + "</b></td><td>RELEASE <b>" + formatNumber(c.release) + "</b></td><td>INFORM <b>" + formatNumber(c.inform) + "</b></td><td>" + htmlEncode(tr("Konflikte")) + " <b>" + formatNumber(c.conflicts) + "</b></td><td>" + htmlEncode(tr("Pool erschöpft")) + " <b>" + formatNumber(c.poolExhausted) + "</b></td></tr><tr>" +
         "<td>" + htmlEncode(tr("Ignoriert")) + " <b>" + formatNumber(c.ignored) + "</b></td><td>" + htmlEncode(tr("Fehlerhaft")) + " <b>" + formatNumber(c.malformed) + "</b></td><td>" + htmlEncode(tr("Gedrosselt")) + " <b>" + formatNumber(c.rateLimited + c.busy) + "</b></td><td>" + htmlEncode(tr("Empfangen")) + " <b>" + formatNumber(c.received) + "</b></td><td>" + htmlEncode(tr("Gesendet")) + " <b>" + formatNumber(c.sent) + "</b></td></tr></tbody></table>";
 
+    html += renderDhcpIpv6Status(status.ipv6);
+
     div.html(html);
+}
+
+function describeRaFlags(managed, other) {
+    if (managed)
+        return tr("DHCPv6 mit Adressen (M)");
+
+    if (other)
+        return tr("DHCPv6 nur für Einstellungen (O)");
+
+    return tr("nur SLAAC");
+}
+
+function renderDhcpIpv6Status(ipv6) {
+    if (ipv6 == null)
+        return "";
+
+    var configured = (ipv6.listeners.length > 0) || (ipv6.routerAdvertisements.length > 0);
+
+    if (!configured && (ipv6.foreignRouters.length === 0) && (ipv6.foreignServers.length === 0))
+        return "";
+
+    var html = "<h4 class=\"dhcp-heading\">IPv6</h4>";
+    var i;
+
+    if (configured) {
+        html += "<div class=\"dhcp-status-cards\">";
+        html += "<div class=\"dhcp-card\"><div class=\"dhcp-card-title\">" + htmlEncode(tr("Aktive DHCPv6-Leases")) + "</div><div class=\"dhcp-card-value\">" + formatNumber(ipv6.activeLeases) + "</div></div>";
+        html += "<div class=\"dhcp-card\"><div class=\"dhcp-card-title\">" + htmlEncode(tr("Router Advertisements gesendet")) + "</div><div class=\"dhcp-card-value\">" + formatNumber(ipv6.counters.raSent) + "</div></div>";
+        html += "</div>";
+    }
+
+    if (ipv6.routerAdvertisements.length > 0) {
+        html += "<table class=\"table table-condensed\"><thead><tr><th>" + tr("Schnittstelle") + "</th><th>" + tr("Ankündigung") + "</th><th>" + tr("Präfixe") + "</th><th>" + tr("DNS-Server") + "</th><th>" + tr("Zuletzt gesendet") + "</th></tr></thead><tbody>";
+
+        for (i = 0; i < ipv6.routerAdvertisements.length; i++) {
+            var ra = ipv6.routerAdvertisements[i];
+
+            if (!ra.active) {
+                html += "<tr><td>" + htmlEncode(ra.interface) + "</td><td colspan=\"4\"><span class=\"label label-danger\">" + htmlEncode(tr("Fehler")) + "</span> " + htmlEncode(ra.error || "") + "</td></tr>";
+                continue;
+            }
+
+            var prefixes = [];
+            for (var p = 0; p < ra.prefixes.length; p++)
+                prefixes.push("<code>" + htmlEncode(ra.prefixes[p].prefix) + "</code>" + (ra.prefixes[p].slaac ? " <span class=\"text-muted\">SLAAC</span>" : ""));
+
+            var flags = htmlEncode(describeRaFlags(ra.managed, ra.other));
+
+            if (ra.routerLifetime > 0)
+                flags += "<br><span class=\"text-muted\">" + htmlEncode(tr("als Standard-Router")) + "</span>";
+
+            html += "<tr><td>" + htmlEncode(ra.interface) + "</td><td>" + flags + "</td><td>" + (prefixes.length === 0 ? "–" : prefixes.join("<br>")) + "</td><td>" + htmlEncode(ra.dnsServers.join(", ")) + (ra.searchDomains.length > 0 ? "<br><span class=\"text-muted\">" + htmlEncode(ra.searchDomains.join(", ")) + "</span>" : "") + "</td><td>" + formatDhcpTime(ra.lastSent) + "</td></tr>";
+        }
+
+        html += "</tbody></table>";
+    }
+
+    var listenerErrors = [];
+    for (i = 0; i < ipv6.listeners.length; i++) {
+        if (!ipv6.listeners[i].listening)
+            listenerErrors.push(ipv6.listeners[i].interface + ": " + (ipv6.listeners[i].error || ""));
+    }
+
+    if (listenerErrors.length > 0)
+        html += "<div class=\"alert alert-warning\"><b>" + htmlEncode(tr("DHCPv6 ist auf diesen Schnittstellen nicht aktiv:")) + "</b><ul><li>" + listenerErrors.map(htmlEncode).join("</li><li>") + "</li></ul></div>";
+
+    html += "<h5 class=\"dhcp-subheading\">" + htmlEncode(tr("Andere IPv6-Router im Netz")) + "</h5>";
+
+    if (ipv6.foreignRouters.length === 0) {
+        html += "<p class=\"text-muted\">" + htmlEncode(tr("Keine Router Advertisements anderer Geräte empfangen.")) + "</p>";
+    }
+    else {
+        var ownDns = {};
+        for (i = 0; i < ipv6.routerAdvertisements.length; i++) {
+            var own = ipv6.routerAdvertisements[i].dnsServers || [];
+            for (var d = 0; d < own.length; d++)
+                ownDns[own[d]] = true;
+        }
+
+        var foreignDns = false;
+
+        html += "<table class=\"table table-condensed\"><thead><tr><th>" + tr("Router") + "</th><th>" + tr("Schnittstelle") + "</th><th>" + tr("Ankündigung") + "</th><th>" + tr("Präfixe") + "</th><th>" + tr("DNS-Server") + "</th><th>" + tr("Zuletzt gesehen") + "</th></tr></thead><tbody>";
+
+        for (i = 0; i < ipv6.foreignRouters.length; i++) {
+            var router = ipv6.foreignRouters[i];
+
+            for (var k = 0; k < router.dnsServers.length; k++) {
+                if (!ownDns[router.dnsServers[k]])
+                    foreignDns = true;
+            }
+
+            html += "<tr><td><code>" + htmlEncode(router.address) + "</code></td><td>" + htmlEncode(router.interface) + "</td><td>" + htmlEncode(describeRaFlags(router.managed, router.other)) + (router.routerLifetime > 0 ? "<br><span class=\"text-muted\">" + htmlEncode(tr("Standard-Router")) + "</span>" : "") + "</td><td>" + (router.prefixes.length === 0 ? "–" : router.prefixes.map(htmlEncode).join("<br>")) + "</td><td>" + (router.dnsServers.length === 0 ? "–" : router.dnsServers.map(htmlEncode).join("<br>")) + "</td><td>" + formatDhcpTime(router.lastSeen) + "</td></tr>";
+        }
+
+        html += "</tbody></table>";
+
+        if (foreignDns)
+            html += "<div class=\"alert alert-warning\">" + htmlEncode(tr("Ein anderer Router kündigt eigene DNS-Server an. Geräte können diese statt ZenitiumDNS fragen, dann greifen Filter und Gerätenamen von hier nicht. Abhilfe: im Router die DNS-Ankündigung (RDNSS) abschalten oder auf die Adresse dieses Servers setzen.")) + "</div>";
+    }
+
+    if (ipv6.foreignServers.length > 0) {
+        html += "<h5 class=\"dhcp-subheading\">" + htmlEncode(tr("Andere DHCPv6-Server")) + "</h5>";
+        html += "<table class=\"table table-condensed\"><thead><tr><th>" + tr("Server-DUID") + "</th><th>" + tr("Schnittstelle") + "</th><th>" + tr("Zuletzt gesehen") + "</th></tr></thead><tbody>";
+
+        for (i = 0; i < ipv6.foreignServers.length; i++)
+            html += "<tr><td><code>" + htmlEncode(ipv6.foreignServers[i].serverId) + "</code></td><td>" + htmlEncode(ipv6.foreignServers[i].interface) + "</td><td>" + formatDhcpTime(ipv6.foreignServers[i].lastSeen) + "</td></tr>";
+
+        html += "</tbody></table>";
+    }
+
+    if (configured) {
+        var c = ipv6.counters;
+        html += "<table class=\"table table-condensed dhcp-counters\"><tbody><tr>" +
+            "<td>SOLICIT <b>" + formatNumber(c.solicit) + "</b></td><td>ADVERTISE <b>" + formatNumber(c.advertise) + "</b></td><td>REQUEST <b>" + formatNumber(c.request) + "</b></td><td>REPLY <b>" + formatNumber(c.reply) + "</b></td><td>RENEW <b>" + formatNumber(c.renew) + "</b></td></tr><tr>" +
+            "<td>REBIND <b>" + formatNumber(c.rebind) + "</b></td><td>RELEASE <b>" + formatNumber(c.release) + "</b></td><td>DECLINE <b>" + formatNumber(c.decline) + "</b></td><td>CONFIRM <b>" + formatNumber(c.confirm) + "</b></td><td>INFORMATION-REQUEST <b>" + formatNumber(c.informationRequest) + "</b></td></tr><tr>" +
+            "<td>" + htmlEncode(tr("Router Solicitations")) + " <b>" + formatNumber(c.routerSolicitations) + "</b></td><td>" + htmlEncode(tr("Keine Adresse frei")) + " <b>" + formatNumber(c.noAddresses) + "</b></td><td>" + htmlEncode(tr("Über Relay")) + " <b>" + formatNumber(c.relayed) + "</b></td><td>" + htmlEncode(tr("Ignoriert")) + " <b>" + formatNumber(c.ignored) + "</b></td><td>" + htmlEncode(tr("Fehlerhaft")) + " <b>" + formatNumber(c.malformed) + "</b></td></tr></tbody></table>";
+    }
+
+    return html;
 }
 
 function probeDhcp(element) {
@@ -234,6 +464,8 @@ function refreshDhcpLeases() {
         token: sessionData.token,
         success: function (responseJSON) {
             dhcpLeasesData = responseJSON.response.leases;
+            dhcpLeases6Data = responseJSON.response.leases6 || [];
+            dhcpLeaseProfiles = { profiles: responseJSON.response.profiles || [], canAssign: responseJSON.response.canAssignProfiles === true };
             renderDhcpLeases();
         },
         error: function () {
@@ -265,6 +497,65 @@ function getDhcpLeaseStateLabel(lease) {
     }
 }
 
+function getDhcpLeaseActions(lease, canReserve) {
+    var actions = "";
+
+    if (canReserve && (lease.state !== "declined") && !lease.reserved && canModifyDhcp())
+        actions += "<button type=\"button\" class=\"btn btn-default btn-xs\" onclick=\"reserveDhcpLease(" + jsArg(lease.address) + ", this);\">" + htmlEncode(tr("Reservieren")) + "</button> ";
+
+    if (canDeleteDhcp())
+        actions += "<button type=\"button\" class=\"btn btn-danger btn-xs\" onclick=\"deleteDhcpLease(" + jsArg(lease.address) + ", this);\">" + htmlEncode(tr("Löschen")) + "</button>";
+
+    return actions;
+}
+
+function getDhcpLeaseProfileCell(lease) {
+    var mac = lease.hardwareAddress;
+    var direct = (lease.profile != null) && (lease.profileBy === mac);
+    var indirect = (lease.profile != null) && !direct ? htmlEncode(tr("{0} über {1}", lease.profile, lease.profileBy)) : "";
+
+    if (!dhcpLeaseProfiles.canAssign || (mac === "")) {
+        if (lease.profile == null)
+            return "<span class=\"text-muted\">" + htmlEncode(tr("Standard")) + "</span>";
+
+        return direct ? htmlEncode(lease.profile) : indirect;
+    }
+
+    return renderProfileSelect("dhcp-lease-profile", dhcpLeaseProfiles.profiles, direct ? lease.profile : "", " data-mac=\"" + htmlEncode(mac) + "\" onchange=\"changeDhcpLeaseProfile(this);\"") + (indirect !== "" ? "<div class=\"dhcp-profile-note\">" + indirect + "</div>" : "");
+}
+
+function changeDhcpLeaseProfile(select) {
+    var element = $(select).prop("disabled", true);
+    var mac = element.attr("data-mac");
+    var profile = element.val();
+
+    assignClientProfile(mac, profile, function (ok) {
+        refreshDhcpLeases();
+
+        if (ok)
+            showAlert("success", tr("Profil zugewiesen"), profile === "" ? tr("{0} nutzt jetzt die Standardeinstellungen.", mac) : tr("{0} nutzt jetzt das Profil {1}, über IPv4 und IPv6.", mac, profile));
+    });
+}
+
+function getDhcpLeaseClientIdNote(lease) {
+    if (lease.duid != null)
+        return "<div class=\"dhcp-lease-id\" title=\"" + htmlEncode(tr("Client-ID nach RFC 4361 mit derselben DUID wie bei DHCPv6")) + "\">DUID " + htmlEncode(lease.duid) + "</div>";
+
+    if ((lease.clientId != null) && (lease.clientId !== "01:" + lease.hardwareAddress))
+        return "<div class=\"dhcp-lease-id\">" + htmlEncode(tr("Client-ID {0}", lease.clientId)) + "</div>";
+
+    return "";
+}
+
+function getDhcpLeaseName(lease) {
+    var name = htmlEncode(lease.hostName);
+
+    if ((lease.clientHostName !== "") && (lease.clientHostName !== lease.hostName))
+        name += (name === "" ? "" : " ") + "<span class=\"text-muted\">(" + htmlEncode(lease.clientHostName) + ")</span>";
+
+    return name;
+}
+
 function renderDhcpLeases() {
     var div = $("#divDhcpLeases");
 
@@ -273,45 +564,68 @@ function renderDhcpLeases() {
 
     var filter = $("#txtDhcpLeaseFilter").val().trim().toLowerCase();
     var html = "";
+    var html6 = "";
     var shown = 0;
+    var shown6 = 0;
+    var i;
+    var lease;
+    var profileColumn = (dhcpLeaseProfiles != null) && (dhcpLeaseProfiles.profiles.length > 0);
+    var profileHeader = profileColumn ? "<th>" + tr("Profil") + "</th>" : "";
 
-    for (var i = 0; i < dhcpLeasesData.length; i++) {
-        var lease = dhcpLeasesData[i];
+    for (i = 0; i < dhcpLeasesData.length; i++) {
+        lease = dhcpLeasesData[i];
 
         if ((filter !== "") && ((lease.address + " " + lease.hardwareAddress + " " + lease.hostName + " " + lease.clientHostName + " " + lease.vendorClass).toLowerCase().indexOf(filter) < 0))
             continue;
 
         shown++;
 
-        var actions = "";
-
-        if ((lease.state !== "declined") && !lease.reserved && canModifyDhcp())
-            actions += "<button type=\"button\" class=\"btn btn-default btn-xs\" onclick=\"reserveDhcpLease(" + jsArg(lease.address) + ", this);\">" + htmlEncode(tr("Reservieren")) + "</button> ";
-
-        if (canDeleteDhcp())
-            actions += "<button type=\"button\" class=\"btn btn-danger btn-xs\" onclick=\"deleteDhcpLease(" + jsArg(lease.address) + ", this);\">" + htmlEncode(tr("Löschen")) + "</button>";
-
-        var name = lease.hostName;
-        if ((lease.clientHostName !== "") && (lease.clientHostName !== lease.hostName))
-            name += (name === "" ? "" : " ") + "<span class=\"text-muted\">(" + htmlEncode(lease.clientHostName) + ")</span>";
-        else
-            name = htmlEncode(name);
-
         html += "<tr><td><code>" + htmlEncode(lease.address) + "</code>" + (lease.reserved ? " <span class=\"label label-info\">" + htmlEncode(tr("reserviert")) + "</span>" : "") + "</td>" +
-            "<td><code>" + htmlEncode(lease.hardwareAddress) + "</code></td>" +
-            "<td>" + name + "</td>" +
+            "<td><code>" + htmlEncode(lease.hardwareAddress) + "</code>" + getDhcpLeaseClientIdNote(lease) + "</td>" +
+            "<td>" + getDhcpLeaseName(lease) + "</td>" +
             "<td class=\"dhcp-vendor\">" + htmlEncode(lease.vendorClass) + "</td>" +
+            (profileColumn ? "<td class=\"dhcp-profile-cell\">" + getDhcpLeaseProfileCell(lease) + "</td>" : "") +
             "<td>" + getDhcpLeaseStateLabel(lease) + "</td>" +
             "<td>" + formatDhcpTime(lease.expires) + "</td>" +
-            "<td class=\"text-right\" style=\"white-space: nowrap;\">" + actions + "</td></tr>";
+            "<td class=\"text-right\" style=\"white-space: nowrap;\">" + getDhcpLeaseActions(lease, true) + "</td></tr>";
     }
 
-    if (shown === 0) {
-        div.html("<p class=\"text-muted\">" + htmlEncode(dhcpLeasesData.length === 0 ? tr("Noch keine Leases vergeben.") : tr("Kein Lease passt zur Suche.")) + "</p>");
+    var leases6 = dhcpLeases6Data || [];
+
+    for (i = 0; i < leases6.length; i++) {
+        lease = leases6[i];
+
+        if ((filter !== "") && ((lease.address + " " + lease.hardwareAddress + " " + lease.duid + " " + lease.hostName + " " + lease.clientHostName).toLowerCase().indexOf(filter) < 0))
+            continue;
+
+        shown6++;
+
+        var client = lease.hardwareAddress !== "" ? "<code>" + htmlEncode(lease.hardwareAddress) + "</code>" : "<code class=\"dhcp-duid\" title=\"DUID\">" + htmlEncode(lease.duid) + "</code>";
+
+        html6 += "<tr><td><code>" + htmlEncode(lease.address) + "</code>" + (lease.reserved ? " <span class=\"label label-info\">" + htmlEncode(tr("reserviert")) + "</span>" : "") + "</td>" +
+            "<td>" + client + "</td>" +
+            "<td>" + getDhcpLeaseName(lease) + "</td>" +
+            "<td>" + htmlEncode(lease.interface) + "</td>" +
+            (profileColumn ? "<td class=\"dhcp-profile-cell\">" + getDhcpLeaseProfileCell(lease) + "</td>" : "") +
+            "<td>" + getDhcpLeaseStateLabel(lease) + "</td>" +
+            "<td>" + formatDhcpTime(lease.expires) + "</td>" +
+            "<td class=\"text-right\" style=\"white-space: nowrap;\">" + getDhcpLeaseActions(lease, lease.hardwareAddress !== "") + "</td></tr>";
+    }
+
+    if ((shown === 0) && (shown6 === 0)) {
+        div.html("<p class=\"text-muted\">" + htmlEncode((dhcpLeasesData.length === 0) && (leases6.length === 0) ? tr("Noch keine Leases vergeben.") : tr("Kein Lease passt zur Suche.")) + "</p>");
         return;
     }
 
-    div.html("<table class=\"table table-condensed dhcp-leases-table\"><thead><tr><th>" + tr("IP-Adresse") + "</th><th>" + tr("MAC-Adresse") + "</th><th>" + tr("Name") + "</th><th>" + tr("Hersteller") + "</th><th>" + tr("Status") + "</th><th>" + tr("Gültig bis") + "</th><th></th></tr></thead><tbody>" + html + "</tbody></table>");
+    var output = "";
+
+    if (shown > 0)
+        output += "<table class=\"table table-condensed dhcp-leases-table\"><thead><tr><th>" + tr("IP-Adresse") + "</th><th>" + tr("MAC-Adresse") + "</th><th>" + tr("Name") + "</th><th>" + tr("Hersteller") + "</th>" + profileHeader + "<th>" + tr("Status") + "</th><th>" + tr("Gültig bis") + "</th><th></th></tr></thead><tbody>" + html + "</tbody></table>";
+
+    if (shown6 > 0)
+        output += "<h4 class=\"dhcp-heading\">" + htmlEncode(tr("DHCPv6")) + "</h4><table class=\"table table-condensed dhcp-leases-table\"><thead><tr><th>" + tr("IPv6-Adresse") + "</th><th>" + tr("MAC-Adresse oder DUID") + "</th><th>" + tr("Name") + "</th><th>" + tr("Schnittstelle") + "</th>" + profileHeader + "<th>" + tr("Status") + "</th><th>" + tr("Gültig bis") + "</th><th></th></tr></thead><tbody>" + html6 + "</tbody></table>";
+
+    div.html(output);
 }
 
 function deleteDhcpLease(address, element) {
@@ -387,7 +701,7 @@ function loadDhcpSettings() {
 
     for (var i = 0; i < data.interfaces.length; i++) {
         var iface = data.interfaces[i];
-        options += "<option value=\"" + htmlEncode(iface.name) + "\">" + htmlEncode(iface.name + " (" + iface.addresses.join(", ") + ")") + "</option>";
+        options += "<option value=\"" + htmlEncode(iface.name) + "\">" + htmlEncode(iface.name + " (" + (iface.addresses.length > 0 ? iface.addresses.join(", ") : tr("nur IPv6")) + ")") + "</option>";
 
         if (iface.name === settings.interface)
             foundInterface = true;
@@ -408,10 +722,16 @@ function loadDhcpSettings() {
     $("#txtDhcpDomain").val(settings.domain);
     $("#txtDhcpLeaseTime").val(settings.leaseTime);
     $("#chkDhcpAuthoritative").prop("checked", settings.authoritative);
+    $("#optDhcpIpv6Mode").val(settings.ipv6Mode || "off");
+    $("#txtDhcpIpv6RangeStart").val(settings.ipv6RangeStart);
+    $("#txtDhcpIpv6RangeEnd").val(settings.ipv6RangeEnd);
+    $("#optDhcpIpv6Router").val(settings.ipv6Router || "auto");
 
     $("#tbodyDhcpReservations").html("");
+    $(".dhcp-res-profile-col").toggle(getDhcpReservationProfiles().length > 0);
+
     for (var j = 0; j < settings.reservations.length; j++)
-        addDhcpReservationRow(settings.reservations[j].mac, settings.reservations[j].address, settings.reservations[j].hostName);
+        addDhcpReservationRow(settings.reservations[j].mac, settings.reservations[j].address, settings.reservations[j].address6 || "", settings.reservations[j].hostName, findDhcpReservationProfile(settings.reservations[j]));
 
     $("input[name=rdoDhcpPriority][value=" + settings.priority + "]").prop("checked", true);
     $("#txtDhcpResponseDelay").val(settings.responseDelayMs);
@@ -426,6 +746,7 @@ function loadDhcpSettings() {
     $("#txtDhcpExpert").val(settings.expert);
     $("#preDhcpGenerated").text(data.generated === "" ? tr("(keine – einfache Einstellungen ausgeschaltet oder leer)") : data.generated);
     $("#divDhcpExpertResult").html("");
+    onDhcpExpertLoaded();
 
     var names = "";
     for (var k = 0; k < data.options.length; k++) {
@@ -443,6 +764,7 @@ function loadDhcpSettings() {
     updateDhcpSimpleState();
     updateDhcpPriorityState();
     updateDhcpGatewayHint();
+    updateDhcpIpv6State();
 
     if (modify) {
         $("#txtDhcpPingTimeout").prop("disabled", !settings.pingCheck);
@@ -464,6 +786,70 @@ function updateDhcpPriorityState() {
     $(".dhcp-priority-delayed").toggle($("input[name=rdoDhcpPriority]:checked").val() === "delayed");
 }
 
+function updateDhcpIpv6State() {
+    var mode = $("#optDhcpIpv6Mode").val() || "off";
+    var help;
+
+    switch (mode) {
+        case "slaac":
+            help = tr("Geräte bilden ihre Adressen selbst und erfahren den DNS-Server per Router Advertisement (RDNSS) und DHCPv6 ohne Adressvergabe. Funktioniert mit allen Systemen, auch mit Android.");
+            break;
+
+        case "both":
+            help = tr("Wie SLAAC, zusätzlich vergibt DHCPv6 Adressen aus dem Bereich, die unter dem Gerätenamen im DNS stehen. Android nutzt nur die SLAAC-Adresse.");
+            break;
+
+        case "stateful":
+            help = tr("Nur DHCPv6 vergibt Adressen. Android unterstützt das nicht und bekommt von hier keine IPv6-Adresse, nur den DNS-Server.");
+            break;
+
+        default:
+            help = tr("Der Server sendet keine Router Advertisements und beantwortet kein DHCPv6.");
+            break;
+    }
+
+    $("#lblDhcpIpv6ModeHelp").text(help);
+    $(".dhcp-ipv6-on").toggle(mode !== "off");
+    $(".dhcp-ipv6-range").toggle((mode === "both") || (mode === "stateful"));
+
+    var info = "";
+
+    if ((mode !== "off") && (dhcpSettingsData != null)) {
+        var selected = $("#optDhcpInterface").val() || "";
+
+        if (selected === "") {
+            info = "<p class=\"text-warning\">" + htmlEncode(tr("Für IPv6 oben eine Schnittstelle wählen.")) + "</p>";
+        }
+        else {
+            var found = null;
+            var list = dhcpSettingsData.interfaces6 || [];
+
+            for (var i = 0; i < list.length; i++) {
+                if (list[i].name === selected) {
+                    found = list[i];
+                    break;
+                }
+            }
+
+            if ((found == null) || (found.prefixes.length === 0)) {
+                info = "<p class=\"text-warning\">" + htmlEncode(tr("Die Schnittstelle {0} hat keine globale oder ULA-IPv6-Adresse. Ohne Präfix sendet der Server dort keine Router Advertisements; sobald eine Adresse da ist, startet er von selbst.", selected)) + "</p>";
+            }
+            else {
+                var prefixes = [];
+                for (var j = 0; j < found.prefixes.length; j++)
+                    prefixes.push("<code>" + htmlEncode(found.prefixes[j]) + "</code>");
+
+                info = "<p class=\"help-block-text\">" + htmlEncode(tr("Erkannte Präfixe:")) + " " + prefixes.join(", ") + "</p>";
+
+                if (found.forwarding)
+                    info += "<p class=\"help-block-text\">" + htmlEncode(tr("Dieser Rechner leitet IPv6 weiter; bei Automatisch kündigt er sich als Standard-Router an.")) + "</p>";
+            }
+        }
+    }
+
+    $("#divDhcpIpv6Prefixes").html(info);
+}
+
 function updateDhcpGatewayHint() {
     var hint = "";
 
@@ -483,10 +869,45 @@ function updateDhcpGatewayHint() {
     $("#lblDhcpGatewayHint").text(hint);
 }
 
-function addDhcpReservationRow(mac, address, hostName) {
+function getDhcpReservationProfiles() {
+    return (dhcpSettingsData != null) && (dhcpSettingsData.profiles != null) && dhcpSettingsData.canAssignProfiles ? dhcpSettingsData.profiles : [];
+}
+
+function normalizeDhcpMac(mac) {
+    var value = (mac || "").trim().toLowerCase().replace(/-/g, ":");
+    return /^([0-9a-f]{2}:){5}[0-9a-f]{2}$/.test(value) ? value : null;
+}
+
+function getDhcpReservationIdentifier(mac, address) {
+    var normalized = normalizeDhcpMac(mac);
+
+    if (normalized != null)
+        return normalized;
+
+    return (address || "").trim() !== "" ? address.trim() : null;
+}
+
+function findDhcpReservationProfile(reservation) {
+    var identifier = getDhcpReservationIdentifier(reservation.mac, reservation.address);
+    var profiles = getDhcpReservationProfiles();
+
+    if (identifier == null)
+        return "";
+
+    for (var i = 0; i < profiles.length; i++) {
+        if (profiles[i].identifiers.indexOf(identifier) >= 0)
+            return profiles[i].name;
+    }
+
+    return "";
+}
+
+function addDhcpReservationRow(mac, address, address6, hostName, profile) {
     var row = "<tr><td><input type=\"text\" class=\"form-control input-sm dhcp-res-mac\" placeholder=\"aa:bb:cc:dd:ee:ff\" value=\"" + htmlEncode(mac) + "\"></td>" +
         "<td><input type=\"text\" class=\"form-control input-sm dhcp-res-ip\" placeholder=\"192.168.1.20\" value=\"" + htmlEncode(address) + "\"></td>" +
+        "<td><input type=\"text\" class=\"form-control input-sm dhcp-res-ip6\" placeholder=\"::20\" value=\"" + htmlEncode(address6) + "\"></td>" +
         "<td><input type=\"text\" class=\"form-control input-sm dhcp-res-name\" placeholder=\"" + htmlEncode(tr("optional")) + "\" value=\"" + htmlEncode(hostName) + "\"></td>" +
+        (getDhcpReservationProfiles().length > 0 ? "<td>" + renderProfileSelect("dhcp-res-profile", getDhcpReservationProfiles(), profile || "", " data-initial=\"" + htmlEncode(profile || "") + "\"") + "</td>" : "") +
         "<td class=\"text-right\"><button type=\"button\" class=\"btn btn-default btn-sm\" onclick=\"$(this).closest('tr').remove();\" aria-label=\"" + htmlEncode(tr("Entfernen")) + "\">&times;</button></td></tr>";
 
     $("#tbodyDhcpReservations").append(row);
@@ -498,16 +919,16 @@ function collectDhcpSettings() {
     $("#tbodyDhcpReservations tr").each(function () {
         var mac = $(this).find(".dhcp-res-mac").val().trim();
         var address = $(this).find(".dhcp-res-ip").val().trim();
+        var address6 = $(this).find(".dhcp-res-ip6").val().trim();
         var hostName = $(this).find(".dhcp-res-name").val().trim();
 
-        if ((mac !== "") || (address !== "") || (hostName !== ""))
-            reservations.push({ mac: mac, address: address, hostName: hostName });
+        if ((mac !== "") || (address !== "") || (address6 !== "") || (hostName !== ""))
+            reservations.push({ mac: mac, address: address, address6: address6, hostName: hostName });
     });
 
     var dns = $("#txtDhcpDnsServers").val().trim();
 
     return {
-        configVersion: dhcpSettingsData == null ? 0 : dhcpSettingsData.settings.configVersion,
         enabled: $("#chkDhcpEnabled").prop("checked"),
         simpleEnabled: $("#chkDhcpSimpleEnabled").prop("checked"),
         interface: $("#optDhcpInterface").val() || "",
@@ -529,8 +950,54 @@ function collectDhcpSettings() {
         rogueDetection: $("#chkDhcpRogueDetection").prop("checked"),
         rogueProbeIntervalSeconds: parseInt($("#txtDhcpRogueInterval").val(), 10) || 300,
         registerDns: $("#chkDhcpRegisterDns").prop("checked"),
-        dnsTtl: parseInt($("#txtDhcpDnsTtl").val(), 10) || 0
+        dnsTtl: parseInt($("#txtDhcpDnsTtl").val(), 10) || 0,
+        ipv6Mode: $("#optDhcpIpv6Mode").val() || "off",
+        ipv6RangeStart: $("#txtDhcpIpv6RangeStart").val().trim(),
+        ipv6RangeEnd: $("#txtDhcpIpv6RangeEnd").val().trim(),
+        ipv6Router: $("#optDhcpIpv6Router").val() || "auto"
     };
+}
+
+function applyDhcpReservationProfiles(onDone) {
+    var changes = [];
+
+    $("#tbodyDhcpReservations tr").each(function () {
+        var select = $(this).find(".dhcp-res-profile");
+
+        if (select.length === 0)
+            return;
+
+        var selected = select.val() || "";
+        var initial = select.attr("data-initial") || "";
+
+        if (selected === initial)
+            return;
+
+        var identifier = getDhcpReservationIdentifier($(this).find(".dhcp-res-mac").val(), $(this).find(".dhcp-res-ip").val());
+
+        if (identifier != null)
+            changes.push({ identifier: identifier, profile: selected });
+    });
+
+    var done = 0;
+
+    function next() {
+        if (changes.length === 0) {
+            onDone(done);
+            return;
+        }
+
+        var change = changes.shift();
+
+        assignClientProfile(change.identifier, change.profile, function (ok) {
+            if (ok)
+                done++;
+
+            next();
+        });
+    }
+
+    next();
 }
 
 function showDhcpErrors(errors, placeholder) {
@@ -565,8 +1032,10 @@ function saveDhcpSettings(element) {
                 return;
             }
 
-            refreshDhcpSettings(function () {
-                showAlert("success", tr("Gespeichert"), tr("Die DHCP-Einstellungen wurden gespeichert."), placeholder);
+            applyDhcpReservationProfiles(function (assigned) {
+                refreshDhcpSettings(function () {
+                    showAlert("success", tr("Gespeichert"), assigned > 0 ? tr("Die DHCP-Einstellungen wurden gespeichert, {0} Profilzuordnungen geändert.", assigned) : tr("Die DHCP-Einstellungen wurden gespeichert."), placeholder);
+                });
             });
         },
         error: function () {
@@ -593,11 +1062,12 @@ function validateDhcpExpert(element) {
 
             var response = responseJSON.response;
             $("#preDhcpGenerated").text(response.generated === "" ? tr("(keine – einfache Einstellungen ausgeschaltet oder leer)") : response.generated);
+            applyDhcpExpertErrors(response.errors);
 
             if (response.errors.length > 0)
                 showDhcpErrors(response.errors, $("#divDhcpExpertResult"));
             else
-                showAlert("success", tr("Keine Fehler"), tr("Erkannt: Adressbereiche {0}, Geräteeinträge {1}, Optionen {2}.", response.ranges, response.hosts, response.options), $("#divDhcpExpertResult"));
+                showAlert("success", tr("Keine Fehler"), tr("Erkannt: Adressbereiche {0}, Geräteeinträge {1}, Optionen {2}.", response.ranges + response.ranges6, response.hosts, response.options), $("#divDhcpExpertResult"));
         },
         error: function () {
             btn.button("reset");

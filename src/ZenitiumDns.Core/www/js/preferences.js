@@ -99,6 +99,8 @@ function clearCustomThemeColors() {
         if (name.indexOf("--") === 0)
             style.removeProperty(name);
     }
+
+    style.removeProperty("color-scheme");
 }
 
 function applyCustomThemeColors(theme) {
@@ -177,8 +179,13 @@ function applyCustomTheme(id) {
     if (theme == null)
         return false;
 
-    applyThemeBase(theme.base);
-    applyCustomThemeColors(theme);
+    if (theme.version === 2) {
+        applyThemePalette(getCustomThemePalette(theme), theme.mode);
+    }
+    else {
+        applyThemeBase(theme.base);
+        applyCustomThemeColors(theme);
+    }
 
     try {
         localStorage.setItem("customTheme", JSON.stringify(theme));
@@ -251,21 +258,40 @@ function loadUserPreferences() {
     });
 }
 
+function getThemeSwatches(palette) {
+    return "<span class=\"theme-swatches\" aria-hidden=\"true\"><span style=\"background-color: " + palette["side-bg"] + ";\"></span><span style=\"background-color: " + palette.canvas + ";\"></span><span style=\"background-color: " + palette["brand-fill"] + ";\"></span><span style=\"background-color: " + palette.c2 + ";\"></span></span>";
+}
+
 function renderCustomThemeList() {
     var themes = getCustomThemes();
     var currentTheme = localStorage.getItem("theme");
+    var presets = "";
+
+    for (var p = 0; p < THEME_PRESETS.length; p++) {
+        var preset = THEME_PRESETS[p];
+        var presetValue = "preset:" + preset.id;
+
+        presets += "<div class=\"radio theme-choice\"><label><input type=\"radio\" name=\"rdChangeTheme\" data-theme=\"" + htmlEncode(presetValue) + "\"" + (currentTheme === presetValue ? " checked" : "") + "> " + getThemeSwatches(generateThemePalette(preset)) + htmlEncode(tr(preset.name)) + "</label> <a href=\"#\" class=\"theme-preset-copy\" data-preset-id=\"" + htmlEncode(preset.id) + "\">" + tr("Anpassen") + "</a></div>";
+    }
+
+    $("#divThemePresetList").html(presets);
+
     var html = "";
 
     for (var i = 0; i < themes.length; i++) {
         var theme = themes[i];
         var value = "custom:" + theme.id;
+        var swatches = theme.version === 2 ? getThemeSwatches(getCustomThemePalette(theme)) : "";
 
-        html += "<div class=\"radio\"><label><input type=\"radio\" name=\"rdChangeTheme\" data-theme=\"" + htmlEncode(value) + "\"" + (currentTheme === value ? " checked" : "") + "> " + htmlEncode(theme.name) + "</label> <a href=\"#\" class=\"custom-theme-edit\" data-theme-id=\"" + htmlEncode(theme.id) + "\">" + tr("Bearbeiten") + "</a></div>";
+        html += "<div class=\"radio theme-choice\"><label><input type=\"radio\" name=\"rdChangeTheme\" data-theme=\"" + htmlEncode(value) + "\"" + (currentTheme === value ? " checked" : "") + "> " + swatches + htmlEncode(theme.name) + "</label> <a href=\"#\" class=\"custom-theme-edit\" data-theme-id=\"" + htmlEncode(theme.id) + "\">" + tr("Bearbeiten") + "</a></div>";
     }
+
+    if (themes.length === 0)
+        html = "<div class=\"text-muted theme-empty\">" + htmlEncode(tr("Noch keine eigenen Farbschemata.")) + "</div>";
 
     $("#divCustomThemeList").html(html);
 
-    $("#divCustomThemeList input[type=radio]").on("click", function () {
+    $("#divThemePresetList input[type=radio], #divCustomThemeList input[type=radio]").on("click", function () {
         changeTheme($(this).attr("data-theme"));
     });
 
@@ -274,7 +300,15 @@ function renderCustomThemeList() {
         editCustomTheme($(this).attr("data-theme-id"));
     });
 
-    $("#btnNewCustomTheme").toggle((sessionData != null) && (userPreferences != null) && (themes.length < MAX_CUSTOM_THEMES));
+    $("#divThemePresetList a.theme-preset-copy").on("click", function (e) {
+        e.preventDefault();
+        newCustomTheme($(this).attr("data-preset-id"));
+    });
+
+    var canCreate = (sessionData != null) && (userPreferences != null) && (themes.length < MAX_CUSTOM_THEMES);
+
+    $("#btnNewCustomTheme").toggle(canCreate);
+    $("#divThemePresetList a.theme-preset-copy").toggle(canCreate);
 }
 
 function readCurrentThemeColors() {
@@ -291,15 +325,21 @@ function readCurrentThemeColors() {
     return colors;
 }
 
-function renderCustomThemeEditor() {
+function renderCustomThemeColorGrid() {
     var tokens = getCustomThemeTokens();
+    var palette = getCustomThemePalette(customThemeEditing);
     var html = "";
 
     for (var i = 0; i < tokens.length; i++) {
         var token = tokens[i];
-        var value = customThemeEditing.colors[token.key] || "#000000";
+        var value = palette[token.key];
 
-        html += "<label class=\"theme-color-item\"><input type=\"color\" data-token=\"" + token.key + "\" value=\"" + value + "\"> <span>" + htmlEncode(token.label) + "</span></label>";
+        if (!isValidThemeColor(value))
+            value = normalizeCssColor(value) || "#000000";
+
+        var fixed = (customThemeEditing.colors != null) && (customThemeEditing.colors[token.key] != null);
+
+        html += "<label class=\"theme-color-item" + (fixed ? " theme-color-fixed" : "") + "\"><input type=\"color\" data-token=\"" + token.key + "\" value=\"" + value + "\"> <span>" + htmlEncode(token.label) + "</span></label>";
     }
 
     $("#divCustomThemeColors").html(html);
@@ -309,36 +349,127 @@ function renderCustomThemeEditor() {
         if (!isValidThemeColor(value))
             return;
 
-        customThemeEditing.colors[$(this).attr("data-token")] = value.toLowerCase();
-        previewCustomTheme();
-    });
+        if (customThemeEditing.colors == null)
+            customThemeEditing.colors = {};
 
+        customThemeEditing.colors[$(this).attr("data-token")] = value.toLowerCase();
+        $(this).closest(".theme-color-item").addClass("theme-color-fixed");
+        previewCustomTheme(false);
+    });
+}
+
+function renderCustomThemeContrast(palette) {
+    var checks = getThemeContrastChecks(palette);
+    var html = "";
+
+    for (var i = 0; i < checks.length; i++) {
+        var check = checks[i];
+        var ratio = check.ratio == null ? "–" : check.ratio.toFixed(1).replace(".", zdnsI18n.language === "de" ? "," : ".") + ":1";
+
+        html += "<div class=\"theme-contrast-item " + (check.ok ? "theme-contrast-ok" : "theme-contrast-bad") + "\"><span class=\"fa " + (check.ok ? "fa-check" : "fa-exclamation-triangle") + "\" aria-hidden=\"true\"></span> " + htmlEncode(check.label) + " <span class=\"theme-contrast-ratio\">" + ratio + "</span>" + (check.ok ? "" : " <span class=\"theme-contrast-hint\">" + htmlEncode(tr("schwer lesbar, mindestens {0}:1 empfohlen", String(check.minimum).replace(".", zdnsI18n.language === "de" ? "," : "."))) + "</span>") + "</div>";
+    }
+
+    $("#divCustomThemeContrast").html(html);
+}
+
+function renderCustomThemeEditor() {
     $("#txtCustomThemeName").val(customThemeEditing.name);
-    $("#optCustomThemeBase").val(customThemeEditing.base);
+    $("#optCustomThemeBase").val(customThemeEditing.mode);
+    $("#txtCustomThemeAccent").val(customThemeEditing.accent);
+    $("#txtCustomThemeTint").val(customThemeEditing.tint);
+    $("#optCustomThemeSidebar").val(customThemeEditing.sidebar);
     $("#btnDeleteCustomTheme").toggle(!customThemeEditingIsNew);
+
+    renderCustomThemeColorGrid();
     $("#divCustomThemeEditor").show();
 }
 
-function previewCustomTheme() {
-    applyThemeBase(customThemeEditing.base);
-    applyCustomThemeColors(customThemeEditing);
+function previewCustomTheme(refreshGrid) {
+    var palette = getCustomThemePalette(customThemeEditing);
+
+    applyThemePalette(palette, customThemeEditing.mode);
     updateDashboardChartTheme();
+    renderCustomThemeContrast(palette);
+
+    if (refreshGrid !== false)
+        renderCustomThemeColorGrid();
 }
 
-function newCustomTheme() {
+function changeCustomThemeSpec() {
+    if (customThemeEditing == null)
+        return;
+
+    customThemeEditing.mode = $("#optCustomThemeBase").val() === "dark" ? "dark" : "light";
+    customThemeEditing.accent = ($("#txtCustomThemeAccent").val() || customThemeEditing.accent).toLowerCase();
+    customThemeEditing.tint = ($("#txtCustomThemeTint").val() || customThemeEditing.tint).toLowerCase();
+    customThemeEditing.sidebar = $("#optCustomThemeSidebar").val();
+
+    previewCustomTheme();
+}
+
+function resetCustomThemeOverrides() {
+    if (customThemeEditing == null)
+        return;
+
+    customThemeEditing.colors = {};
+    previewCustomTheme();
+}
+
+function convertLegacyCustomTheme(theme) {
+    var colors = theme.colors || {};
+    var accent = isValidThemeColor(colors["brand-fill"]) ? colors["brand-fill"] : "#00796b";
+    var sideBg = isValidThemeColor(colors["side-bg"]) ? colors["side-bg"] : "#0f2421";
+
+    return {
+        id: theme.id,
+        name: theme.name,
+        version: 2,
+        mode: theme.base === "dark" ? "dark" : "light",
+        accent: accent,
+        tint: accent,
+        sidebar: themeLuminance(sideBg) < 0.2 ? "dark" : "light",
+        colors: {}
+    };
+}
+
+function newCustomTheme(presetId) {
     customThemeBeforeEditing = localStorage.getItem("theme");
     customThemeEditingIsNew = true;
 
-    var base = document.body.classList.contains("dark-mode") ? "dark" : (document.body.classList.contains("amber-mode") ? "amber" : "light");
+    var source = null;
+
+    if (presetId != null)
+        source = getThemePreset(presetId);
+
+    if ((source == null) && (customThemeBeforeEditing != null) && (customThemeBeforeEditing.indexOf("preset:") === 0))
+        source = getThemePreset(customThemeBeforeEditing.substring(7));
+
+    if (source == null) {
+        var current = readCurrentThemeColors();
+
+        source = {
+            mode: document.body.classList.contains("dark-mode") ? "dark" : "light",
+            accent: current["brand-fill"] || "#00796b",
+            tint: current["brand-fill"] || "#00796b",
+            sidebar: themeLuminance(current["side-bg"] || "#0f2421") < 0.2 ? "dark" : "light"
+        };
+    }
+
+    var spec = normalizeThemeSpec(source);
 
     customThemeEditing = {
         id: "t" + Date.now().toString(36) + Math.floor(Math.random() * 1296).toString(36),
-        name: tr("Eigenes Farbschema"),
-        base: base,
-        colors: readCurrentThemeColors()
+        name: presetId != null ? tr("{0} (angepasst)", tr(source.name)) : tr("Eigenes Farbschema"),
+        version: 2,
+        mode: spec.mode,
+        accent: spec.accent,
+        tint: spec.tint,
+        sidebar: spec.sidebar,
+        colors: {}
     };
 
     renderCustomThemeEditor();
+    previewCustomTheme();
     $("#txtCustomThemeName").trigger("focus").trigger("select");
 }
 
@@ -349,7 +480,14 @@ function editCustomTheme(id) {
 
     customThemeBeforeEditing = localStorage.getItem("theme");
     customThemeEditingIsNew = false;
-    customThemeEditing = JSON.parse(JSON.stringify(theme));
+    customThemeEditing = theme.version === 2 ? JSON.parse(JSON.stringify(theme)) : convertLegacyCustomTheme(theme);
+
+    var spec = normalizeThemeSpec(customThemeEditing);
+
+    customThemeEditing.mode = spec.mode;
+    customThemeEditing.accent = spec.accent;
+    customThemeEditing.tint = spec.tint;
+    customThemeEditing.sidebar = spec.sidebar;
 
     if (customThemeEditing.colors == null)
         customThemeEditing.colors = {};
@@ -358,16 +496,6 @@ function editCustomTheme(id) {
     previewCustomTheme();
 }
 
-function changeCustomThemeBase() {
-    customThemeEditing.base = $("#optCustomThemeBase").val();
-
-    clearCustomThemeColors();
-    applyThemeBase(customThemeEditing.base);
-    customThemeEditing.colors = readCurrentThemeColors();
-
-    renderCustomThemeEditor();
-    previewCustomTheme();
-}
 
 function closeCustomThemeEditor() {
     customThemeEditing = null;
@@ -452,9 +580,9 @@ function applySettingsLockState() {
     var enabled = isSettingsLockEnabled();
     var locked = enabled && !settingsTemporarilyUnlocked;
 
-    $("#fsSettings").prop("disabled", locked);
-    $("#divSettingsLockedNote").toggle(locked);
-    $("#btnSaveSettings").prop("disabled", locked);
+    $("fieldset.settings-fieldset").prop("disabled", locked);
+    $("#divSettingsLockedNote, .filter-lock-note").toggle(locked);
+    $("#btnSaveSettings, .filter-settings-save").prop("disabled", locked);
     $("#btnShowRestoreSettingsModal").prop("disabled", locked);
 
     var label;
@@ -501,7 +629,9 @@ function relockSettings() {
 
 $(function () {
     $(document).on("shown.bs.tab", "#mainPanelTabList a[data-toggle='tab'], .main-nav a[data-toggle='tab']", function (e) {
-        if ($(e.target).attr("href") !== "#mainPanelTabPaneSettings")
+        var target = $(e.target).attr("href");
+
+        if ((target !== "#mainPanelTabPaneSettings") && (target !== "#mainPanelTabPaneFilter"))
             relockSettings();
     });
 

@@ -61,7 +61,7 @@ This document only lists the differences between the original build **Technitium
 | Memory almost full | the cache keeps growing until the process runs out of memory | the cache stops growing at 85 % of the system memory, the service or container limit or the .NET heap limit and is cut from 90 % |
 | Lock contention with recursive resolution and DNS-over-TLS | hundreds to thousands of contended locks per second (resolver pool that wakes all waiting loops, own scheduler for TCP, DoT and DoQ) | practically none: lock-free resolver pool, connections on the .NET thread pool |
 | CPU time per DNS-over-TLS query (8,000 queries/s, 4 CPUs) | 122 µs | 56 µs ([docs/Performance.md](docs/Performance.md)) |
-| DHCP | DHCP server with scopes | own DHCPv4 server: simple settings or configuration in the syntax of dnsmasq, detection of other DHCP servers with priority ([docs/DHCP.md](docs/DHCP.md)) |
+| DHCP | DHCP server with scopes | own DHCP server for IPv4 and IPv6 with router advertisements: simple settings or configuration in the syntax of dnsmasq (also by selection), detection of other DHCP servers and IPv6 routers with priority, devices recognized by MAC address, client ID or DUID across IPv4, DHCPv6 and client profiles ([docs/DHCP.md](docs/DHCP.md)) |
 
 ## Measurements
 

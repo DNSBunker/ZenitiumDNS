@@ -61,7 +61,7 @@ Dieses Dokument listet ausschließlich die Unterschiede zwischen dem Original-Bu
 | Speicher fast voll | der Cache wächst weiter, bis dem Prozess der Speicher ausgeht | der Cache wächst ab 85 % des Arbeitsspeichers, des Dienst- oder Container-Limits oder des .NET-Heap-Limits nicht weiter und wird ab 90 % gekürzt |
 | Lock-Konflikte bei rekursiver Auflösung und DNS-over-TLS | Hunderte bis Tausende umkämpfte Sperren pro Sekunde (Resolver-Pool, der alle wartenden Schleifen weckt, eigener Scheduler für TCP, DoT und DoQ) | praktisch keine: sperrfreier Resolver-Pool, Verbindungen auf dem .NET-Threadpool |
 | CPU-Zeit pro Anfrage über DNS-over-TLS (8.000 Anfragen/s, 4 CPUs) | 122 µs | 56 µs ([docs/Performance.de.md](docs/Performance.de.md)) |
-| DHCP | DHCP-Server mit Bereichen | eigener DHCPv4-Server: einfache Einstellungen oder Konfiguration in der Syntax von dnsmasq, Erkennung anderer DHCP-Server mit Priorität ([docs/DHCP.de.md](docs/DHCP.de.md)) |
+| DHCP | DHCP-Server mit Bereichen | eigener DHCP-Server für IPv4 und IPv6 mit Router Advertisements: einfache Einstellungen oder Konfiguration in der Syntax von dnsmasq (auch per Auswahl), Erkennung anderer DHCP-Server und IPv6-Router mit Priorität, Geräte über MAC-Adresse, Client-ID oder DUID hinweg über IPv4, DHCPv6 und Clientprofile erkannt ([docs/DHCP.de.md](docs/DHCP.de.md)) |
 
 ## Messwerte
 

@@ -38,7 +38,7 @@ namespace ZenitiumDns.Core.Dhcp
         static readonly HashSet<string> _unsupported = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
             "dhcp-script", "dhcp-luascript", "dhcp-scriptuser", "dhcp-leasefile", "leasefile-ro", "dhcp-relay", "dhcp-proxy",
-            "pxe-service", "pxe-prompt", "enable-ra", "ra-param", "dhcp-fqdn", "dhcp-hostsfile", "dhcp-hostsdir", "dhcp-optsfile",
+            "pxe-service", "pxe-prompt", "dhcp-fqdn", "dhcp-hostsfile", "dhcp-hostsdir", "dhcp-optsfile",
             "dhcp-optsdir", "read-ethers", "dhcp-duid", "dhcp-name-match", "dhcp-client-update", "dhcp-split-relay", "conf-file",
             "conf-dir", "dhcp-pxe-vendor", "dhcp-ttl", "script-arp", "script-on-renewal", "dhcp-alternate-port", "listen-address",
             "bind-interfaces", "bind-dynamic", "port"
@@ -253,8 +253,11 @@ namespace ZenitiumDns.Core.Dhcp
 
             string startText = tokens[i].Text;
 
-            if (startText.StartsWith("constructor:", StringComparison.OrdinalIgnoreCase) || startText.Contains(':'))
-                throw new FormatException("IPv6 ranges are not supported by the DHCP server");
+            if (startText.Contains(':'))
+            {
+                ParseRange6(config, line, tokens, i, rule.Conditions, rule.SetTag);
+                return;
+            }
 
             rule.Start = ParseIPv4(startText, "start address");
             i++;
@@ -323,6 +326,274 @@ namespace ZenitiumDns.Core.Dhcp
             config.Ranges.Add(rule);
         }
 
+        private static UInt128 ParseIPv6Value(string text, string what)
+        {
+            text = text.Trim();
+
+            if (text.StartsWith('[') && text.EndsWith(']'))
+                text = text.Substring(1, text.Length - 2);
+
+            if (!IPAddress.TryParse(text, out IPAddress address) || (address.AddressFamily != AddressFamily.InterNetworkV6) || (address.ScopeId != 0))
+                throw new FormatException("'" + text + "' is not a valid " + what);
+
+            return Dhcp6Utilities.ToUInt128(address);
+        }
+
+        private static void ParseRange6(DhcpConfiguration config, int line, List<Token> tokens, int i, List<DhcpTagCondition> conditions, string setTag)
+        {
+            Dhcp6RangeRule rule = new Dhcp6RangeRule() { Line = line, SetTag = setTag };
+            rule.Conditions.AddRange(conditions);
+
+            rule.Start = ParseIPv6Value(tokens[i].Text, "IPv6 start address");
+            i++;
+
+            bool hasEnd = false;
+
+            if (i < tokens.Count)
+            {
+                string second = tokens[i].Text.Trim();
+
+                if (second.Equals("static", StringComparison.OrdinalIgnoreCase))
+                {
+                    rule.StaticOnly = true;
+                    rule.End = rule.Start;
+                    hasEnd = true;
+                    i++;
+                }
+                else if (second.Contains(':') && !second.StartsWith("constructor:", StringComparison.OrdinalIgnoreCase))
+                {
+                    rule.End = ParseIPv6Value(second, "IPv6 end address");
+                    hasEnd = true;
+                    i++;
+                }
+            }
+
+            bool prefixSet = false;
+
+            for (; i < tokens.Count; i++)
+            {
+                string text = tokens[i].Text.Trim();
+
+                if (text.StartsWith("constructor:", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (rule.Constructor is not null)
+                        throw new FormatException("constructor: is given twice");
+
+                    rule.Constructor = ValidateInterfaceName(text.Substring(12));
+                    continue;
+                }
+
+                switch (text.ToLowerInvariant())
+                {
+                    case "ra-only":
+                        rule.RaOnly = true;
+                        continue;
+
+                    case "slaac":
+                        rule.Slaac = true;
+                        continue;
+
+                    case "ra-stateless":
+                        rule.RaStateless = true;
+                        continue;
+
+                    case "ra-names":
+                        rule.RaNames = true;
+                        continue;
+
+                    case "off-link":
+                        rule.OffLink = true;
+                        continue;
+
+                    case "ra-advrouter":
+                        continue;
+                }
+
+                if (!prefixSet && (text.Length > 0) && (text.Length <= 3) && int.TryParse(text, NumberStyles.None, CultureInfo.InvariantCulture, out int prefixLength))
+                {
+                    if ((prefixLength < 48) || (prefixLength > 128))
+                        throw new FormatException("the IPv6 prefix length must be between 48 and 128");
+
+                    rule.PrefixLength = prefixLength;
+                    prefixSet = true;
+                    continue;
+                }
+
+                if (DhcpUtilities.LooksLikeLeaseTime(text))
+                {
+                    if (!DhcpUtilities.TryParseLeaseTime(text, out uint leaseTime))
+                        throw new FormatException("'" + text + "' is not a valid lease time");
+
+                    rule.LeaseTime = leaseTime;
+                    continue;
+                }
+
+                throw new FormatException("unexpected value '" + text + "'");
+            }
+
+            if ((rule.RaOnly ? 1 : 0) + (rule.RaStateless ? 1 : 0) + (rule.Slaac || rule.RaNames ? 1 : 0) > 1)
+                throw new FormatException("ra-only, ra-stateless and slaac cannot be combined");
+
+            if (!hasEnd)
+            {
+                if (!rule.RaOnly && !rule.RaStateless)
+                    throw new FormatException("the IPv6 end address is missing (or use ra-only, ra-stateless or static)");
+
+                rule.End = rule.Start;
+            }
+
+            if ((rule.PrefixLength != 64) && rule.AutonomousFlag)
+                throw new FormatException("SLAAC needs a /64 prefix");
+
+            UInt128 hostMask = rule.HostMask;
+
+            if (rule.Constructor is not null)
+            {
+                if (((rule.Start & ~hostMask) != UInt128.Zero) || ((rule.End & ~hostMask) != UInt128.Zero))
+                    throw new FormatException("with constructor: the addresses must only contain the host part (for example ::100)");
+            }
+            else
+            {
+                if ((rule.Start >> 64) == UInt128.Zero)
+                    throw new FormatException("an IPv6 range without constructor: needs full addresses including the prefix");
+
+                if ((rule.Start & ~hostMask) != (rule.End & ~hostMask))
+                    throw new FormatException("start and end address are not in the same /" + rule.PrefixLength + " prefix");
+            }
+
+            if (rule.End < rule.Start)
+                throw new FormatException("the end address is lower than the start address");
+
+            config.Ranges6.Add(rule);
+        }
+
+        private static void ParseRaParam(DhcpConfiguration config, int line, List<Token> tokens)
+        {
+            if (tokens.Count < 2)
+                throw new FormatException("ra-param expects <interface>,[mtu:<value>,][high|low,]<interval>[,<router lifetime>]");
+
+            DhcpRaParam param = new DhcpRaParam() { Line = line, Interface = ValidateInterfaceName(tokens[0].Text) };
+            int i = 1;
+
+            if (tokens[i].Text.StartsWith("mtu:", StringComparison.OrdinalIgnoreCase))
+            {
+                string mtu = tokens[i].Text.Substring(4).Trim();
+
+                if (mtu.Equals("off", StringComparison.OrdinalIgnoreCase))
+                    param.MtuOff = true;
+                else if (int.TryParse(mtu, NumberStyles.None, CultureInfo.InvariantCulture, out int mtuValue))
+                {
+                    if ((mtuValue < 1280) || (mtuValue > 65535))
+                        throw new FormatException("the MTU must be between 1280 and 65535");
+
+                    param.Mtu = mtuValue;
+                }
+                else
+                    param.MtuInterface = ValidateInterfaceName(mtu);
+
+                i++;
+            }
+
+            if (i < tokens.Count)
+            {
+                string preference = tokens[i].Text.Trim().ToLowerInvariant();
+
+                if (preference == "high")
+                {
+                    param.RouterPreference = 1;
+                    i++;
+                }
+                else if (preference == "low")
+                {
+                    param.RouterPreference = 3;
+                    i++;
+                }
+            }
+
+            if (i < tokens.Count)
+            {
+                if (!int.TryParse(tokens[i].Text, NumberStyles.None, CultureInfo.InvariantCulture, out int interval) || (interval < 4) || (interval > 1800))
+                    throw new FormatException("the RA interval must be between 4 and 1800 seconds");
+
+                param.Interval = interval;
+                i++;
+            }
+
+            if (i < tokens.Count)
+            {
+                if (!int.TryParse(tokens[i].Text, NumberStyles.None, CultureInfo.InvariantCulture, out int lifetime) || (lifetime > 9000))
+                    throw new FormatException("the router lifetime must be between 0 and 9000 seconds");
+
+                param.RouterLifetime = lifetime;
+                i++;
+            }
+
+            if (i < tokens.Count)
+                throw new FormatException("unexpected value '" + tokens[i].Text + "'");
+
+            config.RaParams.Add(param);
+        }
+
+        private static void ParseOption6(DhcpConfiguration config, int line, List<Token> tokens, int i, List<DhcpTagCondition> conditions, bool force)
+        {
+            Dhcp6OptionRule rule = new Dhcp6OptionRule() { Line = line, Force = force };
+            rule.Conditions.AddRange(conditions);
+
+            string name = tokens[i].Text.Trim().Substring(8);
+            i++;
+
+            Dhcp6OptionDefinition definition;
+
+            if (ushort.TryParse(name, NumberStyles.None, CultureInfo.InvariantCulture, out ushort code))
+            {
+                if (code == 0)
+                    throw new FormatException("'" + name + "' is not a valid DHCPv6 option number");
+
+                Dhcp6OptionCatalog.TryGetDefinition(code, out definition);
+                rule.Code = code;
+            }
+            else
+            {
+                if (!Dhcp6OptionCatalog.TryGetDefinition(name, out definition))
+                    throw new FormatException("unknown DHCPv6 option name '" + name + "'");
+
+                rule.Code = definition.Code;
+            }
+
+            if ((definition is not null) && definition.Protected)
+                throw new FormatException("option6 " + definition.Name + " is managed by the DHCP server and cannot be set");
+
+            List<string> values = new List<string>();
+            bool anyQuoted = false;
+
+            for (; i < tokens.Count; i++)
+            {
+                values.Add(tokens[i].Text);
+                anyQuoted |= tokens[i].Quoted;
+            }
+
+            if ((values.Count == 0) || ((values.Count == 1) && (values[0].Length == 0) && !anyQuoted))
+            {
+                rule.Suppress = true;
+                rule.Value = [];
+                config.Options6.Add(rule);
+                return;
+            }
+
+            Dhcp6OptionType type = definition?.Type ?? Dhcp6OptionType.Guess;
+
+            if (anyQuoted && ((type == Dhcp6OptionType.Guess) || (type == Dhcp6OptionType.Bytes)))
+                type = Dhcp6OptionType.Text;
+
+            rule.Value = Dhcp6OptionCatalog.Encode(type, values, out bool usesServerAddress);
+            rule.UsesServerAddress = usesServerAddress;
+
+            if (rule.Value.Length > 1024)
+                throw new FormatException("the option value is longer than 1024 bytes");
+
+            config.Options6.Add(rule);
+        }
+
         private static void ParseHost(DhcpConfiguration config, int line, List<Token> tokens)
         {
             DhcpHostRule rule = new DhcpHostRule() { Line = line };
@@ -379,7 +650,22 @@ namespace ZenitiumDns.Core.Dhcp
                     }
 
                     if (text.StartsWith('['))
-                        throw new FormatException("IPv6 addresses are not supported by the DHCP server");
+                    {
+                        if (rule.Address6 is not null)
+                            throw new FormatException("more than one IPv6 address");
+
+                        if (!text.EndsWith(']') || !IPAddress.TryParse(text.AsSpan(1, text.Length - 2), out IPAddress address6) || (address6.AddressFamily != AddressFamily.InterNetworkV6) || (address6.ScopeId != 0))
+                            throw new FormatException("'" + text + "' is not a valid IPv6 address");
+
+                        UInt128 value6 = Dhcp6Utilities.ToUInt128(address6);
+
+                        if ((value6 == UInt128.Zero) || address6.IsIPv6Multicast || address6.IsIPv6LinkLocal || IPAddress.IsLoopback(address6))
+                            throw new FormatException("'" + text + "' cannot be assigned to a client");
+
+                        rule.Address6 = address6;
+                        rule.Address6IsSuffix = (value6 >> 64) == UInt128.Zero;
+                        continue;
+                    }
 
                     if (IsIPv4(text))
                     {
@@ -490,7 +776,13 @@ namespace ZenitiumDns.Core.Dhcp
             DhcpOptionDefinition definition = null;
 
             if (optionText.StartsWith("option6:", StringComparison.OrdinalIgnoreCase))
-                throw new FormatException("DHCPv6 options are not supported by the DHCP server");
+            {
+                if ((rule.EncapsulatedIn != 0) || rule.IsViEncapsulated || (rule.VendorClass is not null))
+                    throw new FormatException("encap:, vi-encap: and vendor: are not supported for DHCPv6 options");
+
+                ParseOption6(config, line, tokens, i - 1, rule.Conditions, force);
+                return;
+            }
 
             if (optionText.StartsWith("option:", StringComparison.OrdinalIgnoreCase))
             {
@@ -907,6 +1199,11 @@ namespace ZenitiumDns.Core.Dhcp
                     config.NoPing = true;
                     return;
 
+                case "enable-ra":
+                    RequireNoValue(key, value);
+                    config.EnableRa = true;
+                    return;
+
                 case "dhcp-lease-max":
                     {
                         if (!int.TryParse(RequireValue(key, value), NumberStyles.None, CultureInfo.InvariantCulture, out int max) || (max < 1) || (max > 1000000))
@@ -1015,6 +1312,11 @@ namespace ZenitiumDns.Core.Dhcp
                     ParseBoot(config, line, tokens);
                     return;
 
+                case "ra-param":
+                    RequireValue(key, value);
+                    ParseRaParam(config, line, tokens);
+                    return;
+
                 case "domain":
                     RequireValue(key, value);
                     ParseDomain(config, line, tokens);
@@ -1107,6 +1409,10 @@ namespace ZenitiumDns.Core.Dhcp
                     {
                         config.Errors.Add(new DhcpConfigError(line, ex.Message));
                     }
+                    catch (Exception ex) when ((ex is ArgumentException) || (ex is OverflowException) || (ex is IndexOutOfRangeException) || (ex is InvalidOperationException))
+                    {
+                        config.Errors.Add(new DhcpConfigError(line, "the line could not be read: " + ex.Message));
+                    }
                 }
             }
 
@@ -1116,12 +1422,26 @@ namespace ZenitiumDns.Core.Dhcp
                     rule.Weak = true;
             }
 
-            Validate(config);
+            foreach (Dhcp6OptionRule rule in config.Options6)
+            {
+                if (rule.Line <= weakLines)
+                    rule.Weak = true;
+            }
+
+            Validate(config, weakLines);
 
             return config;
         }
 
-        private static void Validate(DhcpConfiguration config)
+        private static string DescribeLine(int line, int weakLines)
+        {
+            if (line <= weakLines)
+                return "the simple settings";
+
+            return "line " + (line - weakLines);
+        }
+
+        private static void Validate(DhcpConfiguration config, int weakLines)
         {
             for (int i = 0; i < config.Ranges.Count; i++)
             {
@@ -1138,8 +1458,36 @@ namespace ZenitiumDns.Core.Dhcp
                         continue;
 
                     if ((a.StartValue <= b.EndValue) && (b.StartValue <= a.EndValue))
-                        config.Errors.Add(new DhcpConfigError(b.Line, "the range overlaps the range in line " + a.Line));
+                        config.Errors.Add(new DhcpConfigError(b.Line, "the range overlaps the range in " + DescribeLine(a.Line, weakLines)));
                 }
+            }
+
+            for (int i = 0; i < config.Ranges6.Count; i++)
+            {
+                Dhcp6RangeRule a = config.Ranges6[i];
+
+                if (!a.AssignsAddresses)
+                    continue;
+
+                for (int j = i + 1; j < config.Ranges6.Count; j++)
+                {
+                    Dhcp6RangeRule b = config.Ranges6[j];
+
+                    if (!b.AssignsAddresses || ((a.Constructor is null) != (b.Constructor is null)))
+                        continue;
+
+                    if ((a.Constructor is not null) && !a.Constructor.Equals(b.Constructor, StringComparison.Ordinal))
+                        continue;
+
+                    if ((a.Start <= b.End) && (b.Start <= a.End))
+                        config.Errors.Add(new DhcpConfigError(b.Line, "the range overlaps the range in " + DescribeLine(a.Line, weakLines)));
+                }
+            }
+
+            foreach (DhcpRaParam param in config.RaParams)
+            {
+                if ((param.Interval > 0) && (param.RouterLifetime > 0) && (param.RouterLifetime < param.Interval))
+                    config.Errors.Add(new DhcpConfigError(param.Line, "the router lifetime must not be shorter than the RA interval"));
             }
 
             Dictionary<uint, int> reservedAddresses = new Dictionary<uint, int>();
@@ -1162,7 +1510,7 @@ namespace ZenitiumDns.Core.Dhcp
                     }
 
                     if (!sameClient)
-                        config.Errors.Add(new DhcpConfigError(host.Line, host.Address + " is already reserved in line " + otherLine));
+                        config.Errors.Add(new DhcpConfigError(host.Line, host.Address + " is already reserved in " + DescribeLine(otherLine, weakLines)));
                 }
                 else
                 {

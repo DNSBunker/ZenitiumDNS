@@ -147,12 +147,20 @@ function showPageMain() {
         $("#resolverTabPaneCache").addClass("active");
     }
 
+    $("#filterTabListBlockLists").toggle(permissions.Settings.canView);
     $("#filterTabListBlocked").toggle(permissions.Blocked.canView);
     $("#filterTabListAllowed").toggle(permissions.Allowed.canView);
-    $("#filterTabListLists").toggle(permissions.Settings.canView);
     $("#filterTabListClients").toggle(permissions.Settings.canView);
+    $("#filterTabListBlocking").toggle(permissions.Settings.canView);
 
-    if (permissions.Blocked.canView) {
+    $("#mainPanelTabPaneFilter .sub-nav > li").removeClass("active");
+    $("#mainPanelTabPaneFilter > .tab-content > .tab-pane").removeClass("active");
+
+    if (permissions.Settings.canView) {
+        $("#filterTabListBlockLists").addClass("active");
+        $("#filterTabPaneBlockLists").addClass("active");
+    }
+    else if (permissions.Blocked.canView) {
         $("#filterTabListBlocked").addClass("active");
         $("#filterTabPaneBlocked").addClass("active");
     }
@@ -182,7 +190,7 @@ function showPageMain() {
     var tabs = [
         { list: "#mainPanelTabListDashboard", pane: "#mainPanelTabPaneDashboard", visible: permissions.Dashboard.canView, open: function () { refreshDashboard(); } },
         { list: "#mainPanelTabListResolver", pane: "#mainPanelTabPaneResolver", visible: canViewResolver, open: function () { refreshResolverTab(); } },
-        { list: "#mainPanelTabListFilter", pane: "#mainPanelTabPaneFilter", visible: canViewFilter, open: null },
+        { list: "#mainPanelTabListFilter", pane: "#mainPanelTabPaneFilter", visible: canViewFilter, open: function () { refreshFilterTab(); } },
         { list: "#mainPanelTabListDhcp", pane: "#mainPanelTabPaneDhcp", visible: (permissions.DhcpServer != null) && permissions.DhcpServer.canView, open: function () { refreshDhcpTab(); } },
         { list: "#mainPanelTabListApps", pane: "#mainPanelTabPaneApps", visible: permissions.Apps.canView, open: function () { refreshApps(); } },
         { list: "#mainPanelTabListDnsClient", pane: "#mainPanelTabPaneDnsClient", visible: permissions.DnsClient.canView, open: null },
@@ -347,6 +355,51 @@ function updateCacheDependentSettings() {
         $("#chkServeStale").triggerHandler("click");
 }
 
+function refreshFilterTab() {
+    var active = $("#mainPanelTabPaneFilter .sub-nav > li.active").attr("id");
+
+    if ((active === "filterTabListBlockLists") || (active === "filterTabListBlocking"))
+        loadFilterSettings();
+}
+
+function showFilterSection(filterTabListId) {
+    $("#mainPanelTabListFilter a").tab("show");
+    $("#" + filterTabListId + " a").tab("show");
+    loadFilterSettings();
+}
+
+function loadFilterSettings() {
+    var bodies = $("#mainPanelTabPaneFilter .filter-settings-body");
+    var loaders = $("#mainPanelTabPaneFilter .filter-settings-loader");
+
+    $(".filter-settings-save").prop("disabled", true);
+    bodies.hide();
+    loaders.show();
+
+    HTTPRequest({
+        url: "api/settings/get",
+        token: sessionData.token,
+        success: function (responseJSON) {
+            updateDnsSettingsDataAndGui(responseJSON);
+            loadDnsSettings(responseJSON);
+
+            $(".filter-settings-save").toggle(sessionData.info.permissions.Settings.canModify).prop("disabled", false);
+            applySettingsLockState();
+            refreshBlockListStatus();
+
+            loaders.hide();
+            bodies.show();
+        },
+        error: function () {
+            loaders.hide();
+        },
+        invalidToken: function () {
+            showPageLogin();
+        },
+        objLoaderPlaceholder: loaders
+    });
+}
+
 function showSettingsSection(settingsTabListId) {
     $("#mainPanelTabListSettings a").tab("show");
     refreshDnsSettings();
@@ -358,6 +411,14 @@ $(function () {
     initUpdateNotificationMenu();
 
     $(".main-nav a[data-toggle=tab]").on("shown.bs.tab", updatePageTitle);
+
+    $("#divDnsSettings .settings-nav a[data-toggle=tab]").on("shown.bs.tab", function (e) {
+        $("#divSettingsActions").toggle($(e.target).attr("href") !== "#settingsTabPaneBackup");
+    });
+
+    $("#filterTabListBlockLists a, #filterTabListBlocking a").on("shown.bs.tab", function () {
+        loadFilterSettings();
+    });
 
     loadQuickBlockLists();
     loadQuickForwardersList();
@@ -1189,7 +1250,6 @@ function refreshDnsSettings() {
             checkForReverseProxy(responseJSON);
 
             $("#btnSaveSettings").toggle(sessionData.info.permissions.Settings.canModify);
-            $("#btnSettingsFlushCache").toggle(sessionData.info.permissions.Cache.canDelete);
             $("#btnShowBackupSettingsModal").toggle(sessionData.info.permissions.Settings.canDelete);
             $("#btnShowRestoreSettingsModal").toggle(sessionData.info.permissions.Settings.canDelete);
             $("#btnSettingsLock").toggle(sessionData.info.permissions.Settings.canModify);
@@ -3158,7 +3218,7 @@ function initTheme() {
     if (window.matchMedia) {
         window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", e => {
             const currentTheme = localStorage.getItem("theme");
-            if ((currentTheme != null) && (currentTheme.indexOf("custom:") === 0))
+            if ((currentTheme != null) && ((currentTheme.indexOf("custom:") === 0) || (currentTheme.indexOf("preset:") === 0)))
                 return;
 
             switch (currentTheme) {
@@ -3187,6 +3247,20 @@ function changeTheme(newTheme, persist) {
 
     if ((newTheme != null) && (newTheme.indexOf("custom:") === 0)) {
         if (applyCustomTheme(newTheme.substring(7))) {
+            localStorage.setItem("theme", newTheme);
+            updateDashboardChartTheme();
+
+            if (persist !== false)
+                saveActiveThemePreference(newTheme);
+
+            return;
+        }
+
+        newTheme = "system";
+    }
+
+    if ((newTheme != null) && (newTheme.indexOf("preset:") === 0)) {
+        if (applyThemePreset(newTheme.substring(7))) {
             localStorage.setItem("theme", newTheme);
             updateDashboardChartTheme();
 
@@ -3262,7 +3336,7 @@ function showChangeThemeModal() {
             break;
 
         default:
-            $("#rdChangeThemeSystem").prop("checked", (currentTheme == null) || (currentTheme.indexOf("custom:") !== 0));
+            $("#rdChangeThemeSystem").prop("checked", (currentTheme == null) || ((currentTheme.indexOf("custom:") !== 0) && (currentTheme.indexOf("preset:") !== 0)));
             break;
     }
 

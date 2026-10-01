@@ -33,11 +33,28 @@ namespace ZenitiumDns.Core.Dhcp
         Standby = 2
     }
 
+    public enum DhcpIpv6Mode : byte
+    {
+        Off = 0,
+        Slaac = 1,
+        Stateful = 2,
+        Both = 3
+    }
+
+    public enum DhcpIpv6Router : byte
+    {
+        Auto = 0,
+        Yes = 1,
+        No = 2
+    }
+
     public sealed class DhcpReservation
     {
         public string HardwareAddress { get; init; }
 
         public string Address { get; init; }
+
+        public string Address6 { get; init; }
 
         public string HostName { get; init; }
     }
@@ -98,6 +115,14 @@ namespace ZenitiumDns.Core.Dhcp
 
         public uint DnsTtl { get; init; } = 60;
 
+        public DhcpIpv6Mode Ipv6Mode { get; init; } = DhcpIpv6Mode.Off;
+
+        public string Ipv6RangeStart { get; init; } = "::1000";
+
+        public string Ipv6RangeEnd { get; init; } = "::1fff";
+
+        public DhcpIpv6Router Ipv6Router { get; init; } = DhcpIpv6Router.Auto;
+
         #endregion
 
         #region public
@@ -130,7 +155,7 @@ namespace ZenitiumDns.Core.Dhcp
                 List<string> dns = new List<string>();
                 foreach (string server in DnsServers)
                 {
-                    if (!string.IsNullOrWhiteSpace(server))
+                    if (!string.IsNullOrWhiteSpace(server) && !server.Contains(':'))
                         dns.Add(server.Trim());
                 }
 
@@ -139,6 +164,52 @@ namespace ZenitiumDns.Core.Dhcp
 
                 if (!string.IsNullOrWhiteSpace(Domain))
                     sb.Append("dhcp-option=tag:simple,option:domain-search,").Append(Domain.Trim().TrimEnd('.')).Append('\n');
+            }
+
+            if (Ipv6Mode != DhcpIpv6Mode.Off)
+            {
+                string iface = (Interface ?? "").Trim();
+
+                if (iface.Length == 0)
+                {
+                    errors.Add("IPv6 needs an interface in the simple settings");
+                }
+                else
+                {
+                    string lease = string.IsNullOrWhiteSpace(LeaseTime) ? "24h" : LeaseTime.Trim();
+
+                    switch (Ipv6Mode)
+                    {
+                        case DhcpIpv6Mode.Slaac:
+                            sb.Append("dhcp-range=set:simple,::,constructor:").Append(iface).Append(",ra-stateless,64,").Append(lease).Append('\n');
+                            break;
+
+                        case DhcpIpv6Mode.Stateful:
+                        case DhcpIpv6Mode.Both:
+                            sb.Append("dhcp-range=set:simple,").Append((Ipv6RangeStart ?? "").Trim()).Append(',').Append((Ipv6RangeEnd ?? "").Trim()).Append(",constructor:").Append(iface);
+
+                            if (Ipv6Mode == DhcpIpv6Mode.Both)
+                                sb.Append(",slaac");
+
+                            sb.Append(",64,").Append(lease).Append('\n');
+                            break;
+                    }
+
+                    sb.Append("enable-ra\n");
+
+                    if (Ipv6Router != DhcpIpv6Router.Auto)
+                        sb.Append("ra-param=").Append(iface).Append(",600,").Append(Ipv6Router == DhcpIpv6Router.Yes ? "1800" : "0").Append('\n');
+
+                    List<string> dns6 = new List<string>();
+                    foreach (string server in DnsServers)
+                    {
+                        if (!string.IsNullOrWhiteSpace(server) && server.Contains(':'))
+                            dns6.Add("[" + server.Trim().Trim('[', ']') + "]");
+                    }
+
+                    if (dns6.Count > 0)
+                        sb.Append("dhcp-option=tag:simple,option6:dns-server,").Append(string.Join(',', dns6)).Append('\n');
+                }
             }
 
             if (!string.IsNullOrWhiteSpace(Domain))
@@ -155,7 +226,17 @@ namespace ZenitiumDns.Core.Dhcp
                 sb.Append("dhcp-host=").Append(reservation.HardwareAddress.Trim());
 
                 if (!string.IsNullOrWhiteSpace(reservation.Address))
-                    sb.Append(',').Append(reservation.Address.Trim());
+                {
+                    string address = reservation.Address.Trim();
+
+                    if (address.Contains(':'))
+                        sb.Append(",[").Append(address.Trim('[', ']')).Append(']');
+                    else
+                        sb.Append(',').Append(address);
+                }
+
+                if (!string.IsNullOrWhiteSpace(reservation.Address6))
+                    sb.Append(",[").Append(reservation.Address6.Trim().Trim('[', ']')).Append(']');
 
                 if (!string.IsNullOrWhiteSpace(reservation.HostName))
                     sb.Append(',').Append(reservation.HostName.Trim());
@@ -213,6 +294,7 @@ namespace ZenitiumDns.Core.Dhcp
                 writer.WriteStartObject();
                 writer.WriteString("mac", reservation.HardwareAddress ?? "");
                 writer.WriteString("address", reservation.Address ?? "");
+                writer.WriteString("address6", reservation.Address6 ?? "");
                 writer.WriteString("hostName", reservation.HostName ?? "");
                 writer.WriteEndObject();
             }
@@ -228,6 +310,10 @@ namespace ZenitiumDns.Core.Dhcp
             writer.WriteNumber("rogueProbeIntervalSeconds", RogueProbeIntervalSeconds);
             writer.WriteBoolean("registerDns", RegisterDns);
             writer.WriteNumber("dnsTtl", DnsTtl);
+            writer.WriteString("ipv6Mode", Ipv6Mode.ToString().ToLowerInvariant());
+            writer.WriteString("ipv6RangeStart", Ipv6RangeStart ?? "");
+            writer.WriteString("ipv6RangeEnd", Ipv6RangeEnd ?? "");
+            writer.WriteString("ipv6Router", Ipv6Router.ToString().ToLowerInvariant());
             writer.WriteEndObject();
         }
 
@@ -262,6 +348,7 @@ namespace ZenitiumDns.Core.Dhcp
                     {
                         HardwareAddress = GetString(item, "mac"),
                         Address = GetString(item, "address"),
+                        Address6 = GetString(item, "address6"),
                         HostName = GetString(item, "hostName")
                     });
                 }
@@ -270,6 +357,14 @@ namespace ZenitiumDns.Core.Dhcp
             DhcpPriorityMode priority = DhcpPriorityMode.Primary;
             if (root.TryGetProperty("priority", out JsonElement jsonPriority) && !Enum.TryParse(jsonPriority.GetString(), true, out priority))
                 priority = DhcpPriorityMode.Primary;
+
+            DhcpIpv6Mode ipv6Mode = DhcpIpv6Mode.Off;
+            if (root.TryGetProperty("ipv6Mode", out JsonElement jsonIpv6Mode) && (!Enum.TryParse(jsonIpv6Mode.GetString(), true, out ipv6Mode) || !Enum.IsDefined(ipv6Mode)))
+                ipv6Mode = DhcpIpv6Mode.Off;
+
+            DhcpIpv6Router ipv6Router = DhcpIpv6Router.Auto;
+            if (root.TryGetProperty("ipv6Router", out JsonElement jsonIpv6Router) && (!Enum.TryParse(jsonIpv6Router.GetString(), true, out ipv6Router) || !Enum.IsDefined(ipv6Router)))
+                ipv6Router = DhcpIpv6Router.Auto;
 
             return new DhcpSettings()
             {
@@ -294,7 +389,11 @@ namespace ZenitiumDns.Core.Dhcp
                 RogueDetection = GetBool(root, "rogueDetection", true),
                 RogueProbeIntervalSeconds = Math.Clamp(GetInt(root, "rogueProbeIntervalSeconds", 300), 30, 86400),
                 RegisterDns = GetBool(root, "registerDns", true),
-                DnsTtl = (uint)Math.Clamp(GetInt(root, "dnsTtl", 60), 0, 86400)
+                DnsTtl = (uint)Math.Clamp(GetInt(root, "dnsTtl", 60), 0, 86400),
+                Ipv6Mode = ipv6Mode,
+                Ipv6RangeStart = GetString(root, "ipv6RangeStart", "::1000"),
+                Ipv6RangeEnd = GetString(root, "ipv6RangeEnd", "::1fff"),
+                Ipv6Router = ipv6Router
             };
         }
 
@@ -323,7 +422,11 @@ namespace ZenitiumDns.Core.Dhcp
                 RogueDetection = RogueDetection,
                 RogueProbeIntervalSeconds = RogueProbeIntervalSeconds,
                 RegisterDns = RegisterDns,
-                DnsTtl = DnsTtl
+                DnsTtl = DnsTtl,
+                Ipv6Mode = Ipv6Mode,
+                Ipv6RangeStart = Ipv6RangeStart,
+                Ipv6RangeEnd = Ipv6RangeEnd,
+                Ipv6Router = Ipv6Router
             };
         }
 
@@ -356,7 +459,7 @@ namespace ZenitiumDns.Core.Dhcp
                     errors.Add(new DhcpConfigError(error.Line - simpleLines, error.Message));
             }
 
-            if (Enabled && (configuration.Ranges.Count == 0))
+            if (Enabled && (configuration.Ranges.Count == 0) && (configuration.Ranges6.Count == 0))
                 errors.Add(new DhcpConfigError(0, "no address range is configured"));
 
             return errors;

@@ -712,8 +712,9 @@ namespace ZenitiumDns.Core
 
             ZipArchiveEntry settingsEntry = backupZip.GetEntry(Dhcp.DhcpServer.SETTINGS_FILE);
             ZipArchiveEntry leasesEntry = backupZip.GetEntry(Dhcp.DhcpServer.LEASES_FILE);
+            ZipArchiveEntry leases6Entry = backupZip.GetEntry(Dhcp.DhcpServer.LEASES6_FILE);
 
-            if ((settingsEntry is null) && (leasesEntry is null))
+            if ((settingsEntry is null) && (leasesEntry is null) && (leases6Entry is null))
                 return;
 
             if (settingsEntry is not null)
@@ -743,6 +744,19 @@ namespace ZenitiumDns.Core
                 catch (Exception ex)
                 {
                     _log.Write("DHCP leases of the backup could not be restored.", ex);
+                }
+            }
+
+            if (leases6Entry is not null)
+            {
+                try
+                {
+                    int count = dhcpServer.RestoreLeases6(await ReadBackupEntryAsync(leases6Entry, 64 * 1024 * 1024));
+                    _log.Write("DHCPv6 leases were restored from the backup: " + count);
+                }
+                catch (Exception ex)
+                {
+                    _log.Write("DHCPv6 leases of the backup could not be restored.", ex);
                 }
             }
         }
@@ -812,6 +826,9 @@ namespace ZenitiumDns.Core
 
                         if (File.Exists(Path.Combine(_configFolder, Dhcp.DhcpServer.LEASES_FILE)))
                             await WriteBackupEntryAsync(backupZip, Dhcp.DhcpServer.LEASES_FILE, dhcpServer.ExportLeases());
+
+                        if (File.Exists(Path.Combine(_configFolder, Dhcp.DhcpServer.LEASES6_FILE)))
+                            await WriteBackupEntryAsync(backupZip, Dhcp.DhcpServer.LEASES6_FILE, dhcpServer.ExportLeases6());
                     }
 
                     if (!string.IsNullOrEmpty(_dnsServer.DnsTlsCertificatePath))
@@ -2031,9 +2048,11 @@ namespace ZenitiumDns.Core
             _webService.MapGetAndPost("/api/dhcp/leases/reserve", _dhcpApi.ReserveLease);
             _webService.MapGetAndPost("/api/dhcp/probe", _dhcpApi.ProbeAsync);
             _webService.MapGetAndPost("/api/dhcp/foreign/clear", _dhcpApi.ClearForeignServers);
+            _webService.MapGetAndPost("/api/dhcp/devices", _dhcpApi.ListDevicesAsync);
             _webService.MapGetAndPost("/api/settings/clients/list", _settingsApi.GetClientProfiles);
             _webService.MapGetAndPost("/api/settings/clients/set", _settingsApi.SetClientProfile);
             _webService.MapGetAndPost("/api/settings/clients/delete", _settingsApi.DeleteClientProfile);
+            _webService.MapGetAndPost("/api/settings/clients/assign", _settingsApi.AssignClientIdentifier);
             _webService.MapGetAndPost("/api/settings/forceUpdateClientBlockLists", _settingsApi.ForceUpdateClientBlockLists);
             _webService.MapGetAndPost("/api/settings/iana/update", _settingsApi.UpdateIanaDataAsync);
             _webService.MapGetAndPost("/api/settings/iana/get", _settingsApi.GetIanaDataAsync);
@@ -2650,6 +2669,7 @@ namespace ZenitiumDns.Core
             try
             {
                 _dhcpServer = new Dhcp.DhcpServer(_configFolder, Dhcp.DhcpServer.LoadOrCreateNodeId(_configFolder), delegate (string message) { _log.Write(message); }, delegate (string message, Exception ex) { _log.Write(message, ex); });
+                _dnsServer.ClientProfileManager.HardwareAddressResolver = _dhcpServer.TryGetHardwareAddress;
                 _dhcpServer.LoadSettings();
                 _dnsServer.DhcpServer = _dhcpServer;
                 _dhcpServer.Start();
@@ -2672,6 +2692,7 @@ namespace ZenitiumDns.Core
                 if (_dhcpServer is not null)
                 {
                     _dnsServer.DhcpServer = null;
+                    _dnsServer.ClientProfileManager.HardwareAddressResolver = null;
                     _dhcpServer.Dispose();
                     _dhcpServer = null;
                 }

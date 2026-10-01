@@ -192,6 +192,101 @@ function onServerConnectionRestored() {
     });
 }
 
+function getDnsRecordDataText(record) {
+    var r = record.rData;
+
+    if (r == null)
+        return "";
+
+    switch (record.type) {
+        case "A":
+        case "AAAA":
+            return r.ipAddress;
+
+        case "NS":
+            return r.nameServer;
+
+        case "CNAME":
+            return r.cname;
+
+        case "DNAME":
+            return r.dname;
+
+        case "PTR":
+            return r.ptrName;
+
+        case "MX":
+            return r.preference + " " + r.exchange;
+
+        case "TXT":
+            return r.text;
+
+        case "SRV":
+            return r.priority + " " + r.weight + " " + r.port + " " + r.target;
+
+        case "SOA":
+            return r.primaryNameServer + " " + r.responsiblePerson + " " + r.serial;
+
+        case "DS":
+            return r.keyTag + " " + r.algorithm + " " + r.digestType + " " + r.digest;
+
+        case "DNSKEY":
+            return r.flags + " " + r.algorithm + " " + r.computedKeyTag;
+
+        case "RRSIG":
+            return r.typeCovered + " " + r.algorithm + " " + r.signersName + " " + r.keyTag;
+
+        case "NSEC":
+            return r.nextDomainName;
+    }
+
+    if (r.data != null)
+        return r.data;
+
+    var parts = [];
+
+    for (var key in r) {
+        if ((key !== "dataType") && (typeof r[key] !== "object"))
+            parts.push(r[key]);
+    }
+
+    return parts.join(" ");
+}
+
+function renderDnsRecordsView(container, records) {
+    var html = "<table class=\"table table-condensed dns-records-table\"><thead><tr><th>" + htmlEncode(tr("Name")) + "</th><th>" + htmlEncode(tr("Typ")) + "</th><th>TTL</th><th>" + htmlEncode(tr("Daten")) + "</th><th></th></tr></thead><tbody>";
+
+    for (var i = 0; i < records.length; i++) {
+        var record = records[i];
+        var status = "";
+
+        switch (record.dnssecStatus) {
+            case "Secure":
+                status = " <span class=\"label label-success\">DNSSEC</span>";
+                break;
+
+            case "Bogus":
+                status = " <span class=\"label label-danger\">" + htmlEncode(tr("DNSSEC ungültig")) + "</span>";
+                break;
+        }
+
+        html += "<tr class=\"dns-record-row\" tabindex=\"0\"><td>" + htmlEncode(record.name === "" ? "." : record.name) + "</td><td><span class=\"dns-record-type\">" + htmlEncode(record.type) + "</span></td><td class=\"dns-record-ttl\">" + htmlEncode(String(record.ttl)) + "</td><td class=\"dns-record-data\">" + htmlEncode(String(getDnsRecordDataText(record))) + status + "</td><td class=\"text-right\"><span class=\"fa fa-angle-down\" aria-hidden=\"true\"></span></td></tr>";
+        html += "<tr class=\"dns-record-details\" style=\"display: none;\"><td colspan=\"5\"><pre>" + htmlEncode(JSON.stringify(record, null, 2)) + "</pre></td></tr>";
+    }
+
+    html += "</tbody></table>";
+
+    container.html(html);
+    container.find(".dns-record-row").on("click keydown", function (e) {
+        if ((e.type === "keydown") && (e.key !== "Enter") && (e.key !== " "))
+            return;
+
+        e.preventDefault();
+        $(this).next(".dns-record-details").toggle();
+        $(this).find(".fa").toggleClass("fa-angle-down fa-angle-up");
+    });
+}
+
 function HTTPRequest(url, method, data, isTextResponse, success, error, invalidToken, twoFactorAuthRequired, objAlertPlaceholder, objLoaderPlaceholder, processData, contentType, dontHideAlert, showInnerError, token) {
     var finalUrl;
 

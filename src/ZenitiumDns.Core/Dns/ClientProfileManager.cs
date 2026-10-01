@@ -89,6 +89,8 @@ namespace ZenitiumDns.Core.Dns
         }
     }
 
+    public delegate bool HardwareAddressResolver(IPAddress address, out byte[] hardwareAddress);
+
     public sealed class ClientProfileManager
     {
         #region variables
@@ -257,6 +259,60 @@ namespace ZenitiumDns.Core.Dns
             return true;
         }
 
+        public static bool TryNormalizeHardwareAddress(string text, out string normalized)
+        {
+            normalized = null;
+
+            if ((text is null) || (text.Length != 17))
+                return false;
+
+            char separator = text[2];
+            if ((separator != ':') && (separator != '-'))
+                return false;
+
+            char[] chars = new char[17];
+
+            for (int i = 0; i < 17; i++)
+            {
+                char c = text[i];
+
+                if ((i % 3) == 2)
+                {
+                    if (c != separator)
+                        return false;
+
+                    chars[i] = ':';
+                    continue;
+                }
+
+                if (!char.IsAsciiHexDigit(c))
+                    return false;
+
+                chars[i] = char.ToLowerInvariant(c);
+            }
+
+            normalized = new string(chars);
+            return true;
+        }
+
+        public static string FormatHardwareAddress(byte[] address)
+        {
+            if ((address is null) || (address.Length != 6))
+                return null;
+
+            return string.Join(':', Array.ConvertAll(address, delegate (byte b) { return b.ToString("x2"); }));
+        }
+
+        public static string NormalizeIdentifier(string identifier)
+        {
+            ClientProfile profile = Normalize("x", [identifier], true, true, []);
+
+            if (profile.Identifiers.Count != 1)
+                throw new ArgumentException("The identifier is empty.");
+
+            return profile.Identifiers[0];
+        }
+
         public static ClientProfile Normalize(string name, IEnumerable<string> identifiers, bool blockingEnabled, bool useDefaultLists, IEnumerable<string> blockListUrls)
         {
             name = name?.Trim();
@@ -292,12 +348,16 @@ namespace ZenitiumDns.Core.Dns
 
                     normalized = network.ToString();
                 }
+                else if (TryNormalizeHardwareAddress(identifier, out string mac))
+                {
+                    normalized = mac;
+                }
                 else
                 {
                     normalized = identifier.ToLowerInvariant();
 
                     if (!IsValidClientId(normalized))
-                        throw new ArgumentException("Invalid client identifier '" + identifier + "'. Use an IP address, a network in CIDR notation or a ClientID made of lowercase letters, digits and hyphens (max. " + MAX_CLIENT_ID_LENGTH + " characters).");
+                        throw new ArgumentException("Invalid client identifier '" + identifier + "'. Use an IP address, a network in CIDR notation, a MAC address or a ClientID made of lowercase letters, digits and hyphens (max. " + MAX_CLIENT_ID_LENGTH + " characters).");
                 }
 
                 if (seenIdentifiers.Add(normalized))
@@ -523,6 +583,19 @@ namespace ZenitiumDns.Core.Dns
             if (clientId is not null)
                 index.ByClientId.TryGetValue(clientId, out profile);
 
+            if ((profile is null) && (address is not null) && (index.ByMac.Count > 0))
+            {
+                HardwareAddressResolver resolver = HardwareAddressResolver;
+
+                if ((resolver is not null) && resolver(address, out byte[] hardwareAddress))
+                {
+                    string mac = FormatHardwareAddress(hardwareAddress);
+
+                    if (mac is not null)
+                        index.ByMac.TryGetValue(mac, out profile);
+                }
+            }
+
             if ((profile is null) && (address is not null))
             {
                 if (address.IsIPv4MappedToIPv6)
@@ -542,6 +615,91 @@ namespace ZenitiumDns.Core.Dns
             }
 
             return new DnsClientIdentity(address, clientId, profile);
+        }
+
+        public ClientProfile ResolveDevice(IPAddress address, string mac, out string matchedBy)
+        {
+            ProfileIndex index = _index;
+            matchedBy = null;
+
+            if ((mac is not null) && index.ByMac.TryGetValue(mac, out ClientProfile byMac))
+            {
+                matchedBy = mac;
+                return byMac;
+            }
+
+            if (address is null)
+                return null;
+
+            if (address.IsIPv4MappedToIPv6)
+                address = address.MapToIPv4();
+
+            if (index.ByAddress.TryGetValue(address, out ClientProfile byAddress))
+            {
+                matchedBy = address.ToString();
+                return byAddress;
+            }
+
+            foreach ((NetworkAddress network, ClientProfile networkProfile) in index.ByNetwork)
+            {
+                if (network.Contains(address))
+                {
+                    matchedBy = network.ToString();
+                    return networkProfile;
+                }
+            }
+
+            return null;
+        }
+
+        public string AssignIdentifier(string identifier, string profileName)
+        {
+            string normalized = NormalizeIdentifier(identifier);
+
+            lock (_lock)
+            {
+                List<ClientProfile> profiles = new List<ClientProfile>(_index.Profiles);
+                string previous = null;
+                int target = -1;
+
+                if (!string.IsNullOrEmpty(profileName))
+                {
+                    target = profiles.FindIndex(delegate (ClientProfile p) { return p.Name.Equals(profileName, StringComparison.OrdinalIgnoreCase); });
+
+                    if (target < 0)
+                        throw new ArgumentException("Client profile was not found: " + profileName);
+                }
+
+                for (int i = 0; i < profiles.Count; i++)
+                {
+                    ClientProfile profile = profiles[i];
+                    List<string> identifiers = new List<string>(profile.Identifiers);
+
+                    if (identifiers.RemoveAll(delegate (string x) { return x.Equals(normalized, StringComparison.OrdinalIgnoreCase); }) > 0)
+                    {
+                        previous = profile.Name;
+                        profiles[i] = new ClientProfile(profile.Name, identifiers, profile.BlockingEnabled, profile.UseDefaultLists, profile.BlockListUrls);
+                    }
+                }
+
+                if (target >= 0)
+                {
+                    ClientProfile profile = profiles[target];
+                    List<string> identifiers = new List<string>(profile.Identifiers) { normalized };
+
+                    if (identifiers.Count > MAX_IDENTIFIERS)
+                        throw new ArgumentException("A profile cannot have more than " + MAX_IDENTIFIERS + " identifiers.");
+
+                    profiles[target] = new ClientProfile(profile.Name, identifiers, profile.BlockingEnabled, profile.UseDefaultLists, profile.BlockListUrls);
+                }
+
+                ProfileIndex newIndex = ProfileIndex.Create(profiles);
+
+                SaveInternal(newIndex.Profiles);
+                Apply(newIndex);
+
+                return previous;
+            }
         }
 
         public ClientProfile GetProfile(string name)
@@ -587,22 +745,29 @@ namespace ZenitiumDns.Core.Dns
         public bool HasClientIds
         { get { return _index.ByClientId.Count > 0; } }
 
+        public bool HasHardwareAddresses
+        { get { return _index.ByMac.Count > 0; } }
+
+        public HardwareAddressResolver HardwareAddressResolver { get; set; }
+
         #endregion
 
         sealed class ProfileIndex
         {
-            public static readonly ProfileIndex Empty = new ProfileIndex([], new Dictionary<string, ClientProfile>(), new Dictionary<IPAddress, ClientProfile>(), [], []);
+            public static readonly ProfileIndex Empty = new ProfileIndex([], new Dictionary<string, ClientProfile>(), new Dictionary<string, ClientProfile>(), new Dictionary<IPAddress, ClientProfile>(), [], []);
 
             public readonly ClientProfile[] Profiles;
             public readonly Dictionary<string, ClientProfile> ByClientId;
+            public readonly Dictionary<string, ClientProfile> ByMac;
             public readonly Dictionary<IPAddress, ClientProfile> ByAddress;
             public readonly (NetworkAddress, ClientProfile)[] ByNetwork;
             public readonly IReadOnlyList<string> ListLines;
 
-            private ProfileIndex(ClientProfile[] profiles, Dictionary<string, ClientProfile> byClientId, Dictionary<IPAddress, ClientProfile> byAddress, (NetworkAddress, ClientProfile)[] byNetwork, IReadOnlyList<string> listLines)
+            private ProfileIndex(ClientProfile[] profiles, Dictionary<string, ClientProfile> byClientId, Dictionary<string, ClientProfile> byMac, Dictionary<IPAddress, ClientProfile> byAddress, (NetworkAddress, ClientProfile)[] byNetwork, IReadOnlyList<string> listLines)
             {
                 Profiles = profiles;
                 ByClientId = byClientId;
+                ByMac = byMac;
                 ByAddress = byAddress;
                 ByNetwork = byNetwork;
                 ListLines = listLines;
@@ -611,6 +776,7 @@ namespace ZenitiumDns.Core.Dns
             public static ProfileIndex Create(IReadOnlyList<ClientProfile> profiles)
             {
                 Dictionary<string, ClientProfile> byClientId = new Dictionary<string, ClientProfile>(StringComparer.Ordinal);
+                Dictionary<string, ClientProfile> byMac = new Dictionary<string, ClientProfile>(StringComparer.Ordinal);
                 Dictionary<IPAddress, ClientProfile> byAddress = new Dictionary<IPAddress, ClientProfile>();
                 List<(NetworkAddress, ClientProfile)> byNetwork = new List<(NetworkAddress, ClientProfile)>();
                 Dictionary<string, string> owners = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -630,6 +796,8 @@ namespace ZenitiumDns.Core.Dns
                             byNetwork.Add((NetworkAddress.Parse(identifier), profile));
                         else if (IPAddressExtensions.TryParseStrict(identifier, out IPAddress address))
                             byAddress.Add(address, profile);
+                        else if (TryNormalizeHardwareAddress(identifier, out string mac))
+                            byMac.Add(mac, profile);
                         else
                             byClientId.Add(identifier, profile);
                     }
@@ -643,7 +811,7 @@ namespace ZenitiumDns.Core.Dns
 
                 byNetwork.Sort(delegate ((NetworkAddress, ClientProfile) x, (NetworkAddress, ClientProfile) y) { return y.Item1.PrefixLength.CompareTo(x.Item1.PrefixLength); });
 
-                return new ProfileIndex([.. profiles], byClientId, byAddress, byNetwork.ToArray(), listLines);
+                return new ProfileIndex([.. profiles], byClientId, byMac, byAddress, byNetwork.ToArray(), listLines);
             }
         }
     }

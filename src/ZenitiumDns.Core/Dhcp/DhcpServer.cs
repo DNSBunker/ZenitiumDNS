@@ -35,6 +35,8 @@ namespace ZenitiumDns.Core.Dhcp
     {
         public IPAddress Address { get; init; }
 
+        public string ServerId { get; init; }
+
         public string Interface { get; init; }
 
         public DateTime FirstSeen { get; init; }
@@ -46,6 +48,27 @@ namespace ZenitiumDns.Core.Dhcp
         public IPAddress OfferedAddress { get; set; }
 
         public long Count { get; set; }
+    }
+
+    public sealed class DhcpDevice
+    {
+        public string HardwareAddress { get; set; }
+
+        public string HostName { get; set; }
+
+        public SortedSet<string> Addresses4 { get; } = new SortedSet<string>(StringComparer.Ordinal);
+
+        public SortedSet<string> Addresses6 { get; } = new SortedSet<string>(StringComparer.Ordinal);
+
+        public string ClientId { get; set; }
+
+        public SortedSet<string> Duids { get; } = new SortedSet<string>(StringComparer.Ordinal);
+
+        public bool Reserved { get; set; }
+
+        public SortedSet<string> Sources { get; } = new SortedSet<string>(StringComparer.Ordinal);
+
+        public DateTime LastSeen { get; set; }
     }
 
     public sealed class DhcpListenerStatus
@@ -65,6 +88,7 @@ namespace ZenitiumDns.Core.Dhcp
 
         public const string SETTINGS_FILE = "dhcp.json";
         public const string LEASES_FILE = "dhcp-leases.json";
+        public const string LEASES6_FILE = "dhcp6-leases.json";
 
         const int SERVER_PORT = 67;
         const int CLIENT_PORT = 68;
@@ -74,6 +98,7 @@ namespace ZenitiumDns.Core.Dhcp
         const int SOL_SOCKET = 1;
         const int MAINTENANCE_INTERVAL_MS = 15000;
         const int PROBE_WAIT_MS = 6000;
+        const uint DEFAULT_LEASE_TIME = 3600;
 
         readonly string _configFolder;
         readonly Action<string> _logMessage;
@@ -83,6 +108,10 @@ namespace ZenitiumDns.Core.Dhcp
         readonly object _lock = new object();
         readonly DhcpLeaseStore _store;
         readonly DhcpEngine _engine;
+        readonly Dhcp6LeaseStore _store6;
+        readonly Dhcp6Engine _engine6;
+        readonly RouterAdvertiser _ra;
+        readonly byte[] _serverDuid;
 
         DhcpSettings _settings = new DhcpSettings();
         DhcpConfiguration _config = DhcpConfiguration.Empty;
@@ -90,6 +119,12 @@ namespace ZenitiumDns.Core.Dhcp
 
         readonly Dictionary<string, Listener> _listeners = new Dictionary<string, Listener>(StringComparer.Ordinal);
         readonly List<DhcpListenerStatus> _listenerStatus = new List<DhcpListenerStatus>();
+        readonly Dictionary<string, Listener6> _listeners6 = new Dictionary<string, Listener6>(StringComparer.Ordinal);
+        readonly List<DhcpListenerStatus> _listener6Status = new List<DhcpListenerStatus>();
+        HashSet<UInt128> _localAddresses6 = new HashSet<UInt128>();
+        long _received6;
+        long _sent6;
+        long _malformed6;
         DhcpRawSender _rawSender;
         string _rawSenderError;
 
@@ -103,15 +138,21 @@ namespace ZenitiumDns.Core.Dhcp
         long _sent;
 
         readonly ConcurrentDictionary<string, DhcpForeignServer> _foreignServers = new ConcurrentDictionary<string, DhcpForeignServer>(StringComparer.Ordinal);
+        readonly ConcurrentDictionary<string, DhcpForeignServer> _foreignServers6 = new ConcurrentDictionary<string, DhcpForeignServer>(StringComparer.Ordinal);
         readonly HashSet<string> _probeHardwareAddresses = new HashSet<string>(StringComparer.Ordinal);
         DateTime _lastProbe = DateTime.MinValue;
         DateTime _lastProbeCompleted = DateTime.MinValue;
         string _lastProbeError;
         int _probing;
 
+        readonly NeighborTable _neighbors = new NeighborTable();
+        Dictionary<IPAddress, byte[]> _addressToMac = new Dictionary<IPAddress, byte[]>();
+        Dictionary<string, byte[]> _duidToMac = new Dictionary<string, byte[]>(StringComparer.Ordinal);
+
         readonly object _dnsLock = new object();
-        Dictionary<string, (IPAddress Address, DateTime Updated)> _dnsNames = new Dictionary<string, (IPAddress, DateTime)>(StringComparer.OrdinalIgnoreCase);
+        Dictionary<string, DnsEntry> _dnsNames = new Dictionary<string, DnsEntry>(StringComparer.OrdinalIgnoreCase);
         Dictionary<uint, string> _dnsReverse = new Dictionary<uint, string>();
+        Dictionary<UInt128, string> _dnsReverse6 = new Dictionary<UInt128, string>();
         int _dnsRebuildPending;
 
         Timer _maintenanceTimer;
@@ -129,10 +170,19 @@ namespace ZenitiumDns.Core.Dhcp
             _logMessage = logMessage ?? delegate (string message) { };
             _logError = logError ?? delegate (string message, Exception ex) { };
 
-            _store = new DhcpLeaseStore(configFolder is null ? null : Path.Combine(configFolder, LEASES_FILE), nodeId, delegate (string message, Exception ex) { if (ex is null) _logMessage(message); else _logError(message, ex); });
+            Action<string, Exception> storeLog = delegate (string message, Exception ex) { if (ex is null) _logMessage(message); else _logError(message, ex); };
+
+            _store = new DhcpLeaseStore(configFolder is null ? null : Path.Combine(configFolder, LEASES_FILE), nodeId, storeLog);
             _engine = new DhcpEngine(_store, PingAsync, _logMessage);
             _engine.ForeignServerSeen += delegate (IPAddress address, string iface) { RecordForeignServer(address, iface, "request", null); };
-            _store.LeaseChanged += OnLeaseChanged;
+            _store.LeaseChanged += delegate (DhcpLease lease) { ScheduleDnsRebuild(); };
+
+            _serverDuid = CreateServerDuid(nodeId);
+            _store6 = new Dhcp6LeaseStore(configFolder is null ? null : Path.Combine(configFolder, LEASES6_FILE), storeLog);
+            _engine6 = new Dhcp6Engine(_store6, _logMessage);
+            _engine6.ForeignServerSeen += RecordForeignServer6;
+            _store6.LeaseChanged += delegate (Dhcp6Lease lease) { ScheduleDnsRebuild(); };
+            _ra = new RouterAdvertiser(_logMessage, _logError);
         }
 
         #endregion
@@ -150,9 +200,12 @@ namespace ZenitiumDns.Core.Dhcp
             }
 
             _maintenanceTimer?.Dispose();
+            _ra.Dispose();
             StopListeners();
+            StopListeners6();
             _rawSender?.Dispose();
             _store.Dispose();
+            _store6.Dispose();
         }
 
         #endregion
@@ -165,6 +218,22 @@ namespace ZenitiumDns.Core.Dhcp
             public DhcpInterfaceInfo Info;
             public CancellationTokenSource Cancellation;
             public Task ReceiveTask;
+        }
+
+        private sealed class Listener6
+        {
+            public Socket Socket;
+            public volatile Dhcp6InterfaceInfo Info;
+            public CancellationTokenSource Cancellation;
+        }
+
+        private sealed class DnsEntry
+        {
+            public List<IPAddress> Addresses4 = new List<IPAddress>();
+            public DateTime Updated4 = DateTime.MinValue;
+            public List<IPAddress> Addresses6 = new List<IPAddress>();
+            public DateTime Updated6 = DateTime.MinValue;
+            public string ClientKey6;
         }
 
         #endregion
@@ -425,6 +494,304 @@ namespace ZenitiumDns.Core.Dhcp
                 _listenerStatus.Clear();
                 _listenerStatus.AddRange(status);
             }
+
+            List<Dhcp6InterfaceInfo> interfaces6 = Dhcp6Utilities.GetInterfaces();
+            HashSet<UInt128> localAddresses6 = new HashSet<UInt128>();
+
+            foreach (Dhcp6InterfaceInfo info in interfaces6)
+            {
+                foreach (Dhcp6InterfaceAddress address in info.Addresses)
+                    localAddresses6.Add(Dhcp6Utilities.ToUInt128(address.Address));
+            }
+
+            _localAddresses6 = localAddresses6;
+
+            RefreshListeners6(config, enabled, interfaces6);
+            _ra.Update(config, enabled, interfaces6, DEFAULT_LEASE_TIME);
+        }
+
+        private void StopListeners6()
+        {
+            List<Listener6> listeners;
+
+            lock (_lock)
+            {
+                listeners = new List<Listener6>(_listeners6.Values);
+                _listeners6.Clear();
+            }
+
+            foreach (Listener6 listener in listeners)
+                StopListener6(listener);
+        }
+
+        private static void StopListener6(Listener6 listener)
+        {
+            try
+            {
+                listener.Cancellation.Cancel();
+            }
+            catch
+            { }
+
+            try
+            {
+                listener.Socket.Dispose();
+            }
+            catch
+            { }
+        }
+
+        private static Socket CreateBoundSocket6(Dhcp6InterfaceInfo info)
+        {
+            Socket socket = new Socket(AddressFamily.InterNetworkV6, SocketType.Dgram, ProtocolType.Udp);
+
+            try
+            {
+                socket.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ReuseAddress, true);
+                socket.SetSocketOption(SocketOptionLevel.IPv6, SocketOptionName.IPv6Only, true);
+
+                if (OperatingSystem.IsLinux())
+                {
+                    byte[] name = Encoding.ASCII.GetBytes(info.Name + "\0");
+                    socket.SetRawSocketOption(SOL_SOCKET, SO_BINDTODEVICE, name);
+                }
+
+                socket.SetSocketOption(SocketOptionLevel.IPv6, SocketOptionName.PacketInformation, true);
+                socket.Bind(new IPEndPoint(IPAddress.IPv6Any, Dhcp6Message.SERVER_PORT));
+                socket.SetSocketOption(SocketOptionLevel.IPv6, SocketOptionName.AddMembership, new IPv6MulticastOption(Dhcp6Message.AllServersAndRelays, info.Index));
+                socket.SetSocketOption(SocketOptionLevel.IPv6, SocketOptionName.MulticastInterface, info.Index);
+                return socket;
+            }
+            catch
+            {
+                socket.Dispose();
+                throw;
+            }
+        }
+
+        private void RefreshListeners6(DhcpConfiguration config, bool enabled, List<Dhcp6InterfaceInfo> interfaces)
+        {
+            Dictionary<string, Dhcp6InterfaceInfo> wanted = new Dictionary<string, Dhcp6InterfaceInfo>(StringComparer.Ordinal);
+            List<DhcpListenerStatus> status = new List<DhcpListenerStatus>();
+            bool relayRanges = false;
+
+            foreach (Dhcp6RangeRule rule in config.Ranges6)
+            {
+                if ((rule.Constructor is null) && rule.OffersDhcp)
+                    relayRanges = true;
+            }
+
+            if (enabled && (config.Ranges6.Count > 0))
+            {
+                foreach (Dhcp6InterfaceInfo info in interfaces)
+                {
+                    if (!config.IsInterfaceAllowed(info.Name) || (info.LinkLocal is null) || (info.Index <= 0))
+                        continue;
+
+                    bool serves = relayRanges;
+
+                    foreach (Dhcp6RangeCandidate candidate in Dhcp6RangeCandidate.GetForInterface(config, info))
+                    {
+                        if (candidate.Rule.OffersDhcp)
+                        {
+                            serves = true;
+                            break;
+                        }
+                    }
+
+                    if (serves)
+                        wanted[info.Name] = info;
+                }
+
+                foreach (Dhcp6RangeRule rule in config.Ranges6)
+                {
+                    if ((rule.Constructor is null) || rule.Constructor.EndsWith('*'))
+                        continue;
+
+                    Dhcp6InterfaceInfo found = null;
+
+                    foreach (Dhcp6InterfaceInfo info in interfaces)
+                    {
+                        if (info.Name == rule.Constructor)
+                        {
+                            found = info;
+                            break;
+                        }
+                    }
+
+                    string error = null;
+
+                    if (found is null)
+                        error = "interface not found, down or without IPv6";
+                    else if (!config.IsInterfaceAllowed(found.Name))
+                        error = "the interface is excluded by interface= or except-interface=";
+                    else if (found.GetPrefixAddresses(rule.PrefixLength).Count == 0)
+                        error = "no global or unique local IPv6 prefix (/" + rule.PrefixLength + " or shorter) on the interface";
+                    else if (found.LinkLocal is null)
+                        error = "no usable link-local address on the interface";
+
+                    if (error is not null)
+                        status.Add(new DhcpListenerStatus() { Interface = rule.Constructor, Addresses = [], Listening = false, Error = error });
+                }
+            }
+
+            List<Listener6> toStop = new List<Listener6>();
+
+            lock (_lock)
+            {
+                foreach (KeyValuePair<string, Listener6> entry in _listeners6)
+                {
+                    if (!wanted.TryGetValue(entry.Key, out Dhcp6InterfaceInfo info) || (info.Index != entry.Value.Info.Index))
+                        toStop.Add(entry.Value);
+                    else
+                        entry.Value.Info = info;
+                }
+
+                foreach (Listener6 listener in toStop)
+                    _listeners6.Remove(listener.Info.Name);
+            }
+
+            foreach (Listener6 listener in toStop)
+                StopListener6(listener);
+
+            foreach (Dhcp6InterfaceInfo info in wanted.Values)
+            {
+                List<string> addresses = new List<string>();
+                foreach (Dhcp6InterfaceAddress address in info.Addresses)
+                {
+                    if (!address.IsTemporary)
+                        addresses.Add(address.Address + "/" + address.PrefixLength);
+                }
+
+                lock (_lock)
+                {
+                    if (_listeners6.ContainsKey(info.Name))
+                    {
+                        status.Add(new DhcpListenerStatus() { Interface = info.Name, Addresses = addresses, Listening = true });
+                        continue;
+                    }
+                }
+
+                try
+                {
+                    Socket socket = CreateBoundSocket6(info);
+                    Listener6 listener = new Listener6() { Socket = socket, Info = info, Cancellation = new CancellationTokenSource() };
+
+                    lock (_lock)
+                    {
+                        _listeners6[info.Name] = listener;
+                    }
+
+                    _ = Task.Run(delegate () { return ReceiveLoop6Async(listener); });
+                    status.Add(new DhcpListenerStatus() { Interface = info.Name, Addresses = addresses, Listening = true });
+                    _logMessage("DHCPv6 Server is listening on " + info.Name + ".");
+                }
+                catch (Exception ex)
+                {
+                    status.Add(new DhcpListenerStatus() { Interface = info.Name, Addresses = addresses, Listening = false, Error = ex.Message });
+                    _logError("DHCPv6 Server failed to listen on " + info.Name + " port 547", ex);
+                }
+            }
+
+            lock (_lock)
+            {
+                _listener6Status.Clear();
+                _listener6Status.AddRange(status);
+            }
+        }
+
+        private async Task ReceiveLoop6Async(Listener6 listener)
+        {
+            byte[] buffer = new byte[4096];
+            EndPoint any = new IPEndPoint(IPAddress.IPv6Any, 0);
+            CancellationToken token = listener.Cancellation.Token;
+
+            while (!token.IsCancellationRequested)
+            {
+                SocketReceiveMessageFromResult result;
+
+                try
+                {
+                    result = await listener.Socket.ReceiveMessageFromAsync(buffer, SocketFlags.None, any, token);
+                }
+                catch (OperationCanceledException)
+                {
+                    return;
+                }
+                catch (ObjectDisposedException)
+                {
+                    return;
+                }
+                catch (SocketException ex)
+                {
+                    if (token.IsCancellationRequested)
+                        return;
+
+                    if ((ex.SocketErrorCode == SocketError.ConnectionReset) || (ex.SocketErrorCode == SocketError.MessageSize))
+                        continue;
+
+                    _logError("DHCPv6 Server receive error on " + listener.Info.Name, ex);
+                    await Task.Delay(1000, CancellationToken.None);
+                    continue;
+                }
+
+                Interlocked.Increment(ref _received6);
+
+                IPEndPoint remote = (IPEndPoint)result.RemoteEndPoint;
+
+                if (!Dhcp6Message.TryParse(buffer.AsSpan(0, result.ReceivedBytes), out Dhcp6Message request, out _))
+                {
+                    Interlocked.Increment(ref _malformed6);
+                    continue;
+                }
+
+                string key = "6|" + remote.Address;
+                long second = Environment.TickCount64 / 1000;
+                (long Second, int Count) counter = _packetCounts.AddOrUpdate(key, (second, 1), delegate (string k, (long Second, int Count) value) { return value.Second == second ? (second, value.Count + 1) : (second, 1); });
+                if (counter.Count > MAX_PACKETS_PER_CLIENT_PER_SECOND)
+                {
+                    Interlocked.Increment(ref _droppedRateLimited);
+                    continue;
+                }
+
+                if (!_concurrency.Wait(0))
+                {
+                    Interlocked.Increment(ref _droppedBusy);
+                    continue;
+                }
+
+                IPAddress destination = result.PacketInformation.Address;
+                bool multicast = (destination is null) || destination.IsIPv6Multicast;
+                Dhcp6InterfaceInfo info = listener.Info;
+
+                _ = Task.Run(async delegate ()
+                {
+                    try
+                    {
+                        Dhcp6Reply reply = _engine6.Process(request, info, remote.Address, multicast);
+
+                        if (reply is not null)
+                        {
+                            if (reply.DelayMs > 0)
+                                await Task.Delay(reply.DelayMs);
+
+                            int port = reply.ToRelay ? Dhcp6Message.SERVER_PORT : Dhcp6Message.CLIENT_PORT;
+                            listener.Socket.SendTo(reply.Message.Serialize(), new IPEndPoint(remote.Address, port));
+                            Interlocked.Increment(ref _sent6);
+                        }
+                    }
+                    catch (ObjectDisposedException)
+                    { }
+                    catch (Exception ex)
+                    {
+                        _logError("DHCPv6 Server failed to process a request from " + remote.Address, ex);
+                    }
+                    finally
+                    {
+                        _concurrency.Release();
+                    }
+                });
+            }
         }
 
         private async Task ReceiveLoopAsync(Listener listener)
@@ -621,6 +988,134 @@ namespace ZenitiumDns.Core.Dhcp
                 ApplyEngineSettings();
         }
 
+        private void RecordForeignServer6(byte[] serverDuid, string iface)
+        {
+            if ((serverDuid is null) || (serverDuid.Length == 0) || (serverDuid.Length > 130))
+                return;
+
+            DateTime now = DateTime.UtcNow;
+            string serverId = DhcpUtilities.FormatHex(serverDuid);
+            string key = iface + "|" + serverId;
+            bool added = false;
+
+            if (!_foreignServers6.ContainsKey(key) && (_foreignServers6.Count >= 64))
+                return;
+
+            DhcpForeignServer server = _foreignServers6.GetOrAdd(key, delegate (string k)
+            {
+                added = true;
+                return new DhcpForeignServer() { ServerId = serverId, Interface = iface, FirstSeen = now, LastSeen = now, Source = "request", Count = 0 };
+            });
+
+            lock (server)
+            {
+                server.LastSeen = now;
+                server.Count++;
+            }
+
+            if (added)
+            {
+                _logMessage("DHCPv6 Server detected another DHCPv6 server with DUID " + serverId + " on " + iface + " (a client addressed it).");
+                ApplyEngineSettings();
+            }
+        }
+
+        private static byte[] GetDuidFromClientId(byte[] clientId)
+        {
+            if ((clientId is null) || (clientId.Length < 7) || (clientId[0] != 0xFF))
+                return null;
+
+            return clientId.AsSpan(5).ToArray();
+        }
+
+        private static byte[] GetMacFromLinkLocal(IPAddress address)
+        {
+            if ((address is null) || !address.IsIPv6LinkLocal)
+                return null;
+
+            byte[] bytes = address.GetAddressBytes();
+
+            if ((bytes[11] != 0xFF) || (bytes[12] != 0xFE))
+                return null;
+
+            return [(byte)(bytes[8] ^ 0x02), bytes[9], bytes[10], bytes[13], bytes[14], bytes[15]];
+        }
+
+        private byte[] ResolveDhcp6ClientMac(byte[] duid, IPAddress source)
+        {
+            Dictionary<string, byte[]> duidToMac;
+
+            lock (_dnsLock)
+            {
+                duidToMac = _duidToMac;
+            }
+
+            if ((duid is not null) && duidToMac.TryGetValue(Convert.ToHexString(duid), out byte[] mac))
+                return mac;
+
+            if (source is null)
+                return null;
+
+            mac = GetMacFromLinkLocal(source);
+            if (mac is not null)
+                return mac;
+
+            if (_neighbors.TryGetHardwareAddress(source, out mac))
+                return mac;
+
+            return null;
+        }
+
+        private static byte[] CreateServerDuid(string nodeId)
+        {
+            byte[] duid = new byte[18];
+            duid[1] = 4;
+
+            if (Guid.TryParseExact(nodeId ?? "", "N", out Guid guid))
+                guid.TryWriteBytes(duid.AsSpan(2), true, out _);
+            else
+                Random.Shared.NextBytes(duid.AsSpan(2));
+
+            return duid;
+        }
+
+        private string FindHostNameByMac(byte[] hardwareAddress)
+        {
+            DateTime now = DateTime.UtcNow;
+            DhcpLease best = null;
+
+            foreach (DhcpLease lease in _store.GetAll())
+            {
+                if ((lease.HostName is null) || (lease.State != DhcpLeaseState.Bound) || !lease.IsActive(now))
+                    continue;
+
+                if (!lease.HardwareAddress.AsSpan().SequenceEqual(hardwareAddress))
+                    continue;
+
+                if ((best is null) || (lease.Updated > best.Updated))
+                    best = lease;
+            }
+
+            if (best is not null)
+                return best.HostName;
+
+            DhcpConfiguration config = _config;
+
+            foreach (DhcpHostRule host in config.Hosts)
+            {
+                if (host.HostName is null)
+                    continue;
+
+                foreach (DhcpHardwarePattern pattern in host.HardwareAddresses)
+                {
+                    if (!pattern.HasWildcard && pattern.Matches(1, hardwareAddress))
+                        return host.HostName;
+                }
+            }
+
+            return null;
+        }
+
         private byte[] GetProbeHardwareAddress(DhcpInterfaceInfo info)
         {
             uint hash = DhcpUtilities.GetStableHash(_nodeId + "|" + info.Name);
@@ -766,7 +1261,7 @@ namespace ZenitiumDns.Core.Dhcp
 
         #region dns
 
-        private void OnLeaseChanged(DhcpLease lease)
+        private void ScheduleDnsRebuild()
         {
             if (Interlocked.Exchange(ref _dnsRebuildPending, 1) == 0)
             {
@@ -783,7 +1278,7 @@ namespace ZenitiumDns.Core.Dhcp
         {
             foreach (DhcpDomainRule rule in config.Domains)
             {
-                if ((rule.Start is not null) && rule.Matches(address))
+                if ((rule.Start is not null) && (address is not null) && rule.Matches(address))
                     return rule.Domain;
             }
 
@@ -794,6 +1289,50 @@ namespace ZenitiumDns.Core.Dhcp
             }
 
             return null;
+        }
+
+        private static void AddDnsName(Dictionary<string, DnsEntry> names, string fqdn, IPAddress address, DateTime updated)
+        {
+            if (!names.TryGetValue(fqdn, out DnsEntry entry))
+            {
+                entry = new DnsEntry();
+                names.Add(fqdn, entry);
+            }
+
+            if (updated < entry.Updated4)
+                return;
+
+            entry.Addresses4.Clear();
+            entry.Addresses4.Add(address);
+            entry.Updated4 = updated;
+        }
+
+        private static void AddDnsName6(Dictionary<string, DnsEntry> names, string fqdn, IPAddress address, DateTime updated, string clientKey)
+        {
+            if (!names.TryGetValue(fqdn, out DnsEntry entry))
+            {
+                entry = new DnsEntry();
+                names.Add(fqdn, entry);
+            }
+
+            if (entry.ClientKey6 == clientKey)
+            {
+                if (!entry.Addresses6.Contains(address) && (entry.Addresses6.Count < 8))
+                    entry.Addresses6.Add(address);
+
+                if (updated > entry.Updated6)
+                    entry.Updated6 = updated;
+
+                return;
+            }
+
+            if (updated < entry.Updated6)
+                return;
+
+            entry.Addresses6.Clear();
+            entry.Addresses6.Add(address);
+            entry.Updated6 = updated;
+            entry.ClientKey6 = clientKey;
         }
 
         private void RebuildDnsIndex()
@@ -807,8 +1346,44 @@ namespace ZenitiumDns.Core.Dhcp
                 register = _settings.RegisterDns && _settings.Enabled;
             }
 
-            Dictionary<string, (IPAddress, DateTime)> names = new Dictionary<string, (IPAddress, DateTime)>(StringComparer.OrdinalIgnoreCase);
+            Dictionary<string, DnsEntry> names = new Dictionary<string, DnsEntry>(StringComparer.OrdinalIgnoreCase);
             Dictionary<uint, string> reverse = new Dictionary<uint, string>();
+            Dictionary<UInt128, string> reverse6 = new Dictionary<UInt128, string>();
+            Dictionary<IPAddress, byte[]> addressToMac = new Dictionary<IPAddress, byte[]>();
+            Dictionary<string, byte[]> duidToMac = new Dictionary<string, byte[]>(StringComparer.Ordinal);
+            DateTime mapNow = DateTime.UtcNow;
+
+            foreach (DhcpLease lease in _store.GetAll())
+            {
+                if ((lease.State != DhcpLeaseState.Bound) || !lease.IsActive(mapNow) || (lease.HardwareAddress.Length != 6))
+                    continue;
+
+                addressToMac[lease.Address] = lease.HardwareAddress;
+
+                byte[] duid = GetDuidFromClientId(lease.ClientId);
+                if (duid is not null)
+                    duidToMac[Convert.ToHexString(duid)] = lease.HardwareAddress;
+            }
+
+            foreach (DhcpHostRule host in config.Hosts)
+            {
+                if (host.Address is null)
+                    continue;
+
+                foreach (DhcpHardwarePattern pattern in host.HardwareAddresses)
+                {
+                    byte[] mac = pattern.GetFixedAddress();
+
+                    if ((mac is not null) && !addressToMac.ContainsKey(host.Address))
+                        addressToMac[host.Address] = mac;
+                }
+            }
+
+            foreach (Dhcp6Lease lease in _store6.GetAll())
+            {
+                if ((lease.State == DhcpLeaseState.Bound) && lease.IsActive(mapNow) && (lease.HardwareAddress.Length == 6))
+                    addressToMac[lease.Address] = lease.HardwareAddress;
+            }
 
             if (register)
             {
@@ -820,16 +1395,7 @@ namespace ZenitiumDns.Core.Dhcp
                         continue;
 
                     string domain = GetDomainFor(config, lease.Address);
-                    string fqdn = domain is null ? lease.HostName : lease.HostName + "." + domain;
-
-                    if (names.TryGetValue(fqdn, out (IPAddress Address, DateTime Updated) existing) && (existing.Updated >= lease.Updated))
-                        continue;
-
-                    if (existing.Address is not null)
-                        reverse.Remove(DhcpUtilities.ToUInt32(existing.Address));
-
-                    names[fqdn] = (lease.Address, lease.Updated);
-                    reverse[DhcpUtilities.ToUInt32(lease.Address)] = fqdn;
+                    AddDnsName(names, domain is null ? lease.HostName : lease.HostName + "." + domain, lease.Address, lease.Updated);
                 }
 
                 foreach (DhcpHostRule host in config.Hosts)
@@ -838,13 +1404,34 @@ namespace ZenitiumDns.Core.Dhcp
                         continue;
 
                     string domain = GetDomainFor(config, host.Address);
-                    string fqdn = domain is null ? host.HostName : host.HostName + "." + domain;
+                    AddDnsName(names, domain is null ? host.HostName : host.HostName + "." + domain, host.Address, DateTime.MaxValue);
+                }
 
-                    if (names.TryGetValue(fqdn, out (IPAddress Address, DateTime Updated) existing) && (existing.Address is not null))
-                        reverse.Remove(DhcpUtilities.ToUInt32(existing.Address));
+                string domain6 = GetDomainFor(config, null);
 
-                    names[fqdn] = (host.Address, DateTime.MaxValue);
-                    reverse[DhcpUtilities.ToUInt32(host.Address)] = fqdn;
+                foreach (Dhcp6Lease lease in _store6.GetAll())
+                {
+                    if ((lease.State != DhcpLeaseState.Bound) || !lease.IsActive(now) || string.IsNullOrEmpty(lease.HostName))
+                        continue;
+
+                    AddDnsName6(names, domain6 is null ? lease.HostName : lease.HostName + "." + domain6, lease.Address, lease.Reserved ? DateTime.MaxValue : lease.Updated, lease.ClientKey);
+                }
+
+                foreach (DhcpHostRule host in config.Hosts)
+                {
+                    if ((host.Address6 is null) || host.Address6IsSuffix || (host.HostName is null) || host.Ignore)
+                        continue;
+
+                    AddDnsName6(names, domain6 is null ? host.HostName : host.HostName + "." + domain6, host.Address6, DateTime.MaxValue, "host:" + host.Line);
+                }
+
+                foreach (KeyValuePair<string, DnsEntry> entry in names)
+                {
+                    foreach (IPAddress address in entry.Value.Addresses4)
+                        reverse[DhcpUtilities.ToUInt32(address)] = entry.Key;
+
+                    foreach (IPAddress address in entry.Value.Addresses6)
+                        reverse6[Dhcp6Utilities.ToUInt128(address)] = entry.Key;
                 }
             }
 
@@ -852,15 +1439,19 @@ namespace ZenitiumDns.Core.Dhcp
             {
                 _dnsNames = names;
                 _dnsReverse = reverse;
+                _dnsReverse6 = reverse6;
+                _addressToMac = addressToMac;
+                _duidToMac = duidToMac;
             }
         }
 
-        public bool TryResolveName(string name, out IPAddress address, out uint ttl)
+        public bool TryResolveName(string name, out IReadOnlyList<IPAddress> addresses4, out IReadOnlyList<IPAddress> addresses6, out uint ttl)
         {
-            address = null;
+            addresses4 = [];
+            addresses6 = [];
             ttl = _settings.DnsTtl;
 
-            Dictionary<string, (IPAddress Address, DateTime Updated)> names;
+            Dictionary<string, DnsEntry> names;
 
             lock (_dnsLock)
             {
@@ -870,9 +1461,10 @@ namespace ZenitiumDns.Core.Dhcp
             if (names.Count == 0)
                 return false;
 
-            if (names.TryGetValue(name.TrimEnd('.'), out (IPAddress Address, DateTime Updated) entry))
+            if (names.TryGetValue(name.TrimEnd('.'), out DnsEntry entry))
             {
-                address = entry.Address;
+                addresses4 = entry.Addresses4;
+                addresses6 = entry.Addresses6;
                 return true;
             }
 
@@ -905,7 +1497,22 @@ namespace ZenitiumDns.Core.Dhcp
             name = null;
             ttl = _settings.DnsTtl;
 
-            if ((address is null) || (address.AddressFamily != AddressFamily.InterNetwork))
+            if (address is null)
+                return false;
+
+            if (address.AddressFamily == AddressFamily.InterNetworkV6)
+            {
+                Dictionary<UInt128, string> reverse6;
+
+                lock (_dnsLock)
+                {
+                    reverse6 = _dnsReverse6;
+                }
+
+                return reverse6.TryGetValue(Dhcp6Utilities.ToUInt128(address), out name);
+            }
+
+            if (address.AddressFamily != AddressFamily.InterNetwork)
                 return false;
 
             Dictionary<uint, string> reverse;
@@ -932,6 +1539,8 @@ namespace ZenitiumDns.Core.Dhcp
                 RefreshListeners();
 
                 _store.Maintain(DateTime.UtcNow);
+                _store6.Maintain(DateTime.UtcNow);
+                _ra.Maintain();
 
                 long currentSecond = Environment.TickCount64 / 1000;
 
@@ -947,6 +1556,12 @@ namespace ZenitiumDns.Core.Dhcp
                 {
                     if (entry.Value.LastSeen < now.AddHours(-24))
                         _foreignServers.TryRemove(entry.Key, out _);
+                }
+
+                foreach (KeyValuePair<string, DhcpForeignServer> entry in _foreignServers6)
+                {
+                    if (entry.Value.LastSeen < now.AddHours(-24))
+                        _foreignServers6.TryRemove(entry.Key, out _);
                 }
 
                 DhcpSettings settings = _settings;
@@ -965,15 +1580,26 @@ namespace ZenitiumDns.Core.Dhcp
 
         private bool HasRecentForeignServer()
         {
+            return HasRecentForeignServer(_foreignServers);
+        }
+
+        private bool HasRecentForeignServer(ConcurrentDictionary<string, DhcpForeignServer> servers)
+        {
             DateTime limit = DateTime.UtcNow.AddSeconds(-Math.Max(900, _settings.RogueProbeIntervalSeconds * 3));
 
-            foreach (DhcpForeignServer server in _foreignServers.Values)
+            foreach (DhcpForeignServer server in servers.Values)
             {
                 if (server.LastSeen >= limit)
                     return true;
             }
 
             return false;
+        }
+
+        private bool IsLocalAddress6(UInt128 address)
+        {
+            HashSet<UInt128> local = _localAddresses6;
+            return local.Contains(address);
         }
 
         private void ApplyEngineSettings()
@@ -998,8 +1624,18 @@ namespace ZenitiumDns.Core.Dhcp
                 ResponseDelayMs = settings.Priority == DhcpPriorityMode.Delayed ? settings.ResponseDelayMs : 0,
                 MinSecs = settings.Priority == DhcpPriorityMode.Delayed ? settings.MinSecs : 0,
                 OffersPaused = paused,
-                DefaultLeaseTime = 3600
+                DefaultLeaseTime = DEFAULT_LEASE_TIME
             }, IsLocalAddress);
+
+            _engine6.Configure(config, new Dhcp6EngineSettings()
+            {
+                Serving = serving,
+                OffersPaused = (settings.Priority == DhcpPriorityMode.Standby) && HasRecentForeignServer(_foreignServers6),
+                ResponseDelayMs = settings.Priority == DhcpPriorityMode.Delayed ? settings.ResponseDelayMs : 0,
+                PreferMe = config.Authoritative && (settings.Priority == DhcpPriorityMode.Primary),
+                RegisterDns = settings.RegisterDns,
+                DefaultLeaseTime = DEFAULT_LEASE_TIME
+            }, _serverDuid, FindHostNameByMac, IsLocalAddress6, ResolveDhcp6ClientMac);
         }
 
         #endregion
@@ -1056,6 +1692,7 @@ namespace ZenitiumDns.Core.Dhcp
             }
 
             _store.Load();
+            _store6.Load();
             Apply(settings, false);
         }
 
@@ -1133,6 +1770,22 @@ namespace ZenitiumDns.Core.Dhcp
             return _store.ExportSnapshot();
         }
 
+        public byte[] ExportLeases6()
+        {
+            return _store6.ExportSnapshot();
+        }
+
+        public int RestoreLeases6(byte[] data)
+        {
+            List<Dhcp6Lease> leases = Dhcp6LeaseStore.ParseSnapshot(data);
+
+            _store6.ReplaceAll(leases);
+            _store6.SaveNow();
+            RebuildDnsIndex();
+
+            return leases.Count;
+        }
+
         public List<DhcpConfigError> RestoreSettings(byte[] data)
         {
             DhcpSettings settings;
@@ -1158,6 +1811,9 @@ namespace ZenitiumDns.Core.Dhcp
 
         public bool DeleteLease(IPAddress address)
         {
+            if (address.AddressFamily == AddressFamily.InterNetworkV6)
+                return _store6.Remove(address);
+
             DhcpLease lease = _store.Get(address);
             if (lease is null)
                 return false;
@@ -1169,7 +1825,222 @@ namespace ZenitiumDns.Core.Dhcp
         public void ClearForeignServers()
         {
             _foreignServers.Clear();
+            _foreignServers6.Clear();
+            _ra.ClearForeignRouters();
             ApplyEngineSettings();
+        }
+
+        public bool TryGetHardwareAddress(IPAddress address, out byte[] hardwareAddress)
+        {
+            hardwareAddress = null;
+
+            if (address is null)
+                return false;
+
+            if (address.IsIPv4MappedToIPv6)
+                address = address.MapToIPv4();
+
+            Dictionary<IPAddress, byte[]> map;
+
+            lock (_dnsLock)
+            {
+                map = _addressToMac;
+            }
+
+            IPAddress key = (address.AddressFamily == AddressFamily.InterNetworkV6) && (address.ScopeId != 0) ? new IPAddress(address.GetAddressBytes()) : address;
+
+            if (map.TryGetValue(key, out hardwareAddress))
+                return true;
+
+            return _neighbors.TryGetHardwareAddress(address, out hardwareAddress);
+        }
+
+        public List<DhcpDevice> GetDevices()
+        {
+            Dictionary<string, DhcpDevice> devices = new Dictionary<string, DhcpDevice>(StringComparer.Ordinal);
+            DateTime now = DateTime.UtcNow;
+            DhcpConfiguration config = _config;
+
+            DhcpDevice Get(string key)
+            {
+                if (!devices.TryGetValue(key, out DhcpDevice device))
+                {
+                    device = new DhcpDevice();
+
+                    if (!key.StartsWith("duid:", StringComparison.Ordinal))
+                        device.HardwareAddress = key;
+
+                    devices.Add(key, device);
+                }
+
+                return device;
+            }
+
+            foreach (DhcpLease lease in _store.GetAll())
+            {
+                if ((lease.HardwareAddress.Length != 6) || !(lease.IsActive(now) || lease.Reserved))
+                    continue;
+
+                if (lease.State == DhcpLeaseState.Declined)
+                    continue;
+
+                DhcpDevice device = Get(DhcpUtilities.FormatHardwareAddress(lease.HardwareAddress));
+                device.Addresses4.Add(lease.Address.ToString());
+                device.Sources.Add("dhcp");
+                device.HostName ??= lease.HostName;
+
+                if ((lease.ClientId is not null) && (lease.ClientId.Length > 0))
+                {
+                    device.ClientId = DhcpUtilities.FormatHex(lease.ClientId);
+
+                    byte[] duid = GetDuidFromClientId(lease.ClientId);
+                    if (duid is not null)
+                        device.Duids.Add(DhcpUtilities.FormatHex(duid));
+                }
+
+                if (lease.Updated > device.LastSeen)
+                    device.LastSeen = lease.Updated;
+            }
+
+            foreach (Dhcp6Lease lease in _store6.GetAll())
+            {
+                if ((lease.State != DhcpLeaseState.Bound) || !lease.IsActive(now))
+                    continue;
+
+                string key = lease.HardwareAddress.Length == 6 ? DhcpUtilities.FormatHardwareAddress(lease.HardwareAddress) : "duid:" + DhcpUtilities.FormatHex(lease.Duid);
+                DhcpDevice device = Get(key);
+                device.Addresses6.Add(lease.Address.ToString());
+                device.Duids.Add(DhcpUtilities.FormatHex(lease.Duid));
+                device.Sources.Add("dhcpv6");
+                device.HostName ??= lease.HostName;
+
+                if (lease.Updated > device.LastSeen)
+                    device.LastSeen = lease.Updated;
+            }
+
+            foreach (DhcpHostRule host in config.Hosts)
+            {
+                if (host.Ignore)
+                    continue;
+
+                foreach (DhcpHardwarePattern pattern in host.HardwareAddresses)
+                {
+                    byte[] mac = pattern.GetFixedAddress();
+
+                    if (mac is null)
+                        continue;
+
+                    DhcpDevice device = Get(DhcpUtilities.FormatHardwareAddress(mac));
+                    device.Reserved = true;
+                    device.Sources.Add("reservation");
+
+                    if (host.HostName is not null)
+                        device.HostName = host.HostName;
+
+                    if (host.Address is not null)
+                        device.Addresses4.Add(host.Address.ToString());
+                }
+            }
+
+            foreach (NeighborEntry entry in _neighbors.GetEntries())
+            {
+                if (entry.Address.IsIPv6LinkLocal || entry.Address.IsIPv6Multicast || ((entry.HardwareAddress[0] & 0x01) != 0))
+                    continue;
+
+                DhcpDevice device = Get(DhcpUtilities.FormatHardwareAddress(entry.HardwareAddress));
+                device.Sources.Add("neighbor");
+
+                if (entry.Address.AddressFamily == AddressFamily.InterNetwork)
+                    device.Addresses4.Add(entry.Address.ToString());
+                else
+                    device.Addresses6.Add(entry.Address.ToString());
+            }
+
+            foreach (DhcpDevice device in devices.Values)
+            {
+                if (device.HostName is not null)
+                    continue;
+
+                foreach (string text in device.Addresses4)
+                {
+                    if (TryResolveAddress(IPAddress.Parse(text), out string name, out _))
+                    {
+                        device.HostName = name;
+                        break;
+                    }
+                }
+            }
+
+            return new List<DhcpDevice>(devices.Values);
+        }
+
+        public IReadOnlyDictionary<string, long> GetCounters6()
+        {
+            Dictionary<string, long> counters = new Dictionary<string, long>(_engine6.GetCounters())
+            {
+                { "received", Interlocked.Read(ref _received6) },
+                { "sent", Interlocked.Read(ref _sent6) },
+                { "malformed", Interlocked.Read(ref _malformed6) },
+                { "raSent", _ra.Sent },
+                { "routerSolicitations", _ra.Solicitations }
+            };
+
+            return counters;
+        }
+
+        public List<DhcpForeignServer> GetForeignServers6()
+        {
+            return new List<DhcpForeignServer>(_foreignServers6.Values);
+        }
+
+        public List<DhcpListenerStatus> GetListener6Status()
+        {
+            lock (_lock)
+            {
+                return new List<DhcpListenerStatus>(_listener6Status);
+            }
+        }
+
+        public List<RaInterfaceStatus> GetRaStatus()
+        {
+            return _ra.GetStatus();
+        }
+
+        public List<RaForeignRouter> GetForeignRouters()
+        {
+            return _ra.GetForeignRouters();
+        }
+
+        public (UInt128 Total, int Used) GetPoolUsage6()
+        {
+            DhcpConfiguration config = _config;
+            DateTime now = DateTime.UtcNow;
+            UInt128 total = UInt128.Zero;
+            int used = 0;
+            List<Dhcp6RangeCandidate> candidates = new List<Dhcp6RangeCandidate>();
+
+            foreach (Dhcp6InterfaceInfo info in Dhcp6Utilities.GetInterfaces())
+            {
+                if (config.IsInterfaceAllowed(info.Name))
+                    candidates.AddRange(Dhcp6RangeCandidate.GetForInterface(config, info));
+            }
+
+            foreach (Dhcp6RangeCandidate candidate in candidates)
+            {
+                if (candidate.Rule.AssignsAddresses)
+                {
+                    UInt128 size = candidate.Last - candidate.First + UInt128.One;
+                    total = total > UInt128.MaxValue - size ? UInt128.MaxValue : total + size;
+                }
+            }
+
+            foreach (Dhcp6Lease lease in _store6.GetAll())
+            {
+                if ((lease.State == DhcpLeaseState.Bound) && lease.IsActive(now))
+                    used++;
+            }
+
+            return (total, used);
         }
 
         public IReadOnlyDictionary<string, long> GetCounters()
@@ -1247,6 +2118,12 @@ namespace ZenitiumDns.Core.Dhcp
 
         public DhcpLeaseStore LeaseStore
         { get { return _store; } }
+
+        public Dhcp6LeaseStore LeaseStore6
+        { get { return _store6; } }
+
+        public byte[] ServerDuid
+        { get { return _serverDuid; } }
 
         public bool IsServing
         { get { return _engine.Settings.Serving; } }

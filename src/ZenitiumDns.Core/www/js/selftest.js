@@ -75,6 +75,16 @@ function openSelfTestSection(section) {
     if (section == null)
         return;
 
+    if ((section === "filter-lists") || (section === "settings:Blocking")) {
+        showFilterSection("filterTabListBlockLists");
+        return;
+    }
+
+    if (section === "filter-blocking") {
+        showFilterSection("filterTabListBlocking");
+        return;
+    }
+
     if (section.indexOf("settings:") === 0) {
         showSettingsSection("settingsTabList" + section.substring(9));
         return;

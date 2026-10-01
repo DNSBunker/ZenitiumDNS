@@ -2,6 +2,39 @@
 
 [English version](CHANGELOG.md)
 
+## ZenitiumDNS 15.5.1 (Paket 15.5.1-13)
+Veröffentlicht: 1. Oktober 2026
+
+### Neu
+- DHCPv6 und Router Advertisements, Details in [docs/DHCP.de.md](docs/DHCP.de.md#ipv6):
+  - einfache Einstellungen unter DHCP > Einstellungen > **IPv6**: SLAAC (empfohlen), SLAAC und zusätzlich DHCPv6-Adressen oder nur DHCPv6-Adressen, der DHCPv6-Bereich als hinterer Adressteil (`::1000` bis `::1fff`) und ob sich der Server als Standard-Router ankündigt (automatisch: nur, wenn er IPv6 weiterleitet). Die Präfixe stammen aus den globalen und ULA-Adressen der Schnittstelle und folgen Anbieterwechseln; weggefallene Präfixe werden zwei Stunden lang als ungültig angekündigt,
+  - DHCPv6-Server nach RFC 8415 (SOLICIT/ADVERTISE, REQUEST, RENEW, REBIND, CONFIRM, RELEASE, DECLINE, INFORMATION-REQUEST, Rapid Commit, Relays), eine Adresse pro Gerät aus jedem Präfix der Schnittstelle, Reservierungen nach DUID, nach der MAC-Adresse in der DUID oder vom Relay (RFC 6939), Client-FQDN (RFC 4704), Optionen für DNS, Domain, NTP und SNTP,
+  - Router Advertisements nach RFC 4861 mit RDNSS und DNSSL (RFC 8106); als DNS-Server wird die Adresse dieses Servers im Netz angekündigt, bevorzugt eine ULA und fest eingetragene Adressen,
+  - Expertenkonfiguration in dnsmasq-Syntax: IPv6-`dhcp-range` mit `constructor:`, `ra-only`, `ra-stateless`, `slaac`, `off-link`, dazu `enable-ra`, `ra-param`, `dhcp-option=option6:…` und `dhcp-host=…,[::20]`,
+  - Reservierungen in den einfachen Einstellungen haben eine IPv6-Spalte; „Reservieren“ funktioniert auch für DHCPv6-Leases,
+  - Gerätenamen werden auch mit AAAA- und `ip6.arpa`-PTR-Einträgen beantwortet,
+  - solange der DHCP-Server eingeschaltet ist, beobachtet er die Router Advertisements anderer Router; Status, Selbsttest und Metriken zeigen Router, die per IPv6 andere DNS-Server ankündigen (Geräte können ZenitiumDNS und seine Filter dann umgehen), Router mit M-Flag und andere DHCPv6-Server,
+  - DHCPv6-Leases (`dhcp6-leases.json`) sind Teil der Sicherung; neue Metriken `zenitiumdns_dhcp6_*` und `zenitiumdns_ra_*`.
+- Geräte werden über DHCP, DHCPv6 und Clientprofile hinweg erkannt:
+  - Clientprofile akzeptieren MAC-Adressen als Kennung. Eine MAC-Adresse erfasst ein Gerät im selben Netz über IPv4 und IPv6, auch mit wechselnden IPv6-Adressen; der Server findet sie über seine DHCP-Leases und die Nachbartabelle des Systems (ARP/NDP), das funktioniert also auch, wenn der Router die Adressen vergibt. Reihenfolge: ClientID, MAC-Adresse, IP-Adresse, Netz,
+  - DHCPv6-Leases bekommen die MAC-Adresse des Geräts aus der DUID, vom Relay, aus dem IPv4-Lease mit derselben DUID (Client-Kennung nach RFC 4361), aus einer EUI-64-Link-Local-Adresse oder aus der Nachbartabelle; Reservierungen, Namen und Profile nach MAC-Adresse gelten so auch für DHCPv6,
+  - Reservierungen erkennen ein Gerät an der MAC-Adresse oder per `id:` an Client-Kennung bzw. DUID und haben eine Spalte für das Profil; die Lease-Liste zeigt Client-Kennung oder DUID und hat je Lease eine Profilauswahl,
+  - das Abfrageprotokoll zeigt unter der Adresse den Namen bekannter Geräte, und der Dialog der Clientprofile bietet die bekannten Geräte an (neue API `api/dhcp/devices`, `api/settings/clients/assign`).
+- DHCP-Expertenkonfiguration mit Auswahl statt nur Text: Der Reiter **Experte** zeigt die Zeilen als Liste lesbarer Einträge mit Bearbeiten, Verschieben und Entfernen; **Neuer Eintrag** öffnet Formulare für Bereiche (IPv4 und IPv6), Reservierungen, DHCP- und DHCPv6-Optionen (aus einer Liste mit Beschreibung gewählt, Wertfelder passend zum Typ der Option), Gerätegruppen, Regeln, Netzwerkstart, Domains, Parameter der Router Advertisements und allgemeine Schalter. Die Textansicht bleibt; beide zeigen dieselbe Konfiguration. Fehlerhafte Zeilen werden schon beim Bearbeiten in der Liste markiert.
+
+### Weboberfläche
+- Blocklisten und das Blockierverhalten sind aus den Einstellungen in den Reiter **Filter** umgezogen („Blocklisten“ und „Blockierverhalten“), neben die blockierten und erlaubten Domains und die Clientprofile. Beide Reiter laden beim Öffnen die aktuellen Einstellungen und haben einen eigenen Speichern-Knopf; der Schreibschutz gilt auch dort.
+- Sicherungen haben einen eigenen Bereich unter Einstellungen > **Sicherung**. Der Knopf „Cache leeren“ ist aus der Leiste jeder Einstellungsseite verschwunden; geleert wird der Cache unter Resolver > Cache.
+- Einstellungen: Der Wächter hat unter Server einen eigenen Abschnitt; das Client-Zeitlimit und die Grenze gleichzeitiger Auflösungen sind von Netzwerk nach Resolver gewandert, die QUIC-Grenzen zu den Einstellungen für DNS-over-QUIC; „Verschlüsselte Protokolle“ heißt jetzt **Dienste**, weil dort auch unverschlüsseltes DNS (Do53) eingestellt wird; die beiden Abschnitte „Hinter einem Reverse Proxy“ sind danach benannt, wofür sie gelten (DNS oder Weboberfläche).
+- Der Cache und die Listen blockierter und erlaubter Domains zeigen ihre Einträge als Tabelle (Name, Typ, TTL, lesbare Daten, DNSSEC-Status); ein Klick auf eine Zeile zeigt alle Details wie bisher als JSON.
+- Farbschemata: acht neue Vorlagen (Ozean, Lavendel, Sonne, Schiefer, Wald, Nord, Beere, Hoher Kontrast). Eigene Farbschemata entstehen jetzt aus einem Grundton (hell oder dunkel), einer Akzentfarbe, einem Hintergrundton und der Art der Seitenleiste; alle übrigen Farben werden daraus abgeleitet, Text auf dem Akzent wird automatisch schwarz oder weiß, und eine Lesbarkeitsprüfung zeigt den Kontrast von Text, Links und Seitenleiste. Einzelne Farben lassen sich weiterhin fein einstellen. Jede Vorlage lässt sich als Ausgangspunkt nutzen („Anpassen“). Mit früheren Versionen erstellte Farbschemata sehen unverändert aus, bis sie bearbeitet werden.
+- Abfrageprotokoll: Die häufigen Filter (Domain, Client, Typ, Zeitraum) stehen vorn, die übrigen unter „Weitere Filter“; die Auswahl von App und Klassenpfad erscheint nur, wenn mehrere Quellen aktiv sind, und ohne Quelle gibt es einen Hinweis mit Sprung zu den Apps.
+
+### Behoben
+- DHCP: Meldungen wie „the range overlaps the range in line 5“ zählten die Zeilen der einfachen Einstellungen und der Expertenkonfiguration zusammen; jetzt nennen sie die Zeile der eigenen Konfiguration oder „the simple settings“.
+- DHCP: Ein unerwarteter Fehler beim Lesen einer einzelnen Konfigurationszeile verhindert nicht mehr den Start des ganzen DHCP-Servers; die Zeile wird stattdessen als Fehler gemeldet.
+- DHCP-Einstellungen: Der Hilfetext zur Schnittstelle erwähnte noch den entfernten Cluster.
+
 ## ZenitiumDNS 15.5.1 (Paket 15.5.1-12)
 Veröffentlicht: 1. Oktober 2026
 

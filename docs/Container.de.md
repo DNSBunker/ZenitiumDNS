@@ -47,7 +47,7 @@ Das Passwort steht außerdem in `/etc/zenitiumdns/admin.password`. `http://<Host
 | 853 | UDP | DNS-over-QUIC |
 | 443 | TCP, UDP | DNS-over-HTTPS mit HTTP/2 und HTTP/3 |
 
-Nur die Ports der eingeschalteten Dienste veröffentlichen. Zertifikate für die verschlüsselten Protokolle gehören in das Konfigurations-Volume, etwa `/etc/zenitiumdns/fullchain.pem` und `/etc/zenitiumdns/privkey.pem`, lesbar für UID 1053; unter Einstellungen > Verschlüsselte Protokolle relativ zum Konfigurationsordner eintragen.
+Nur die Ports der eingeschalteten Dienste veröffentlichen. Zertifikate für die verschlüsselten Protokolle gehören in das Konfigurations-Volume, etwa `/etc/zenitiumdns/fullchain.pem` und `/etc/zenitiumdns/privkey.pem`, lesbar für UID 1053; unter Einstellungen > Dienste relativ zum Konfigurationsordner eintragen.
 
 ## Volumes
 

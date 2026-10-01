@@ -334,7 +334,23 @@ function refreshQueryLogsTab(doQueryLogs) {
 
             appsList = apps;
 
-            if (doQueryLogs)
+            var sourceCount = 0;
+
+            for (var k = 0; k < apps.length; k++) {
+                if (!apps[k].enabled)
+                    continue;
+
+                for (var l = 0; l < apps[k].dnsApps.length; l++) {
+                    if (apps[k].dnsApps[l].isQueryLogs)
+                        sourceCount++;
+                }
+            }
+
+            $("#divQueryLogsSource").toggle(sourceCount > 1);
+            $("#divQueryLogsNone").toggle(sourceCount === 0);
+            frmQueryLogs.toggle(sourceCount > 0);
+
+            if (doQueryLogs && (sourceCount > 0))
                 queryLogs();
         },
         error: function () {
@@ -484,8 +500,8 @@ function queryLogs(pageNumber, liveUpdate) {
                 }
 
                 tableHtml += "<tr" + (trbgcolor == null ? "" : " style=\"background-color: " + trbgcolor + ";\"") + "><td>" + responseJSON.response.entries[i].rowNumber + "</td><td>" +
-                    moment(responseJSON.response.entries[i].timestamp).local().format(tr("DD.MM.YYYY HH:mm:ss")) + "</td><td style=\"word-break: break-all; min-width: 125px;\">" +
-                    responseJSON.response.entries[i].clientIpAddress + "</td><td>" +
+                    moment(responseJSON.response.entries[i].timestamp).local().format(tr("DD.MM.YYYY HH:mm:ss")) + "</td><td style=\"word-break: break-all; min-width: 125px;\"><span class=\"query-log-client\" data-ip=\"" + htmlEncode(responseJSON.response.entries[i].clientIpAddress) + "\">" +
+                    htmlEncode(responseJSON.response.entries[i].clientIpAddress) + "</span></td><td>" +
                     responseJSON.response.entries[i].protocol + "</td><td>" +
                     responseJSON.response.entries[i].responseType + (responseJSON.response.entries[i].responseRtt == null ? "" : "<div style=\"font-size: 12px;\">(" + responseJSON.response.entries[i].responseRtt.toFixed(2) + " ms)</div>") + "</td><td>" +
                     formatRcode(responseJSON.response.entries[i].rcode) + "</td><td style=\"word-break: break-all;\">" +
@@ -546,6 +562,8 @@ function queryLogs(pageNumber, liveUpdate) {
             }
 
             $("#tableQueryLogsBody").html(tableHtml);
+            annotateQueryLogClients();
+            loadKnownDevices(annotateQueryLogClients);
 
             var statusHtml;
 
@@ -696,3 +714,17 @@ function formatRcode(rcode) {
     }
 }
 
+function annotateQueryLogClients() {
+    $("#tableQueryLogsBody .query-log-client").each(function () {
+        var element = $(this);
+
+        if (element.next(".query-log-device").length > 0)
+            return;
+
+        var device = knownDevicesByAddress[element.attr("data-ip")];
+        var label = getKnownDeviceLabel(device);
+
+        if (label !== "")
+            element.after("<div class=\"query-log-device\">" + htmlEncode(label) + "</div>");
+    });
+}

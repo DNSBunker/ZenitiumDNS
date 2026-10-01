@@ -3231,15 +3231,29 @@ namespace ZenitiumDns.Core.Dns
 
             if (question.Type == DnsResourceRecordType.PTR)
             {
-                if (!name.EndsWith(".in-addr.arpa", StringComparison.OrdinalIgnoreCase) || !IPAddressExtensions.TryParseReverseDomain(name, out IPAddress address) || !dhcpServer.TryResolveAddress(address, out string hostName, out uint ptrTtl))
+                if (!(name.EndsWith(".in-addr.arpa", StringComparison.OrdinalIgnoreCase) || name.EndsWith(".ip6.arpa", StringComparison.OrdinalIgnoreCase)) || !IPAddressExtensions.TryParseReverseDomain(name, out IPAddress address) || !dhcpServer.TryResolveAddress(address, out string hostName, out uint ptrTtl))
                     return null;
 
                 answer = [new DnsResourceRecord(name, DnsResourceRecordType.PTR, DnsClass.IN, ptrTtl, new DnsPTRRecordData(hostName))];
             }
-            else if (dhcpServer.TryResolveName(name, out IPAddress address, out uint ttl))
+            else if (dhcpServer.TryResolveName(name, out IReadOnlyList<IPAddress> addresses4, out IReadOnlyList<IPAddress> addresses6, out uint ttl))
             {
+                List<DnsResourceRecord> records = new List<DnsResourceRecord>();
+
                 if ((question.Type == DnsResourceRecordType.A) || (question.Type == DnsResourceRecordType.ANY))
-                    answer = [new DnsResourceRecord(name, DnsResourceRecordType.A, DnsClass.IN, ttl, new DnsARecordData(address))];
+                {
+                    foreach (IPAddress address in addresses4)
+                        records.Add(new DnsResourceRecord(name, DnsResourceRecordType.A, DnsClass.IN, ttl, new DnsARecordData(address)));
+                }
+
+                if ((question.Type == DnsResourceRecordType.AAAA) || (question.Type == DnsResourceRecordType.ANY))
+                {
+                    foreach (IPAddress address in addresses6)
+                        records.Add(new DnsResourceRecord(name, DnsResourceRecordType.AAAA, DnsClass.IN, ttl, new DnsAAAARecordData(address)));
+                }
+
+                if (records.Count > 0)
+                    answer = records;
             }
             else if (dhcpServer.IsNameInLocalDomain(name))
             {

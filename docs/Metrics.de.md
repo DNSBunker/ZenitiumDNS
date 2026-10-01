@@ -141,6 +141,14 @@ Nur vorhanden, solange der DHCP-Server eingeschaltet ist ([DHCP.de.md](DHCP.de.m
 | `zenitiumdns_dhcp_conflicts_total` | counter | | Adressen, die der Ping-Test als belegt erkannt hat oder die per DHCPDECLINE gemeldet wurden. |
 | `zenitiumdns_dhcp_pool_addresses` | gauge | `state` | Adressen der dynamischen Bereiche: `total` und `used`. |
 | `zenitiumdns_dhcp_foreign_servers` | gauge | | Andere DHCP-Server, die in den letzten 15 Minuten (oder drei Suchintervallen) im Netz zu sehen waren. |
+| `zenitiumdns_dhcp6_messages_total` | counter | `type` | Verarbeitete DHCPv6-Nachrichten: `solicit`, `advertise`, `request`, `reply`, `renew`, `rebind`, `release`, `decline`, `confirm`, `information_request`. |
+| `zenitiumdns_dhcp6_packets_total` | counter | `result` | DHCPv6-Pakete: `received`, `sent`, `malformed`, `ignored`, `relayed` (über ein Relay gekommen). |
+| `zenitiumdns_dhcp6_no_addresses_total` | counter | | DHCPv6-Anfragen, für die keine freie Adresse mehr da war. |
+| `zenitiumdns_dhcp6_leases_active` | gauge | | Aktive DHCPv6-Leases. |
+| `zenitiumdns_dhcp6_foreign_servers` | gauge | | Andere DHCPv6-Server, die Geräte in den letzten 15 Minuten angesprochen haben. |
+| `zenitiumdns_ra_sent_total` | counter | | Gesendete Router Advertisements. |
+| `zenitiumdns_ra_solicitations_total` | counter | | Empfangene Router Solicitations. |
+| `zenitiumdns_ra_foreign_routers` | gauge | `kind` | Andere IPv6-Router der letzten Stunde: `all` und `rdnss` für die, die DNS-Server ankündigen. |
 
 ### Prozess und .NET-Laufzeit
 

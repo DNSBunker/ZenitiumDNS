@@ -600,6 +600,65 @@ namespace ZenitiumDns.Core
 
                 w.Header("zenitiumdns_dhcp_foreign_servers", "gauge", "Other DHCP servers seen in the network recently");
                 w.Sample("zenitiumdns_dhcp_foreign_servers", foreign);
+
+                IReadOnlyDictionary<string, long> counters6 = dhcpServer.GetCounters6();
+
+                long Counter6(string key)
+                {
+                    return counters6.TryGetValue(key, out long value) ? value : 0;
+                }
+
+                w.Header("zenitiumdns_dhcp6_messages_total", "counter", "DHCPv6 messages processed by type");
+                foreach ((string key, string type) in new (string, string)[] { ("solicit", "solicit"), ("advertise", "advertise"), ("request", "request"), ("reply", "reply"), ("renew", "renew"), ("rebind", "rebind"), ("release", "release"), ("decline", "decline"), ("confirm", "confirm"), ("informationRequest", "information_request") })
+                    w.Sample("zenitiumdns_dhcp6_messages_total", Counter6(key), "type", type);
+
+                w.Header("zenitiumdns_dhcp6_packets_total", "counter", "DHCPv6 packets received, sent and dropped");
+                w.Sample("zenitiumdns_dhcp6_packets_total", Counter6("received"), "result", "received");
+                w.Sample("zenitiumdns_dhcp6_packets_total", Counter6("sent"), "result", "sent");
+                w.Sample("zenitiumdns_dhcp6_packets_total", Counter6("malformed"), "result", "malformed");
+                w.Sample("zenitiumdns_dhcp6_packets_total", Counter6("ignored"), "result", "ignored");
+                w.Sample("zenitiumdns_dhcp6_packets_total", Counter6("relayed"), "result", "relayed");
+
+                w.Header("zenitiumdns_dhcp6_no_addresses_total", "counter", "DHCPv6 requests that found no free address");
+                w.Sample("zenitiumdns_dhcp6_no_addresses_total", Counter6("noAddresses"));
+
+                w.Header("zenitiumdns_dhcp6_leases_active", "gauge", "Active DHCPv6 leases");
+                w.Sample("zenitiumdns_dhcp6_leases_active", dhcpServer.LeaseStore6.CountActive(DateTime.UtcNow));
+
+                w.Header("zenitiumdns_ra_sent_total", "counter", "Router advertisements sent");
+                w.Sample("zenitiumdns_ra_sent_total", Counter6("raSent"));
+
+                w.Header("zenitiumdns_ra_solicitations_total", "counter", "Router solicitations received");
+                w.Sample("zenitiumdns_ra_solicitations_total", Counter6("routerSolicitations"));
+
+                DateTime recentRouter = DateTime.UtcNow.AddHours(-1);
+                int foreignRouters = 0;
+                int foreignRdnss = 0;
+
+                foreach (RaForeignRouter router in dhcpServer.GetForeignRouters())
+                {
+                    if (router.LastSeen < recentRouter)
+                        continue;
+
+                    foreignRouters++;
+
+                    if (router.DnsServers.Count > 0)
+                        foreignRdnss++;
+                }
+
+                w.Header("zenitiumdns_ra_foreign_routers", "gauge", "Other IPv6 routers seen in the last hour, and how many of them announce DNS servers");
+                w.Sample("zenitiumdns_ra_foreign_routers", foreignRouters, "kind", "all");
+                w.Sample("zenitiumdns_ra_foreign_routers", foreignRdnss, "kind", "rdnss");
+
+                int foreign6 = 0;
+                foreach (DhcpForeignServer server in dhcpServer.GetForeignServers6())
+                {
+                    if (server.LastSeen >= recent)
+                        foreign6++;
+                }
+
+                w.Header("zenitiumdns_dhcp6_foreign_servers", "gauge", "Other DHCPv6 servers addressed by clients recently");
+                w.Sample("zenitiumdns_dhcp6_foreign_servers", foreign6);
             }
 
             #endregion
