@@ -1,9 +1,3 @@
-> [!NOTE]  
-> This Fork and the Code is Proof of Concept!
-> It is entirely Vibe Coded using Claude with Fable 5.1
-
-
-
 <p align="center">
 	<img src="docs/logo.png" alt="ZenitiumDNS" width="96" /><br />
 	<b>ZenitiumDNS</b><br />
@@ -13,6 +7,10 @@
 	<br />
 	<b>English</b> · <a href="README.de.md">Deutsch</a>
 </p>
+
+> [!NOTE]  
+> This Fork and the Code is Proof of Concept!
+> It is entirely Vibe Coded using Claude with Fable 5.1
 
 <p align="center">
 	<img src="docs/dashboard.png" alt="ZenitiumDNS dashboard with queries per second, response time, cache hit rate and queries over time" width="100%" />
