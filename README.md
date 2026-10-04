@@ -2,6 +2,8 @@
 > This Fork and the Code is Proof of Concept!
 > It is entirely Vibe Coded using Claude with Fable 5.1
 
+
+
 <p align="center">
 	<img src="docs/logo.png" alt="ZenitiumDNS" width="96" /><br />
 	<b>ZenitiumDNS</b><br />
